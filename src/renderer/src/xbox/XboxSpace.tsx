@@ -1,0 +1,72 @@
+import { Library, SkeletonGrid, type LibraryFilter } from '../components/Library'
+import { SignIn } from '../components/SignIn'
+import type { HubItem } from '../lib/items'
+import { loadXbox, useStore } from '../lib/store'
+
+const FILTERS: LibraryFilter[] = [
+  // Everything this account can start right now, however it got access.
+  { id: 'owned', label: 'Sahip olduklarım', test: (i) => i.action === 'play' },
+  { id: 'gamepass', label: 'Game Pass', test: (i) => i.action === 'play' && !i.xbox?.owned },
+  { id: 'recent', label: 'Son oynananlar', test: (i) => Boolean(i.xbox?.recent || i.xbox?.lastPlayed) },
+  { id: 'all', label: 'Tümü', test: () => true },
+]
+
+interface Props {
+  onOpen(item: HubItem, art: HTMLElement | null): void
+  onOpenSettings(): void
+}
+
+export function XboxSpace({ onOpen, onOpenSettings }: Props) {
+  const status = useStore((s) => s.xbox)
+  const items = useStore((s) => s.xboxItems)
+  const loading = useStore((s) => s.xboxLoading)
+  const error = useStore((s) => s.xboxError)
+
+  if (status.state !== 'signedIn') {
+    return (
+      <SignIn
+        service="Xbox"
+        state={status.state}
+        error={status.error}
+        lines={['Giriş Microsoft’un kendi penceresinde yapılır, şifren bu uygulamaya hiç uğramaz.']}
+        onSignIn={() => void window.hc.xbox.signIn()}
+      />
+    )
+  }
+
+  return (
+    <div className="space-body">
+      {!status.hasCloud && (
+        <div className="banner banner--info" role="status">
+          <span>
+            {status.cloudError?.includes('InvalidCountry')
+              ? 'Microsoft, Cloud Gaming\'i bulunduğun ülkede sunmuyor. Oyun kütüphanen görünür ama akış başlatılamaz.'
+              : 'Bulut oyun erişimi yok. Oyun kütüphanen görünür ama akış başlatılamaz.'}
+          </span>
+          <button className="ghost" data-nav onClick={onOpenSettings}>Ayarlar</button>
+        </div>
+      )}
+      {error && <p className="banner" role="alert">{error}</p>}
+      {items.length === 0 && loading ? (
+        <SkeletonGrid />
+      ) : (
+        <Library
+          items={items}
+          filters={FILTERS}
+          onOpen={onOpen}
+          toolbar={
+            <>
+              {status.gamertag && (
+                <span className="account">
+                  {status.gamerpic && <img src={status.gamerpic} alt="" />}
+                  {status.gamertag}
+                </span>
+              )}
+              <button className="ghost" data-nav disabled={loading} onClick={loadXbox}>Yenile</button>
+            </>
+          }
+        />
+      )}
+    </div>
+  )
+}
