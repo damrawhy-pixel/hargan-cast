@@ -44,6 +44,7 @@ export interface AppSettings {
   psOptionsShareForPs: boolean
   psNativeDualSense: boolean
   psHapticStrength: number
+  dualSenseSpeaker: boolean
   psTriggers: boolean
   psVibration: boolean
 
@@ -114,6 +115,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   psOptionsShareForPs: false,
   psNativeDualSense: true,
   psHapticStrength: 100,
+  dualSenseSpeaker: false,
   psTriggers: true,
   psVibration: true,
 

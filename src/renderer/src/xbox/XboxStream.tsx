@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { XboxTitle } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
+import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
 
 const HOLDER_ID = 'xbox-video-holder'
@@ -166,6 +167,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     }
 
     window.hc.platform.streaming(true)
+    void routeDualSenseSpeaker().catch(() => {})
     if (resumeId) {
       xbox.adoptSession(resumeId, title.titleId).then(() => negotiate()).catch(() => leave('Oturuma dönülemedi, oyunu yeniden başlat'))
     } else {

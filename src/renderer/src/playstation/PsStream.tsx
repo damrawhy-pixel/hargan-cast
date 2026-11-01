@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PsGame } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
+import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
 import { rumble, startInput } from './input'
 import { psQuit, psStage } from './stages'
@@ -61,6 +62,7 @@ export function PsStream({ game, onExit }: Props) {
 
     const run = async () => {
       window.hc.platform.streaming(true)
+      void routeDualSenseSpeaker().catch(() => {})
       const settings = getSettings()
       const { psCodec, psVibration } = settings
       const wantsHevc = psCodec === 'h265' || (psCodec === 'auto' && game.streamServiceType === 'pscloud')

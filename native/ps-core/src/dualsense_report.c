@@ -14,6 +14,10 @@
 #define OUTPUT_BT_TAG 0x10
 #define OUTPUT_BT_CRC_SEED 0xa2
 
+#define SPEAKER_VOLUME 0x64
+#define SPEAKER_PATH 0x30
+#define SPEAKER_PREAMP 0x02
+
 // Nominal sensor sensitivity, used when the controller reports no calibration.
 #define GYRO_COUNTS_PER_DEG_S 16.4f
 #define ACCEL_COUNTS_PER_G 8192.0f
@@ -171,6 +175,15 @@ static void write_common(const DsOutput *o, uint8_t *c)
 		// Releases the bar from the pairing animation so colours take effect.
 		c[38] |= 0x02;
 		c[41] = 0x02;
+	}
+	if(o->fields & DS_OUT_SPEAKER)
+	{
+		// Without this the USB audio goes to the headset jack and the speaker stays silent.
+		c[0] |= 0xa0;
+		c[1] |= 0x80;
+		c[5] = SPEAKER_VOLUME;
+		c[7] = SPEAKER_PATH;
+		c[37] = SPEAKER_PREAMP;
 	}
 }
 

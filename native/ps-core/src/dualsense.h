@@ -28,6 +28,10 @@ void dualsense_set_player(uint8_t player_index);
 void dualsense_set_intensity(uint8_t intensity);
 void dualsense_reset_motion(void);
 
+// Sends the sound of a wired controller to its speaker, stream or no stream.
+// False when no wired DualSense is connected.
+bool dualsense_route_speaker(void);
+
 // Translates a parsed report; exposed for tests.
 void dualsense_fill_state(const DsInput *in, ChiakiControllerState *state);
 

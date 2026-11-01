@@ -314,6 +314,12 @@ export default class PlayStationService {
     return played
   }
 
+  async routeSpeaker(): Promise<boolean> {
+    await this.ensureCore()
+    const { routed } = await this.call('speakerRoute', {})
+    return routed
+  }
+
   async stop() {
     this.core?.stdin.write(`${JSON.stringify({ cmd: 'stop' })}\n`)
   }

@@ -142,6 +142,11 @@ static void test_output(void)
 	ds_build_output(&only, false, 0, usb);
 	CHECK(usb[1] == 0 && usb[2] == 0x04);
 
+	only.fields = DS_OUT_SPEAKER;
+	ds_build_output(&only, false, 0, usb);
+	CHECK(usb[1] == 0xa0 && usb[2] == 0x80 && usb[6] == 0x64 && usb[8] == 0x30 && usb[38] == 0x02);
+	CHECK(usb[3] == 0 && usb[4] == 0 && usb[5] == 0);
+
 	CHECK(ds_player_bits(0) == 0 && ds_player_bits(1) == 0x04 && ds_player_bits(4) == 0x1b && ds_player_bits(9) == 0x1f);
 }
 

@@ -67,6 +67,8 @@ static CRITICAL_SECTION input_lock;
 static ChiakiControllerState renderer_state, dualsense_state;
 static float haptic_gain = 1.0f;
 static bool haptic_motor_on;
+#define HAPTIC_HOLD_MS 500
+static volatile ULONGLONG last_haptic_tick;
 static bool triggers_enabled = true;
 static int trigger_intensity_bits, rumble_intensity_bits;
 // The user's settings, applied on top of what the game asks for.
@@ -450,6 +452,9 @@ static void on_haptics(uint8_t *buf, size_t size, void *user)
 
 	if(haptics_active())
 	{
+		// Consoles keep this stream running through silence, so only real signal counts.
+		if(haptics_to_motor(samples, frames, 1.0f))
+			last_haptic_tick = GetTickCount64();
 		haptics_push(samples, frames, gain);
 		return;
 	}
@@ -477,8 +482,11 @@ static void on_event(ChiakiEvent *event, void *user)
 		{
 			if(!user_vibration)
 				break;
+			// A rumble report makes the controller drop the haptics on its audio path,
+			// so games that send both keep the haptics. Rumble-only games are unaffected.
+			if(!haptics_active() || GetTickCount64() - last_haptic_tick > HAPTIC_HOLD_MS)
+				dualsense_set_rumble(event->rumble.left, event->rumble.right);
 			// The renderer only rumbles pads the core does not own itself.
-			dualsense_set_rumble(event->rumble.left, event->rumble.right);
 			uint8_t head[2] = { event->rumble.left, event->rumble.right };
 			media_server_send(MEDIA_RUMBLE, head, sizeof(head), NULL, 0);
 			break;
@@ -876,6 +884,14 @@ static void handle_command(const char *line)
 			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
 			CloseHandle((HANDLE)_beginthreadex(NULL, 0, stream_thread, r, 0, NULL));
 		}
+	}
+	else if(strcmp(name, "speakerRoute") == 0)
+	{
+		json_object *reply = json_object_new_object();
+		json_object_object_add(reply, "id", json_object_new_int(id));
+		json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		json_object_object_add(reply, "routed", json_object_new_boolean(dualsense_route_speaker()));
+		emit(reply);
 	}
 	else if(strcmp(name, "hapticTest") == 0)
 	{

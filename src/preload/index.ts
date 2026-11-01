@@ -53,6 +53,7 @@ const api: HarganApi = {
     stream: invoke('ps:stream'),
     stop: invoke('ps:stop'),
     testHaptics: invoke('ps:testHaptics'),
+    routeSpeaker: invoke('ps:routeSpeaker'),
     onStatus: subscribe('ps:statusChanged'),
     onEvent: subscribe('ps:event'),
   } as HarganApi['ps'],

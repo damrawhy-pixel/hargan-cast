@@ -161,6 +161,7 @@ function registerIpc() {
     'ps:stream': (game, opts) => ps.stream(game, opts),
     'ps:stop': () => ps.stop(),
     'ps:testHaptics': () => ps.testHaptics(),
+    'ps:routeSpeaker': () => ps.routeSpeaker(),
   }
   for (const [channel, handler] of Object.entries(routes)) ipcMain.handle(channel, (_e, ...args) => handler(...args))
 }

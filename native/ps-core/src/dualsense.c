@@ -186,7 +186,40 @@ static bool open_device(const wchar_t *path)
 	return true;
 }
 
-static bool find_device(void)
+static bool route_device(const wchar_t *path)
+{
+	HANDLE device = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+		NULL, OPEN_EXISTING, 0, NULL);
+	if(device == INVALID_HANDLE_VALUE)
+		return false;
+
+	HIDD_ATTRIBUTES attrs = { .Size = sizeof(attrs) };
+	PHIDP_PREPARSED_DATA preparsed;
+	HIDP_CAPS caps;
+	bool wired = false;
+	if(HidD_GetAttributes(device, &attrs) && attrs.VendorID == SONY_VENDOR &&
+		(attrs.ProductID == PRODUCT_DUALSENSE || attrs.ProductID == PRODUCT_DUALSENSE_EDGE) &&
+		HidD_GetPreparsedData(device, &preparsed))
+	{
+		wired = HidP_GetCaps(preparsed, &caps) == HIDP_STATUS_SUCCESS && caps.Usage == 0x05 /* game pad */ &&
+			caps.InputReportByteLength == USB_INPUT_SIZE && caps.OutputReportByteLength == DS_USB_OUTPUT_SIZE;
+		HidD_FreePreparsedData(preparsed);
+	}
+
+	bool routed = false;
+	if(wired)
+	{
+		DsOutput out = { .fields = DS_OUT_SPEAKER };
+		uint8_t report[DS_USB_OUTPUT_SIZE];
+		ds_build_output(&out, false, 0, report);
+		DWORD written;
+		routed = WriteFile(device, report, DS_USB_OUTPUT_SIZE, &written, NULL) != 0;
+	}
+	CloseHandle(device);
+	return routed;
+}
+
+static bool each_device(bool (*visit)(const wchar_t *path))
 {
 	GUID hid_guid;
 	HidD_GetHidGuid(&hid_guid);
@@ -205,11 +238,21 @@ static bool find_device(void)
 			break;
 		detail->cbSize = sizeof(*detail);
 		if(SetupDiGetDeviceInterfaceDetailW(set, &iface, detail, needed, NULL, NULL))
-			found = open_device(detail->DevicePath);
+			found = visit(detail->DevicePath);
 		free(detail);
 	}
 	SetupDiDestroyDeviceInfoList(set);
 	return found;
+}
+
+static bool find_device(void)
+{
+	return each_device(open_device);
+}
+
+bool dualsense_route_speaker(void)
+{
+	return each_device(route_device);
 }
 
 static void close_device(void)

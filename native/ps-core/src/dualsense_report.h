@@ -48,7 +48,8 @@ enum
 	DS_OUT_LED = 1 << 2,
 	DS_OUT_PLAYER = 1 << 3,
 	DS_OUT_INTENSITY = 1 << 4,
-	DS_OUT_LIGHTBAR_SETUP = 1 << 5
+	DS_OUT_LIGHTBAR_SETUP = 1 << 5,
+	DS_OUT_SPEAKER = 1 << 6
 };
 
 typedef struct

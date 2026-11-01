@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { XBOX_REGIONS, type AppSettings } from '../../../shared/settings'
 import type { PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
+import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
 
 const LANGUAGES: [string, string][] = [
@@ -54,6 +55,27 @@ function HapticTest() {
   return (
     <Row label="Titreşimi dene" hint={note}>
       <button className="ghost" data-nav disabled={state === 'playing'} onClick={() => void run()}>{state === 'playing' ? 'Çalıyor' : 'Dene'}</button>
+    </Row>
+  )
+}
+
+function SpeakerTest() {
+  const [playing, setPlaying] = useState(false)
+  const [note, setNote] = useState('Windows ses düzeyi kısıksa duyulmaz.')
+
+  const run = async () => {
+    setPlaying(true)
+    try {
+      setNote((await testDualSenseSpeaker()) ? 'Çalındı. Sesi koldan duyman gerekiyor.' : 'Kol bulunamadı. Hoparlör yalnızca USB bağlantısında çalışır.')
+    } catch (e) {
+      setNote(clean(e as Error))
+    }
+    setPlaying(false)
+  }
+
+  return (
+    <Row label="Hoparlörü dene" hint={note}>
+      <button className="ghost" data-nav disabled={playing} onClick={() => void run()}>{playing ? 'Çalıyor' : 'Dene'}</button>
     </Row>
   )
 }
@@ -295,6 +317,8 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Toggle field="psTriggers" label="Uyarlanabilir tetikler" />
             <Slider field="psHapticStrength" label="Dokunsal geri bildirim gücü" hint="0, kapalı demektir." min={0} max={100} step={5} unit="%" />
             <HapticTest />
+            <Toggle field="dualSenseSpeaker" label="Tüm oyun sesini koldan çal" hint="Ses çıkışı DualSense ise akışın bütün sesi kolun hoparlörüne gider. Oyunların kola özel efektlerini ayırmaz." />
+            <SpeakerTest />
             <Toggle field="psVibration" label="Titreşim" />
           </section>
         )}

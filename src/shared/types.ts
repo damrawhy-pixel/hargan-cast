@@ -147,6 +147,7 @@ export interface HarganApi {
     stream(game: PsGame, opts: PsStreamOptions): Promise<PsStreamStarted>
     stop(): Promise<void>
     testHaptics(): Promise<boolean>
+    routeSpeaker(): Promise<boolean>
     onStatus(cb: (s: PsStatus) => void): () => void
     onEvent(cb: (e: PsEvent) => void): () => void
   }
