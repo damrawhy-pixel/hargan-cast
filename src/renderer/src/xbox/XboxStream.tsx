@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { XboxTitle } from '../../../shared/types'
-import { StreamShell } from '../components/StreamShell'
+import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
 import { getSettings } from '../lib/useSettings'
 
 const HOLDER_ID = 'xbox-video-holder'
 const POLL_MS = 1000
 const KEEPALIVE_MS = 30_000
+const STATS_MS = 1000
 const RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 1500
 const H264_PROFILES = { high: '4d', main: '42e', baseline: '420' }
@@ -20,6 +21,8 @@ interface Props {
 export function XboxStream({ title, resumeId, onExit }: Props) {
   const [stage, setStage] = useState(resumeId ? 'Oturuma dönülüyor' : 'Sunucu ayrılıyor')
   const [live, setLive] = useState(false)
+  const [stats, setStats] = useState<StreamStats>()
+  const [queue, setQueue] = useState<StreamQueue>()
   const exiting = useRef(false)
 
   useEffect(() => {
@@ -30,6 +33,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     let attempts = 0
     let poll: ReturnType<typeof setInterval> | undefined
     let keepalive: ReturnType<typeof setInterval> | undefined
+    let meter: ReturnType<typeof setInterval> | undefined
 
     const leave = (error?: string) => {
       if (exiting.current) return
@@ -41,6 +45,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     const reconnect = () => {
       if (disposed) return
       clearInterval(keepalive)
+      clearInterval(meter)
       if (attempts >= RECONNECT_ATTEMPTS) return leave('Bağlantı koptu ve yeniden kurulamadı')
       attempts++
       setLive(false)
@@ -60,6 +65,19 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       // With a gain node the sound leaves through its context, not the element.
       const output = gain?.context ?? document.querySelector(`#${HOLDER_ID} audio`)
       if (audioOutputDevice) void output?.setSinkId?.(audioOutputDevice)?.catch?.(() => {})
+    }
+
+    const measure = async (video: HTMLVideoElement | null) => {
+      const state = await player?.getStreamState()
+      if (!state || disposed) return
+      setStats({
+        fps: state.fps,
+        mbps: parseFloat(state.br) || 0,
+        lost: parseInt(state.pl) || 0,
+        rttMs: state.rtt.startsWith('-') ? undefined : Math.round(parseFloat(state.rtt)) || undefined,
+        decodeMs: parseFloat(state.decode) || undefined,
+        size: video?.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : undefined,
+      })
     }
 
     const negotiate = async () => {
@@ -112,6 +130,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         if (settings.xboxFsr) player.startFSR(() => {})
         applyAudio()
         keepalive = setInterval(() => void xbox.keepalive(sessionId), KEEPALIVE_MS)
+        clearInterval(meter)
+        meter = setInterval(() => void measure(video), STATS_MS)
       })
 
       setStage((current) => (attempts > 0 ? current : 'Bağlantı kuruluyor'))
@@ -131,15 +151,17 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       poll = setInterval(async () => {
         const session = await xbox.session(sessionId)
         if (!session) return leave('Oturum sunucuda sonlandı')
-        if (session.playerState === 'queued' && session.waitingSeconds)
-          setStage(`Sırada, yaklaşık ${Math.ceil(session.waitingSeconds / 60)} dk`)
-        else if (session.playerState === 'failed') {
+        if (session.playerState === 'failed') {
           clearInterval(poll)
           leave(session.error ?? 'Oturum başlatılamadı')
         } else if (session.playerState === 'started') {
           clearInterval(poll)
+          setQueue(undefined)
           negotiate().catch((e: Error) => leave(e.message))
-        }
+        } else if (session.state === 'WaitingForResources') {
+          // Once set, the estimate stays put and the card counts it down.
+          setQueue((queue) => (queue?.seconds !== undefined ? queue : { seconds: session.waitingSeconds }))
+        } else setQueue(undefined)
       }, POLL_MS)
     }
 
@@ -161,6 +183,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       disposed = true
       clearInterval(poll)
       clearInterval(keepalive)
+      clearInterval(meter)
       player?.close()
       if (sessionId) void xbox.stopStream(sessionId)
       window.hc.platform.streaming(false)
@@ -170,7 +193,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell title={title.name} stage={stage} live={live} image={title.poster ?? title.image} onExit={() => onExit()}>
+    <StreamShell title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
       <div id={HOLDER_ID} className="stream-surface" />
     </StreamShell>
   )

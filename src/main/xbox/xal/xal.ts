@@ -1,7 +1,6 @@
 import Http from './lib/http'
 import crypto, { subtle, KeyObject } from 'crypto'
 import { exportJWK } from 'jose'
-import { dialog } from "electron";
 
 import DeviceToken from './lib/tokens/devicetoken'
 import SisuToken, { ISisuToken } from './lib/tokens/sisutoken'
@@ -147,14 +146,7 @@ export default class Xal {
                         this.deviceTokenRetryCount += 1
                         return this.getDeviceTokenHack().then(resolve).catch(reject)
                     } else {
-                        // Clear data 
-                        dialog.showMessageBox({
-                            message:
-                                "Error: Failed to refresh device token:" +
-                                JSON.stringify(error) + 
-                                ", Please login again.",
-                            type: "error",
-                        });
+                        // Clear data
                         this.tokenStore.clear && this.tokenStore.clear();
                         reject(error)
                     }

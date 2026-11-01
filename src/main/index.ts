@@ -160,6 +160,7 @@ function registerIpc() {
     'ps:datacenters': (service) => ps.datacenters(service),
     'ps:stream': (game, opts) => ps.stream(game, opts),
     'ps:stop': () => ps.stop(),
+    'ps:testHaptics': () => ps.testHaptics(),
   }
   for (const [channel, handler] of Object.entries(routes)) ipcMain.handle(channel, (_e, ...args) => handler(...args))
 }

@@ -36,6 +36,28 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   )
 }
 
+function HapticTest() {
+  const [state, setState] = useState<'idle' | 'playing'>('idle')
+  const [note, setNote] = useState('Kol USB ile bağlıyken titreşim sol tutamaktan sağa geçer.')
+
+  const run = async () => {
+    setState('playing')
+    try {
+      const played = await window.hc.ps.testHaptics()
+      setNote(played ? 'Çalındı. Sol ve sağ tutamakta hissetmen gerekiyor.' : 'Kol bulunamadı. Dokunsal geri bildirim yalnızca USB bağlantısında çalışır.')
+    } catch (e) {
+      setNote(clean(e as Error))
+    }
+    setState('idle')
+  }
+
+  return (
+    <Row label="Titreşimi dene" hint={note}>
+      <button className="ghost" data-nav disabled={state === 'playing'} onClick={() => void run()}>{state === 'playing' ? 'Çalıyor' : 'Dene'}</button>
+    </Row>
+  )
+}
+
 function Toggle({ field, label, hint }: { field: keyof AppSettings; label: string; hint?: string }) {
   const settings = useSettings()
   const on = settings[field] as boolean
@@ -272,6 +294,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Toggle field="psNativeDualSense" label="Doğrudan bağlantı" hint="Jiroskop, dokunmatik yüzey ve uyarlanabilir tetikler için gerekir. Sonraki akışta geçerli olur." />
             <Toggle field="psTriggers" label="Uyarlanabilir tetikler" />
             <Slider field="psHapticStrength" label="Dokunsal geri bildirim gücü" hint="0, kapalı demektir." min={0} max={100} step={5} unit="%" />
+            <HapticTest />
             <Toggle field="psVibration" label="Titreşim" />
           </section>
         )}
@@ -280,7 +303,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
           <section data-theme="xbox">
             <h2>Xbox</h2>
             <h3>Görüntü</h3>
-            <Choice field="xboxResolution" label="Çözünürlük" options={[[720, '720p'], [1080, '1080p'], [1081, '1080p yüksek kalite']]} />
+            <Choice field="xboxResolution" label="Çözünürlük" hint="Üst sınırı Microsoft belirler: Ultimate hesapta 720p dışındaki seçenekler 1440p'ye çıkabilir." options={[[720, '720p'], [1080, 'Yüksek'], [1081, 'En yüksek']]} />
             <Choice field="xboxBitrate" label="Bit hızı" hint="Son değeri akış pazarlığı belirler." options={XBOX_BITRATES} />
             <Choice field="xboxCodec" label="Kodek" options={[['', 'Otomatik'], ['high', 'H.264 yüksek'], ['main', 'H.264 orta'], ['baseline', 'H.264 düşük']]} />
             <Toggle field="xboxFsr" label="FSR" hint="Görüntüyü yukarı ölçekler, GPU kullanımını artırır." />

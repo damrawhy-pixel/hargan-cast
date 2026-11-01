@@ -5,6 +5,14 @@ export interface StreamStats {
   fps: number
   mbps: number
   lost: number
+  size?: string
+  rttMs?: number
+  decodeMs?: number
+}
+
+export interface StreamQueue {
+  position?: number
+  seconds?: number
 }
 
 interface Props {
@@ -12,6 +20,7 @@ interface Props {
   stage: string
   live: boolean
   stats?: StreamStats
+  queue?: StreamQueue
   controller?: string
   image?: string
   onExit(): void
@@ -29,7 +38,28 @@ const PAD_DOWN = 13
 
 const FIT = { Stretch: 'fill', Zoom: 'cover' } as Record<string, string>
 
-export function StreamShell({ title, stage, live, stats, controller, image, onExit, children }: Props) {
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+
+function QueueCard({ queue }: { queue: StreamQueue }) {
+  const [waited, setWaited] = useState(0)
+  useEffect(() => {
+    const started = Date.now()
+    const timer = setInterval(() => setWaited(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const left = queue.seconds === undefined ? undefined : queue.seconds - waited
+  return (
+    <div className="queue" role="status">
+      <span>Sıradasın</span>
+      {queue.position !== undefined && <b>{queue.position}. sıra</b>}
+      {left !== undefined && <b>{left > 0 ? `Yaklaşık ${clock(left)}` : 'Az kaldı'}</b>}
+      <small>{clock(waited)} bekledin. Sıra gelince oyun kendiliğinden açılır.</small>
+    </div>
+  )
+}
+
+export function StreamShell({ title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
   const settings = getSettings()
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
   const pictureStyle = {
@@ -132,7 +162,7 @@ export function StreamShell({ title, stage, live, stats, controller, image, onEx
           {image && <img className="launch-art" src={image} alt="" />}
           <h2>{title}</h2>
           <div className="launch-bar" aria-hidden="true"><span /></div>
-          <p>{stage}</p>
+          {queue ? <QueueCard queue={queue} /> : <p>{stage}</p>}
           <button className="ghost" onClick={onExit}>Vazgeç</button>
         </div>
       )}
@@ -140,6 +170,9 @@ export function StreamShell({ title, stage, live, stats, controller, image, onEx
       {showStats && stats && (
         <div className={`stream-stats ${settings.statsVertical ? 'stream-stats--vertical' : ''}`}>
           <b>{stats.fps}</b> kare/sn · <b>{stats.mbps.toFixed(1)}</b> Mb/sn · kayıp <b>{stats.lost}</b>
+          {stats.rttMs !== undefined && <> · gecikme <b>{stats.rttMs}</b> ms</>}
+          {stats.decodeMs !== undefined && <> · çözme <b>{stats.decodeMs.toFixed(1)}</b> ms</>}
+          {stats.size && <> · {stats.size}</>}
           {controller && <> · {controller}</>}
         </div>
       )}

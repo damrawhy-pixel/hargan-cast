@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PsGame } from '../../../shared/types'
-import { StreamShell, type StreamStats } from '../components/StreamShell'
+import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
 import { getSettings } from '../lib/useSettings'
 import { rumble, startInput } from './input'
+import { psQuit, psStage } from './stages'
 import type { WorkerCommand, WorkerEvent } from './stream.worker'
 
 const HEVC = { codec: 'hev1.1.6.L153.B0', hardwareAcceleration: 'prefer-hardware' } as const
@@ -25,6 +26,7 @@ export function PsStream({ game, onExit }: Props) {
   const [stage, setStage] = useState('Oturum hazırlanıyor')
   const [live, setLive] = useState(false)
   const [stats, setStats] = useState<StreamStats>()
+  const [queue, setQueue] = useState<StreamQueue>()
   const [controller, setController] = useState<string>()
   const dualsense = useRef<string>()
   const exiting = useRef(false)
@@ -43,9 +45,14 @@ export function PsStream({ game, onExit }: Props) {
     }
 
     const offEvents = window.hc.ps.onEvent((e) => {
-      if (e.ev === 'progress') setStage(e.stage)
-      else if (e.ev === 'connected') setStage('Görüntü bekleniyor')
-      else if (e.ev === 'quit') leave(e.error ? e.detail || e.reason : undefined)
+      if (e.ev === 'progress') {
+        const { text, position } = psStage(e.stage)
+        setStage(text)
+        setQueue(position === undefined ? undefined : { position })
+      } else if (e.ev === 'connected') {
+        setStage('Görüntü bekleniyor')
+        setQueue(undefined)
+      } else if (e.ev === 'quit') leave(e.error ? psQuit(e.reason) : undefined)
       else if (e.ev === 'dualsense') {
         dualsense.current = e.transport
         setController(e.transport === 'usb' ? 'DualSense · USB' : e.transport === 'bluetooth' ? 'DualSense · Bluetooth' : undefined)
@@ -83,7 +90,7 @@ export function PsStream({ game, onExit }: Props) {
       worker.onmessage = (e: MessageEvent<WorkerEvent>) => {
         const msg = e.data
         if (msg.type === 'firstFrame') setLive(true)
-        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost })
+        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: `${started.width}×${started.height}` })
         else if (msg.type === 'rumble') psVibration && rumble(msg.left, msg.right, nativeDualSense)
         else if (msg.type === 'ended') leave()
         else if (msg.type === 'error') leave(msg.message)
@@ -114,7 +121,7 @@ export function PsStream({ game, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell title={game.name} stage={stage} live={live} stats={stats} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
+    <StreamShell title={game.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
       <canvas ref={canvasRef} className="stream-surface" />
     </StreamShell>
   )

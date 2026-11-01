@@ -53,7 +53,7 @@ export default class StreamManager {
     startStream(type:string|'home'|'cloud', target){
         return new Promise((resolve, reject) => {
             this.getApi(type).startStream(target).then((playResult:playResult) => {
-            // this._application._xCloudApi.startStream(type, target).then((playResult) => {
+            // this._application._xCloudApi.startStream(type, target).then((playResult) => {
 
                 const sessionId = playResult.sessionPath.split('/')[3]
 
@@ -225,6 +225,13 @@ export default class StreamManager {
                             this.getSession(sessionId).waitingTimes = waitingTimes
                             this.getSession(sessionId).playerState = 'queued'
 
+                        }).catch(() => {
+                            // Still queued, just without an estimate. Not asking again each second.
+                            const queued = this.getSession(sessionId)
+                            if(queued){
+                                queued.waitingTimes = {}
+                                queued.playerState = 'queued'
+                            }
                         })
                     }
                     

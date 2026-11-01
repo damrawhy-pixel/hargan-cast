@@ -29,6 +29,7 @@
 
 #include <fcntl.h>
 #include <io.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -711,6 +712,61 @@ done:
 	return 0;
 }
 
+// --- haptic test ------------------------------------------------------------
+
+#define TEST_OPEN_MS 1500
+#define TEST_PACKET_MS 30
+#define TEST_PACKET_FRAMES (HAPTIC_INPUT_RATE * TEST_PACKET_MS / 1000)
+#define TEST_PACKETS 30
+#define TEST_TONE_HZ 170.0
+#define TEST_LEVEL 24000.0
+
+typedef struct
+{
+	int id;
+	float gain;
+} HapticTest;
+
+// A short tone that crosses from the left grip to the right one.
+static unsigned __stdcall haptic_test_thread(void *arg)
+{
+	HapticTest *req = arg;
+	haptics_start();
+	for(int waited = 0; waited < TEST_OPEN_MS && !haptics_active(); waited += 20)
+		Sleep(20);
+
+	bool played = haptics_active();
+	if(played)
+	{
+		int16_t packet[TEST_PACKET_FRAMES * 2];
+		const double step = 2.0 * 3.14159265358979 * TEST_TONE_HZ / HAPTIC_INPUT_RATE;
+		size_t frame = 0;
+		for(int i = 0; i < TEST_PACKETS; i++)
+		{
+			bool right = i >= TEST_PACKETS / 2;
+			for(int j = 0; j < TEST_PACKET_FRAMES; j++, frame++)
+			{
+				int16_t level = (int16_t)(sin((double)frame * step) * TEST_LEVEL);
+				packet[j * 2] = right ? 0 : level;
+				packet[j * 2 + 1] = right ? level : 0;
+			}
+			haptics_push(packet, TEST_PACKET_FRAMES, req->gain);
+			Sleep(TEST_PACKET_MS);
+		}
+		Sleep(TEST_PACKET_MS * 3);
+	}
+	haptics_stop();
+
+	json_object *reply = json_object_new_object();
+	json_object_object_add(reply, "id", json_object_new_int(req->id));
+	json_object_object_add(reply, "ok", json_object_new_boolean(1));
+	json_object_object_add(reply, "played", json_object_new_boolean(played));
+	emit(reply);
+	free(req);
+	InterlockedExchange(&stream_busy, 0);
+	return 0;
+}
+
 #ifdef HARGAN_DIAG
 // Test build only: replays a capture through the same media path a live session
 // uses. File format: repeated [u32 little-endian size][sample], first sample being
@@ -819,6 +875,18 @@ static void handle_command(const char *line)
 			r->ps_chord = bool_field(cmd, "psChord");
 			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
 			CloseHandle((HANDLE)_beginthreadex(NULL, 0, stream_thread, r, 0, NULL));
+		}
+	}
+	else if(strcmp(name, "hapticTest") == 0)
+	{
+		if(InterlockedCompareExchange(&stream_busy, 1, 0) != 0)
+			emit_reply_error(id, "Aktif bir oturum varken denenemez");
+		else
+		{
+			HapticTest *r = calloc(1, sizeof(*r));
+			r->id = id;
+			r->gain = (float)int_field(cmd, "strength", 100) / 100.0f;
+			CloseHandle((HANDLE)_beginthreadex(NULL, 0, haptic_test_thread, r, 0, NULL));
 		}
 	}
 #ifdef HARGAN_DIAG

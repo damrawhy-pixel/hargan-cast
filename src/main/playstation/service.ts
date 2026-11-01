@@ -251,7 +251,8 @@ export default class PlayStationService {
       lang: (catalog.resolvedStoreLang || lang).toLowerCase(),
       foreign: !catalog.nativeMode,
     }
-    return { games: catalog.games ?? [], warning: catalog.warning ?? '', nativeMode: catalog.nativeMode }
+    const warning = catalog.warning ? 'Oturumun süresi doldu. Sahip olduğun oyunları görmek için tekrar giriş yap.' : ''
+    return { games: catalog.games ?? [], warning, nativeMode: catalog.nativeMode }
   }
 
   async stream(game: PsGame, opts: PsStreamOptions): Promise<PsStreamStarted> {
@@ -307,6 +308,12 @@ export default class PlayStationService {
       .sort((a, b) => (a.rttMs ?? Infinity) - (b.rttMs ?? Infinity))
   }
 
+  async testHaptics(): Promise<boolean> {
+    await this.ensureCore()
+    const { played } = await this.call('hapticTest', { strength: this.settings().psHapticStrength })
+    return played
+  }
+
   async stop() {
     this.core?.stdin.write(`${JSON.stringify({ cmd: 'stop' })}\n`)
   }
@@ -319,5 +326,13 @@ export default class PlayStationService {
 function friendlyError(message: string) {
   if (message === 'AUTHORIZATION_FAILED') return 'PlayStation oturumunun süresi doldu. Tekrar giriş yap.'
   if (message === 'PS_PLUS_SUBSCRIPTION_REQUIRED') return 'Bu oyun için PS Plus Premium aboneliği gerekiyor.'
+  if (message === 'PING_TIMEOUT') return 'Veri merkezlerine ulaşılamadı. Bağlantını kontrol edip tekrar dene.'
+  if (message === 'ACCOUNT_PRIVACY_SETTINGS') return 'Hesabının gizlilik ayarları bu oyuna izin vermiyor.'
+  if (message.startsWith('Selected datacenter')) return 'Seçtiğin veri merkezi şu an kullanılamıyor. Ayarlardan başka birini seç.'
+  if (message.startsWith('Timed out waiting')) return 'Akış sunucusu beklenirken süre doldu. Tekrar dene.'
+  if (message.startsWith("Couldn't reach") || message.startsWith('Network error')) return 'PlayStation sunucularına ulaşılamadı. Bağlantını kontrol edip tekrar dene.'
+  if (message.startsWith('Failed to fetch')) return 'PlayStation kataloğu alınamadı. Tekrar dene.'
+  // What Sony sends back is a raw response body, not a sentence.
+  if (message.startsWith('{')) return 'PlayStation isteği reddetti. Biraz sonra tekrar dene.'
   return message
 }

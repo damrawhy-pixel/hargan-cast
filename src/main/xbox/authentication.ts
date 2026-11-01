@@ -1,4 +1,4 @@
-import { BrowserWindow, session, dialog } from "electron";
+import { BrowserWindow, session } from "electron";
 
 import Application from './service';
 import { Xal, TokenStore } from "./xal";
@@ -17,6 +17,8 @@ import {
   isWebTokenValid,
 } from './helpers/webTokenStore';
 import { defaultSettings } from './settings';
+
+const SIGN_IN_EXPIRED = "Xbox oturumu yenilenemedi. Tekrar giriş yap.";
 
 export default class Authentication {
   _application: Application;
@@ -90,7 +92,7 @@ export default class Authentication {
       (_streamToken.xHomeToken || _streamToken.xCloudToken) &&
       _webToken
     ) {
-      const {xHomeToken, xCloudToken} = _streamToken;
+      const {xHomeToken, xCloudToken} = _streamToken;
 
       if (xHomeToken || xCloudToken) {
         this._appLevel = 1;
@@ -185,10 +187,7 @@ export default class Authentication {
                 clearStreamToken();
                 clearWebToken();
                 this._tokenStore.clear();
-                dialog.showMessageBox({
-                  message: '[startSilentFlow() - 182] refreshTokens error:' + e.message,
-                  type: "error",
-                });
+                this._application.signInFailed(SIGN_IN_EXPIRED);
               });
           }
         }
@@ -244,12 +243,7 @@ export default class Authentication {
                   clearStreamToken();
                   clearWebToken();
                   this._tokenStore.clear();
-                  dialog.showMessageBox({
-                    message:
-                      "Error: Failed to retrieve web tokens:" +
-                      JSON.stringify(error),
-                    type: "error",
-                  });
+                  this._application.signInFailed(SIGN_IN_EXPIRED);
                 });
             })
             .catch((err) => {
@@ -261,12 +255,7 @@ export default class Authentication {
               clearStreamToken();
               clearWebToken();
               this._tokenStore.clear();
-              dialog.showMessageBox({
-                message:
-                  "Error: Failed to retrieve streaming tokens:" +
-                  JSON.stringify(err),
-                type: "error",
-              });
+              this._application.signInFailed(SIGN_IN_EXPIRED);
             });
         })
         .catch(e => {
@@ -274,10 +263,7 @@ export default class Authentication {
           clearStreamToken();
           clearWebToken();
           this._tokenStore.clear();
-          dialog.showMessageBox({
-                message: '[startSilentFlow() - 275] refreshTokens error:' + e.message,
-                type: "error",
-              });
+          this._application.signInFailed(SIGN_IN_EXPIRED);
         });
     }
   }
@@ -366,11 +352,7 @@ export default class Authentication {
               "[startWebviewHooks()] Authentication Callback is not defined:",
               this._authCallback
             );
-            dialog.showErrorBox(
-              "Error",
-              "Authentication Callback is not defined. Error details: " +
-                JSON.stringify(this._authCallback)
-            );
+            this._application.signInFailed("Xbox girişi tamamlanamadı. Tekrar dene.");
           }
 
           callback({ cancel: true });
@@ -426,7 +408,7 @@ export default class Authentication {
     const settings: any = this._application._store.get(
       "settings",
       defaultSettings
-    );
+    );
     if (
       !this._xal._xcloudToken ||
       this._xal._xcloudToken.getSecondsValid() <= 60
