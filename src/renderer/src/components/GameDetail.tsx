@@ -71,7 +71,7 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
     <section className="detail" data-theme={item.service} role="dialog" aria-label={item.name}>
       {(backdrop ?? item.art) && (
         <div key={backdrop ?? item.art} className={`detail-backdrop ${backdrop ? '' : 'detail-backdrop--soft'}`} style={{ backgroundImage: `url("${backdrop ?? item.art}")` }} />
-      )}}
+      )}
       <div className="detail-shade" />
 
       <div className="detail-body">
