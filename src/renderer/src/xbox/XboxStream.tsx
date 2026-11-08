@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { XboxTitle } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
+import { Picture, fitFor, outputSize, pictureLabel, type Fit, type PictureOptions, type Size } from '../lib/picture'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
 
@@ -11,6 +12,47 @@ const STATS_MS = 1000
 const RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 1500
 const H264_PROFILES = { high: '4d', main: '42e', baseline: '420' }
+
+// Paints each new video frame, post-processed, onto a canvas laid over the video.
+function startPicture(video: HTMLVideoElement, options: PictureOptions, fit: Fit) {
+  const canvas = document.createElement('canvas')
+  canvas.className = 'stream-fsr'
+  video.after(canvas)
+  const picture = Picture.create(canvas, options)
+  if (!picture) {
+    canvas.remove()
+    return undefined
+  }
+
+  let box: Size = { width: 0, height: 0 }
+  const observer = new ResizeObserver(([entry]) => {
+    const size = entry.devicePixelContentBoxSize?.[0]
+    if (size) box = { width: size.inlineSize, height: size.blockSize }
+  })
+  observer.observe(canvas, { box: 'device-pixel-content-box' })
+
+  let handle = 0
+  const paint = () => {
+    const frame = { width: video.videoWidth, height: video.videoHeight }
+    if (frame.width && box.width && box.height) {
+      const out = outputSize(box, frame, fit)
+      if (canvas.width !== out.width || canvas.height !== out.height) {
+        canvas.width = out.width
+        canvas.height = out.height
+      }
+      picture.draw(video, frame.width, frame.height)
+    }
+    handle = video.requestVideoFrameCallback(paint)
+  }
+  handle = video.requestVideoFrameCallback(paint)
+
+  return () => {
+    video.cancelVideoFrameCallback(handle)
+    observer.disconnect()
+    picture.dispose()
+    canvas.remove()
+  }
+}
 
 interface Props {
   title: XboxTitle
@@ -35,6 +77,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     let poll: ReturnType<typeof setInterval> | undefined
     let keepalive: ReturnType<typeof setInterval> | undefined
     let meter: ReturnType<typeof setInterval> | undefined
+    let stopPicture: (() => void) | undefined
+    let filters = ''
 
     const leave = (error?: string) => {
       if (exiting.current) return
@@ -47,6 +91,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       if (disposed) return
       clearInterval(keepalive)
       clearInterval(meter)
+      stopPicture?.()
       if (attempts >= RECONNECT_ATTEMPTS) return leave('Bağlantı koptu ve yeniden kurulamadı')
       attempts++
       setLive(false)
@@ -77,7 +122,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         lost: parseInt(state.pl) || 0,
         rttMs: state.rtt.startsWith('-') ? undefined : Math.round(parseFloat(state.rtt)) || undefined,
         decodeMs: parseFloat(state.decode) || undefined,
-        size: video?.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : undefined,
+        size: video?.videoWidth ? [`${video.videoWidth}×${video.videoHeight}`, filters].filter(Boolean).join(' · ') : undefined,
       })
     }
 
@@ -101,10 +146,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       player.setVideoFormat(settings.videoFormat)
       if (settings.xboxCodec) player.setCodecPreferences('video/H264', { profiles: [H264_PROFILES[settings.xboxCodec]] })
       if (settings.xboxBitrate > 0) player.setVideoBitrate(settings.xboxBitrate)
-      if (settings.xboxAudioBitrate > 0) player.setAudioBitrate(settings.xboxAudioBitrate)
       player.setAudioControl(settings.audioVolume !== 100)
       if (settings.xboxAudioRumble) player.setAudioRumble(true, settings.xboxAudioRumbleThreshold)
-      player.setFsrSharpness(settings.xboxFsrSharpness)
       player.setGamepadIndex(settings.xboxGamepadIndex)
       player.setGamepadMix(settings.xboxGamepadMix)
       player.setPollRate(settings.xboxPollingRate)
@@ -128,7 +171,10 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         const video = document.querySelector<HTMLVideoElement>(`#${HOLDER_ID} video`)
         if (video && !video.videoWidth) video.addEventListener('loadeddata', () => setLive(true), { once: true })
         else setLive(true)
-        if (settings.xboxFsr) player.startFSR(() => {})
+        stopPicture?.()
+        const options: PictureOptions = { fsr: settings.xboxFsr, sharpness: settings.xboxFsrSharpness, deband: settings.xboxDeband }
+        stopPicture = (options.fsr || options.deband) && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
+        filters = stopPicture ? pictureLabel(options) : ''
         applyAudio()
         keepalive = setInterval(() => void xbox.keepalive(sessionId), KEEPALIVE_MS)
         clearInterval(meter)
@@ -186,6 +232,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       clearInterval(poll)
       clearInterval(keepalive)
       clearInterval(meter)
+      stopPicture?.()
       player?.close()
       if (sessionId) void xbox.stopStream(sessionId)
       window.hc.platform.streaming(false)

@@ -116,7 +116,7 @@ let spotlightTimer: ReturnType<typeof setTimeout> | undefined
 export function setSpotlight(item: HubItem) {
   clearTimeout(spotlightTimer)
   spotlightTimer = setTimeout(() => {
-    if (state.spotlight?.key !== item.key) patch({ spotlight: item })
+    if (state.spotlight?.key !== item.key || state.spotlight.hero !== item.hero) patch({ spotlight: item })
   }, SPOTLIGHT_DELAY_MS)
 }
 

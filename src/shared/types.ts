@@ -46,13 +46,17 @@ export interface XboxSession {
   error?: string
 }
 
-export interface XboxDetails {
+/** What a game's page shows, gathered from the stores. */
+export interface GameInfo {
   description?: string
   developer?: string
   release?: string
   rating?: string
   hero?: string
+  logo?: string
   screenshots: string[]
+  /** Players' star rating in the store. */
+  community?: { average: number; count: number }
 }
 
 export interface XboxActiveSession {
@@ -124,7 +128,7 @@ export interface HarganApi {
     signOut(): Promise<void>
     titles(): Promise<XboxTitle[]>
     library(): Promise<XboxTitle[]>
-    details(productId: string): Promise<XboxDetails | undefined>
+    info(productId: string): Promise<GameInfo>
     startStream(titleId: string): Promise<string>
     activeSessions(): Promise<XboxActiveSession[]>
     adoptSession(id: string, titleId: string): Promise<void>
@@ -147,6 +151,7 @@ export interface HarganApi {
     stream(game: PsGame, opts: PsStreamOptions): Promise<PsStreamStarted>
     stop(): Promise<void>
     testHaptics(): Promise<boolean>
+    info(game: PsGame): Promise<GameInfo>
     routeSpeaker(): Promise<boolean>
     onStatus(cb: (s: PsStatus) => void): () => void
     onEvent(cb: (e: PsEvent) => void): () => void

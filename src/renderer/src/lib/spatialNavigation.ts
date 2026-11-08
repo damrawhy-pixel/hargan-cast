@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { sounds } from './sounds'
 
 type Direction = 'up' | 'down' | 'left' | 'right'
 
@@ -35,9 +36,12 @@ function move(root: HTMLElement, direction: Direction) {
   if ((direction === 'left' || direction === 'right') && isAdjustable(current) && targets.includes(current)) return adjust(current, direction)
   if (!current || !targets.includes(current)) {
     targets[0]?.focus()
+    sounds.move()
     return
   }
-  const from = current.getBoundingClientRect()
+  // A tile with a caption beside it is aimed from its picture, not from picture and caption together.
+  const box = (el: HTMLElement) => (el.querySelector('[data-anchor]') ?? el).getBoundingClientRect()
+  const from = box(current)
   const fx = from.left + from.width / 2
   const fy = from.top + from.height / 2
   const horizontal = direction === 'left' || direction === 'right'
@@ -51,7 +55,7 @@ function move(root: HTMLElement, direction: Direction) {
   let bestScore = Infinity
   for (const target of nearby) {
     if (target === current) continue
-    const r = target.getBoundingClientRect()
+    const r = box(target)
     const dx = r.left + r.width / 2 - fx
     const dy = r.top + r.height / 2 - fy
     const along = horizontal ? dx * sign : dy * sign
@@ -64,20 +68,33 @@ function move(root: HTMLElement, direction: Direction) {
   }
   if (best) {
     best.focus({ preventScroll: true })
-    best.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+    // The launcher keeps the chosen game near its start, as a console's home row does.
+    best.scrollIntoView({ block: 'nearest', inline: best.hasAttribute('data-launcher') ? 'start' : 'center', behavior: 'smooth' })
+    sounds.move()
   }
 }
 
-const activeRoot = () => document.querySelector<HTMLElement>('.detail') ?? document.querySelector<HTMLElement>('.space:not([hidden])')
+const activeRoot = () =>
+  document.querySelector<HTMLElement>('.viewer') ?? document.querySelector<HTMLElement>('.detail') ?? document.querySelector<HTMLElement>('.space:not([hidden])')
+
+const PAD_GUIDE = 16
 
 // Couch-friendly: arrows or a gamepad move focus, A or Enter activates, LB/RB
-// are handled by the caller through `onBumper`.
-export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) => void) {
+// are handled by the caller through `onBumper`, and the PS or Xbox button
+// through `onHome`.
+export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) => void, onHome: () => void) {
   useEffect(() => {
     if (!enabled) return
 
+    // Every activation, by pad, keyboard or mouse, ends up as a click.
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest?.('[data-nav], [role=tab], .round-button')) sounds.select()
+    }
+    window.addEventListener('click', onClick, true)
+
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
+      if (e.key === 'Escape') sounds.back()
       if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return
       const direction = ({ ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' } as const)[e.key as string]
       const root = activeRoot()
@@ -87,7 +104,10 @@ export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) 
       }
     }
     window.addEventListener('keydown', onKey)
-    const onMouse = () => delete document.documentElement.dataset.input
+    // Chromium sends motionless mouse events when the page moves under the cursor; those are not the user.
+    const onMouse = (e: MouseEvent) => {
+      if (e.movementX || e.movementY) delete document.documentElement.dataset.input
+    }
     window.addEventListener('mousemove', onMouse)
 
     let frame = 0
@@ -96,6 +116,7 @@ export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) 
     let confirmHeld = false
     let bumperHeld = false
     let backHeld = false
+    let guideHeld = false
 
     const poll = () => {
       frame = requestAnimationFrame(poll)
@@ -128,20 +149,36 @@ export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) 
       confirmHeld = confirm
 
       const back = pad.buttons[1]?.pressed ?? false
-      if (back && !backHeld) document.querySelector<HTMLElement>('.detail-back')?.click()
+      if (back && !backHeld) {
+        const close = document.querySelector<HTMLElement>('.detail-back')
+        sounds.back()
+        close?.click()
+      }
       backHeld = back
 
       const left = pad.buttons[4]?.pressed ?? false
       const right = pad.buttons[5]?.pressed ?? false
-      if ((left || right) && !bumperHeld && !document.querySelector('.detail')) onBumper(right ? 1 : -1)
+      if ((left || right) && !bumperHeld && !document.querySelector('.detail, .viewer')) {
+        sounds.tab()
+        onBumper(right ? 1 : -1)
+      }
       bumperHeld = left || right
+
+      const guide = pad.buttons[PAD_GUIDE]?.pressed ?? false
+      if (guide && !guideHeld) {
+        document.querySelector<HTMLElement>('.detail-back')?.click()
+        sounds.tab()
+        onHome()
+      }
+      guideHeld = guide
     }
     frame = requestAnimationFrame(poll)
 
     return () => {
+      window.removeEventListener('click', onClick, true)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousemove', onMouse)
       cancelAnimationFrame(frame)
     }
-  }, [enabled, onBumper])
+  }, [enabled, onBumper, onHome])
 }

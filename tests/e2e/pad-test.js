@@ -10,7 +10,7 @@
     await wait(120)
   }
   const [A, B, LB, RB, UP, DOWN, LEFT, RIGHT, VIEW, MENU] = [0, 1, 4, 5, 12, 13, 14, 15, 8, 9]
-  const tabOn = () => document.querySelector('.tabs [aria-selected=true]').textContent
+  const tabOn = () => document.querySelector('[data-tab][aria-selected=true]')?.getAttribute('data-tab')
   const focus = () => { const e = document.activeElement; return `${e.tagName}:${(e.getAttribute('aria-label') || e.textContent || '').trim().slice(0, 26)}` }
   const out = {}
 
@@ -40,15 +40,15 @@
   // PlayStation without Premium must not launch.
   document.querySelector('[data-tab=home]').click()
   await wait(500)
-  const psRow = [...document.querySelectorAll('.home .row')].find((r) => r.textContent.includes('PlayStation'))
+  const psRow = [...document.querySelectorAll('.home .shelf')].find((r) => r.textContent.includes('PlayStation'))
   psRow.querySelector('.tile').click()
   await wait(400)
   out.psBlocked = { stream: !!document.querySelector('.stream'), toast: document.querySelector('.toast')?.textContent?.slice(0, 44) }
   await wait(600)
-  out.heroButton = document.querySelector('.hero-copy .primary')?.textContent
+  out.heroButton = document.querySelector('.launch-play')?.textContent
 
   // Stream menu with no keyboard at all.
-  const row = [...document.querySelectorAll('.home .row')].find((r) => r.textContent.includes('Sahip'))
+  const row = [...document.querySelectorAll('.home .shelf')].find((r) => r.textContent.includes('Xbox'))
   row.querySelector('.tile').click()
   await wait(1800)
   pad.buttons[VIEW].pressed = pad.buttons[MENU].pressed = true

@@ -5,12 +5,14 @@ interface Layer {
   id: number
   url: string
   sharp: boolean
+  leaving: boolean
 }
 
-const FADE_MS = 700
+const FADE_MS = 900
 
-// The stage behind every screen. New art fades in over the old one, and only
-// opacity animates, so the compositor does all the work.
+// The stage behind every screen. The new picture settles in over the old one,
+// which fades away; only opacity and transform animate, so the compositor does
+// the work. A slow drift keeps a still picture alive.
 export function Backdrop({ hidden }: { hidden: boolean }) {
   const spotlight = useStore((s) => s.spotlight)
   const [layers, setLayers] = useState<Layer[]>([])
@@ -25,8 +27,8 @@ export function Backdrop({ hidden }: { hidden: boolean }) {
     image.onload = () => {
       if (cancelled) return
       const id = ++nextId.current
-      setLayers((current) => [...current.slice(-1), { id, url, sharp }])
-      setTimeout(() => setLayers((current) => current.filter((l) => l.id >= id)), FADE_MS + 100)
+      setLayers((current) => [...current.filter((l) => !l.leaving).map((l) => ({ ...l, leaving: true })), { id, url, sharp, leaving: false }])
+      setTimeout(() => setLayers((current) => current.filter((l) => !l.leaving || l.id > id)), FADE_MS + 100)
     }
     image.src = url
     return () => {
@@ -43,7 +45,9 @@ export function Backdrop({ hidden }: { hidden: boolean }) {
       <div className="stage-drift" />
       <div className="stage-arts">
         {layers.map((layer) => (
-          <div key={layer.id} className={`stage-art ${layer.sharp ? 'stage-art--sharp' : ''}`} style={{ backgroundImage: `url("${layer.url}")` }} />
+          <div key={layer.id} className={`stage-art ${layer.sharp ? 'stage-art--sharp' : ''} ${layer.leaving ? 'stage-art--leaving' : ''}`}>
+            <div className="stage-art-image" style={{ backgroundImage: `url("${layer.url}")` }} />
+          </div>
         ))}
       </div>
       <div className="stage-shade" />

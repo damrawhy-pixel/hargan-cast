@@ -5,8 +5,10 @@ import { Backdrop } from './components/Backdrop'
 import { GameDetail } from './components/GameDetail'
 import { Home } from './components/Home'
 import { SettingsPage } from './components/SettingsPage'
+import { Splash } from './components/Splash'
 import { SPACES, TopBar, type Space } from './components/TopBar'
 import { canStart, type HubItem } from './lib/items'
+import { reducedMotion, useMotionSetting } from './lib/motion'
 import { readSetting, writeSetting } from './lib/settings'
 import { useSpatialNavigation } from './lib/spatialNavigation'
 import { rememberPlayed } from './lib/store'
@@ -22,7 +24,7 @@ const ORDER = SPACES.map(([id]) => id)
 
 // Shared-element morphs where the browser supports them, plain state otherwise.
 function transition(update: () => void) {
-  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return update()
+  if (!document.startViewTransition || reducedMotion()) return update()
   document.startViewTransition(() => flushSync(update))
 }
 
@@ -37,6 +39,7 @@ export function App() {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => writeSetting('space', space), [space])
+  useMotionSetting()
 
   const showToast = useCallback((text: string) => {
     setToast(text)
@@ -58,7 +61,12 @@ export function App() {
     })
   }, [])
 
-  useSpatialNavigation(!stream, step)
+  const [splash, setSplash] = useState<'showing' | 'revealing' | 'gone'>('showing')
+  const reveal = useCallback(() => setSplash('revealing'), [])
+  const splashDone = useCallback(() => setSplash('gone'), [])
+
+  const home = useCallback(() => go('home'), [go])
+  useSpatialNavigation(!stream && splash === 'gone', step, home)
 
   const showDetail = useCallback((item: HubItem, art: HTMLElement | null) => {
     if (art) art.style.viewTransitionName = 'game-art'
@@ -107,7 +115,7 @@ export function App() {
   }
 
   return (
-    <div className="app" data-space={space} data-direction={direction}>
+    <div className="app" data-space={space} data-direction={direction} data-splash={splash === 'gone' ? undefined : splash}>
       <Backdrop hidden={Boolean(stream)} />
 
       {!stream && <TopBar space={space} onSelect={go} onAbout={() => setAbout(true)} />}
@@ -137,6 +145,8 @@ export function App() {
           }}
         />
       )}
+
+      {splash !== 'gone' && <Splash onReveal={reveal} onDone={splashDone} />}
 
       {toast && <div className="toast glass" role="status">{toast}</div>}
       {about && <About onClose={() => setAbout(false)} />}

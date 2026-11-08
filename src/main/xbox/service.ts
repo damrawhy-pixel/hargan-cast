@@ -1,7 +1,7 @@
 import https from 'node:https'
 import axios from 'axios'
 import { app, session } from 'electron'
-import type { XboxActiveSession, XboxDetails, XboxSession, XboxStatus, XboxTitle } from '../../shared/types'
+import type { GameInfo, XboxActiveSession, XboxSession, XboxStatus, XboxTitle } from '../../shared/types'
 import { log } from '../log'
 import Authentication from './authentication'
 import { clearStreamToken, saveStreamToken } from './helpers/streamTokenStore'
@@ -184,25 +184,34 @@ export default class XboxService {
     this.setStatus({ gamertag: read('Gamertag'), gamerpic: read('GameDisplayPicRaw'), gamerscore: read('Gamerscore') })
   }
 
-  async details(productId: string): Promise<XboxDetails | undefined> {
+  // The cloud catalog and the Microsoft Store each know part of a game's page.
+  async info(productId: string): Promise<GameInfo> {
     const language = app.getLocale().startsWith('tr') ? 'tr-TR' : 'en-US'
-    const { data } = await axios.post(
-      `https://catalog.gamepass.com/v3/products?market=US&language=${language}&hydration=RemoteHighSapphire0`,
-      { Products: [productId] },
-      {
-        timeout: 15000,
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'ms-cv': 0, 'calling-app-name': 'Xbox Cloud Gaming Web', 'calling-app-version': '24.17.63' },
-      },
-    )
-    const product: any = Object.values(data.Products ?? {})[0]
-    if (!product) return undefined
+    const [cloud, store] = await Promise.allSettled([
+      axios.post(
+        `https://catalog.gamepass.com/v3/products?market=US&language=${language}&hydration=RemoteHighSapphire0`,
+        { Products: [productId] },
+        {
+          timeout: 15000,
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'ms-cv': 0, 'calling-app-name': 'Xbox Cloud Gaming Web', 'calling-app-version': '24.17.63' },
+        },
+      ),
+      axios.get(`https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=${encodeURIComponent(productId)}&market=US&languages=${language},en-US`, { timeout: 15000 }),
+    ])
+    const product: any = cloud.status === 'fulfilled' ? Object.values(cloud.value.data.Products ?? {})[0] : undefined
+    const listing: any = store.status === 'fulfilled' ? store.value.data.Products?.[0] : undefined
+    const localized = listing?.LocalizedProperties?.[0]
+    const images: { ImagePurpose: string; Uri: string }[] = localized?.Images ?? []
+    const usage = listing?.MarketProperties?.[0]?.UsageData?.find((u: { AggregateTimeSpan: string }) => u.AggregateTimeSpan === 'AllTime')
+    const shots: string[] = (product?.Screenshots ?? []).map((s: { URL: string }) => toHttps(s.URL))
     return {
-      description: product.ProductDescriptionShort || product.ProductDescription,
-      developer: product.DeveloperName,
-      release: product.OriginalReleaseDate,
-      rating: product.ContentRating?.Description,
-      hero: toHttps(product.Image_Hero?.URL),
-      screenshots: (product.Screenshots ?? []).map((s: { URL: string }) => toHttps(s.URL)),
+      description: product?.ProductDescription || localized?.ProductDescription || product?.ProductDescriptionShort,
+      developer: product?.DeveloperName ?? localized?.DeveloperName,
+      release: product?.OriginalReleaseDate,
+      rating: product?.ContentRating?.Description,
+      hero: toHttps(product?.Image_Hero?.URL),
+      screenshots: shots.length ? shots : images.filter((i) => i.ImagePurpose === 'Screenshot').map((i) => toHttps(i.Uri)!),
+      community: usage?.RatingCount ? { average: usage.AverageRating, count: usage.RatingCount } : undefined,
     }
   }
 

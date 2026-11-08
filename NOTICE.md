@@ -50,6 +50,7 @@ XStreaming Desktop is distributed under this licence:
 | Component | Licence | Use |
 | --- | --- | --- |
 | xstreaming-player | MIT | Xbox WebRTC player (npm) |
+| AMD FidelityFX Super Resolution 1.0 | MIT | Upscaling and sharpening algorithm, reimplemented in `src/renderer/src/lib/picture.ts` |
 | Electron, React, Vite | MIT | Application shell |
 | nanopb | zlib | `native/third_party/nanopb` |
 | Jerasure, GF-Complete | BSD-3-Clause | `native/third_party/` |

@@ -72,6 +72,7 @@ export function PlayStationSpace({ onOpen }: Props) {
         <SkeletonGrid />
       ) : (
         <Library
+          title="PlayStation kitaplığı"
           items={items}
           filters={filters}
           onOpen={onOpen}

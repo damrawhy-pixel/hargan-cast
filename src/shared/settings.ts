@@ -10,6 +10,9 @@ export interface AppSettings {
   backgroundKeepalive: boolean
   useVulkan: boolean
   fontSize: number
+  uiSounds: boolean
+  /** 'system' follows Windows' "Animation effects" switch. */
+  motion: 'on' | 'system' | 'off'
 
   // Stats
   showStats: boolean
@@ -34,6 +37,9 @@ export interface AppSettings {
   psNowBitrate: number
   psNowDatacenter: string
   psCodec: 'auto' | 'h264' | 'h265'
+  psFsr: boolean
+  psFsrSharpness: number
+  psDeband: boolean
   psPremium: boolean
   psGameLanguage: string
   psPacketLossMax: number
@@ -51,11 +57,11 @@ export interface AppSettings {
   // Xbox
   xboxResolution: number
   xboxBitrate: number
-  xboxAudioBitrate: number
   xboxCodec: '' | 'high' | 'main' | 'baseline'
   xboxGameLanguage: string
   xboxFsr: boolean
   xboxFsrSharpness: number
+  xboxDeband: boolean
   xboxRegionIp: string
   xboxSignalServer: string
   xboxIpv6: boolean
@@ -85,6 +91,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundKeepalive: false,
   useVulkan: false,
   fontSize: 15,
+  uiSounds: true,
+  motion: 'on',
 
   showStats: false,
   statsVertical: false,
@@ -99,12 +107,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   audioVolume: 100,
 
   psCloudResolution: 1080,
-  psCloudBitrate: 20000,
+  psCloudBitrate: 0,
   psCloudDatacenter: 'Auto',
   psNowResolution: 1080,
-  psNowBitrate: 20000,
+  psNowBitrate: 0,
   psNowDatacenter: 'Auto',
   psCodec: 'auto',
+  psFsr: true,
+  psFsrSharpness: 4,
+  psDeband: true,
   psPremium: false,
   psGameLanguage: '',
   psPacketLossMax: 5,
@@ -121,11 +132,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   xboxResolution: 1080,
   xboxBitrate: 0,
-  xboxAudioBitrate: 0,
   xboxCodec: 'high',
   xboxGameLanguage: 'en-US',
   xboxFsr: false,
-  xboxFsrSharpness: 2,
+  xboxFsrSharpness: 4,
+  xboxDeband: false,
   xboxRegionIp: '',
   xboxSignalServer: '',
   xboxIpv6: false,

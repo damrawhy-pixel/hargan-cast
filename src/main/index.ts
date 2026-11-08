@@ -24,6 +24,9 @@ app.commandLine.appendSwitch('ignore-gpu-blocklist')
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
+// Chromium drops smooth scrolling when Windows animation effects are off; the
+// launcher and rails glide regardless, and the app's own setting governs the rest.
+app.commandLine.appendSwitch('enable-smooth-scrolling')
 const features = ['PlatformHEVCDecoderSupport', 'D3D11VideoDecoder']
 if (readBootSettings().useVulkan) {
   app.commandLine.appendSwitch('use-vulkan')
@@ -128,7 +131,7 @@ function registerIpc() {
     'xbox:signOut': () => xbox.signOut(),
     'xbox:titles': () => xbox.titles(),
     'xbox:library': () => xbox.library(),
-    'xbox:details': (productId) => xbox.details(productId),
+    'xbox:info': (productId) => xbox.info(productId),
     'xbox:startStream': (id) => xbox.startStream(id),
     'xbox:activeSessions': () => xbox.activeSessions(),
     'xbox:adoptSession': (id, titleId) => xbox.adoptSession(id, titleId),
@@ -161,6 +164,7 @@ function registerIpc() {
     'ps:stream': (game, opts) => ps.stream(game, opts),
     'ps:stop': () => ps.stop(),
     'ps:testHaptics': () => ps.testHaptics(),
+    'ps:info': (game) => ps.info(game),
     'ps:routeSpeaker': () => ps.routeSpeaker(),
   }
   for (const [channel, handler] of Object.entries(routes)) ipcMain.handle(channel, (_e, ...args) => handler(...args))

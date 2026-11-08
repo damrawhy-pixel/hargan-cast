@@ -1,11 +1,11 @@
-import { app, BrowserWindow, session } from 'electron'
+import { app, BrowserWindow, net, session } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import readline from 'node:readline'
 import type { AppSettings } from '../../shared/settings'
-import type { PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
+import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
 import { log, safeUrl } from '../log'
 import SecureStore from '../secureStore'
 import { HttpBridge } from './httpBridge'
@@ -28,6 +28,8 @@ const SIGN_IN_PAGE_HOST = 'my.account.sony.com'
 const SESSION_URL = 'https://ca.account.sony.com/api/v1/ssocookie'
 const SIGN_IN_POLL_MS = 1500
 const CORE_LOG_LINES = 300
+// kb/s per resolution when bit rate is left on automatic. Sony asks for about 38 Mb/s at 4K.
+const AUTO_BITRATE: Record<number, number> = { 720: 10000, 1080: 20000, 1440: 30000, 2160: 40000 }
 const NPSSO_PATTERN = /[A-Za-z0-9]{40,128}/
 
 interface Pending {
@@ -51,6 +53,7 @@ export default class PlayStationService {
   private nextId = 1
   private coreLog: string[] = []
   private context: CatalogContext = { country: 'US', lang: 'en', foreign: false }
+  private infoCache = new Map<string, GameInfo>()
   private signInWindow?: BrowserWindow
   private _status: PsStatus
 
@@ -261,6 +264,7 @@ export default class PlayStationService {
     const owned = game.isOwned && game.streamServiceType === 'psnow'
     const settings = this.settings()
     const cloud = game.streamServiceType === 'pscloud'
+    const resolution = cloud ? settings.psCloudResolution : settings.psNowResolution
     const reply = await this.call('stream', {
       service: game.streamServiceType,
       game: game.streamIdentifier,
@@ -275,8 +279,8 @@ export default class PlayStationService {
       datacenter: cloud ? settings.psCloudDatacenter : settings.psNowDatacenter,
       priorDatacenters: this.vault.get(datacentersKey, '[]'),
       hevc: opts.hevc,
-      resolution: cloud ? settings.psCloudResolution : settings.psNowResolution,
-      bitrate: cloud ? settings.psCloudBitrate : settings.psNowBitrate,
+      resolution,
+      bitrate: (cloud ? settings.psCloudBitrate : settings.psNowBitrate) || (AUTO_BITRATE[resolution] ?? AUTO_BITRATE[1080]),
       packetLossMax: settings.psPacketLossMax,
       psChord: settings.psOptionsShareForPs,
       nativeDualSense: settings.psNativeDualSense,
@@ -306,6 +310,43 @@ export default class PlayStationService {
       .filter((d) => d.dataCenter)
       .map((d) => ({ name: d.dataCenter!, rttMs: d.rtt }))
       .sort((a, b) => (a.rttMs ?? Infinity) - (b.rttMs ?? Infinity))
+  }
+
+  // The store page carries the long description, screenshots, logo and player
+  // rating inside its embedded data; the cloud catalog has none of them.
+  async info(game: PsGame): Promise<GameInfo> {
+    const cached = this.infoCache.get(game.productId)
+    if (cached) return cached
+    const locale = `${this.context.lang}-${this.context.country.toLowerCase()}`
+    const pages = [`https://store.playstation.com/${locale}/product/${encodeURIComponent(game.productId)}`, game.conceptUrl].filter(Boolean) as string[]
+    let html = ''
+    for (const page of pages) {
+      const res = await net.fetch(page, { headers: { 'Accept-Language': locale } }).catch(() => undefined)
+      if (res?.ok) {
+        html = await res.text()
+        if (html.includes('"role":"SCREENSHOT"') || html.includes('"type":"LONG"')) break
+      }
+    }
+    const unescape = (s: string) => {
+      try {
+        return JSON.parse(`"${s}"`) as string
+      } catch {
+        return s
+      }
+    }
+    const media = (role: string) => [...new Set([...html.matchAll(new RegExp(`"role":"${role}","type":"IMAGE","url":"(https:[^"]+)"`, 'g'))].map((m) => m[1]))]
+    const long = html.match(/"__typename":"Description","type":"LONG","value":"((?:[^"\\]|\\.)*)"/)?.[1]
+    const stars = html.match(/"averageRating":([\d.]+),"totalRatingsCount":(\d+)/)
+    const info: GameInfo = {
+      description: long && unescape(long).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim(),
+      // The art the console itself shows behind a game.
+      hero: media('GAMEHUB_COVER_ART')[0],
+      logo: media('LOGO')[0],
+      screenshots: media('SCREENSHOT').slice(0, 12),
+      community: stars && Number(stars[2]) > 0 ? { average: Number(stars[1]), count: Number(stars[2]) } : undefined,
+    }
+    this.infoCache.set(game.productId, info)
+    return info
   }
 
   async testHaptics(): Promise<boolean> {

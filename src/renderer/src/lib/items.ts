@@ -8,6 +8,8 @@ export interface HubItem {
   service: Service
   name: string
   art?: string
+  /** Square artwork for launcher and library tiles. */
+  icon?: string
   hero?: string
   subtitle: string
   badge?: string
@@ -52,6 +54,7 @@ export function psItem(game: PsGame): HubItem {
     service: 'playstation',
     name: game.name,
     art: game.imageUrl || game.landscapeImageUrl,
+    icon: game.imageUrl || game.landscapeImageUrl,
     hero: game.landscapeImageUrl || undefined,
     subtitle: [platform, genre, game.freeToPlay ? 'Ücretsiz' : store ? 'Mağazada' : undefined].filter(Boolean).join(' · '),
     badge: game.isOwned ? 'Sahip' : game.freeToPlay ? 'Ücretsiz' : platform,
@@ -73,6 +76,7 @@ export function xboxItem(title: XboxTitle): HubItem {
     service: 'xbox',
     name: title.name,
     art: sized(title.poster ?? title.image, 360),
+    icon: sized(title.image ?? title.poster, 320),
     hero: sized(title.hero, 1920),
     subtitle: [title.publisher, title.categories[0]].filter(Boolean).join(' · ') || 'Xbox',
     badge: title.owned ? 'Sahip' : title.entitled ? 'Game Pass' : undefined,

@@ -9,6 +9,7 @@ export interface LibraryFilter {
 }
 
 interface Props {
+  title: string
   items: HubItem[]
   filters: LibraryFilter[]
   onOpen(item: HubItem, art: HTMLElement | null): void
@@ -30,7 +31,7 @@ export function SkeletonGrid() {
 
 const matches = (name: string, query: string) => name.toLocaleLowerCase('tr').includes(query)
 
-export function Library({ items, filters, onOpen, toolbar }: Props) {
+export function Library({ title, items, filters, onOpen, toolbar }: Props) {
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<string>()
   const [shown, setShown] = useState(PAGE)
@@ -70,23 +71,22 @@ export function Library({ items, filters, onOpen, toolbar }: Props) {
 
   return (
     <div className="library">
-      <div className="library-bar">
-        <input
-          className="search"
-          data-nav
-          type="search"
-          placeholder={`${items.length.toLocaleString('tr')} oyunda ara`}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <div className="chips" role="tablist">
-          {filters.map((f) => (
-            <button key={f.id} role="tab" aria-selected={f.id === filterId} className="chip" data-nav onClick={() => setPicked(f.id)}>
-              {f.label} <span>{(counts.get(f.id) ?? 0).toLocaleString('tr')}</span>
-            </button>
-          ))}
+      <header className="library-head">
+        <h1>{title}</h1>
+        <div className="library-tools">
+          <label className="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.2 10.4l4.4 4.4-1.4 1.4-4.4-4.4A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" /></svg>
+            <input data-nav type="search" placeholder={`${items.length.toLocaleString('tr')} oyunda ara`} value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
+          {toolbar}
         </div>
-        <div className="library-tools">{toolbar}</div>
+      </header>
+      <div className="chips" role="tablist">
+        {filters.map((f) => (
+          <button key={f.id} role="tab" aria-selected={f.id === filterId} className="chip" data-nav onClick={() => setPicked(f.id)}>
+            {f.label} <span>{(counts.get(f.id) ?? 0).toLocaleString('tr')}</span>
+          </button>
+        ))}
       </div>
 
       <div className="library-scroll" ref={scroller}>

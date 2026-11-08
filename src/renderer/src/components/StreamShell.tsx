@@ -62,10 +62,12 @@ function QueueCard({ queue }: { queue: StreamQueue }) {
 export function StreamShell({ title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
   const settings = getSettings()
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
+  // Any CSS filter, even a neutral one, keeps video off the GPU's direct path to the screen.
+  const adjusted = settings.brightness !== 100 || settings.contrast !== 100 || settings.saturation !== 100
   const pictureStyle = {
     '--stream-fit': FIT[settings.videoFormat] ?? 'contain',
     '--stream-ratio': ratio ?? 'auto',
-    filter: `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)`,
+    filter: adjusted ? `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)` : undefined,
   } as CSSProperties
 
   const [menu, setMenu] = useState(false)

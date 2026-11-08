@@ -13,8 +13,12 @@ const LANGUAGES: [string, string][] = [
   ['zh-CN', '简体中文'], ['zh-TW', '繁體中文'],
 ]
 const RESOLUTIONS: [number, string][] = [[720, '720p'], [1080, '1080p'], [1440, '1440p'], [2160, '4K']]
-const PS_BITRATES: [number, string][] = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b) => [b, `${b / 1000} Mb/sn`])
-const XBOX_BITRATES: [number, string][] = [[0, 'Otomatik'], ...[5, 10, 15, 20, 30, 40, 50].map((b): [number, string] => [b, `${b} Mb/sn`])]
+const PS_BITRATES: [number, string][] = [[0, 'Otomatik'], ...[5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b): [number, string] => [b, `${b / 1000} Mb/sn`])]
+const PS_BITRATE_HINT = 'Otomatik, çözünürlüğe göre seçer: 1080p için 20, 4K için 40 Mb/sn.'
+const FSR_HINT = 'Görüntüyü ekran boyutuna AMD FSR ile büyütür ve keskinleştirir. Görüntü ekrandan küçükse en çok fark eder.'
+const DEBAND_HINT = 'Koyu ve düz renk geçişlerinde sıkıştırmanın bıraktığı basamakları yumuşatır.'
+// Microsoft sends at most about 27 Mb/s, so a higher cap would change nothing.
+const XBOX_BITRATES: [number, string][] = [[0, 'Sınırsız'], ...[5, 10, 15, 20].map((b): [number, string] => [b, `En fazla ${b} Mb/sn`])]
 const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.25, 27.78, 25, 22.73, 20.83, 19.23, 17.86, 16.67].map((r) => [r, `${r} Hz`])
 
 const SECTIONS = [
@@ -250,6 +254,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
           <section>
             <h2>Genel</h2>
             <Slider field="fontSize" label="Yazı boyutu" min={12} max={20} step={1} unit=" px" />
+            <Choice field="motion" label="Animasyonlar" hint="Windows'ta animasyon efektleri kapalı olsa da uygulamadakiler çalışır; istersen Windows'a uydurabilirsin." options={[['on', 'Açık'], ['system', "Windows'a göre"], ['off', 'Kapalı']]} />
             <Toggle field="startFullscreen" label="Tam ekran başlat" hint="Uygulama açılırken tam ekrana geçer." />
             <Toggle field="fullscreenOnStream" label="Akışta tam ekran" />
             <Toggle field="doubleClickFullscreen" label="Çift tıkla tam ekran" />
@@ -277,10 +282,10 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
         {section === 'sound' && (
           <section>
             <h2>Ses</h2>
+            <Toggle field="uiSounds" label="Arayüz sesleri" hint="Menüde gezinirken ve seçim yaparken kısa sesler çalar." />
             <Choice field="audioOutputDevice" label="Çıkış aygıtı" options={[['', 'Windows varsayılanı'], ...outputs]} />
             <Slider field="audioVolume" label="Akış sesi" min={0} max={100} step={1} unit="%" />
             <Slider field="psAudioBufferMs" label="PlayStation ses tamponu" hint="Düşük değer daha az gecikme, yüksek değer daha az cızırtı demektir." min={10} max={100} step={5} unit=" ms" />
-            <Choice field="xboxAudioBitrate" label="Xbox ses bit hızı" options={XBOX_BITRATES} />
             <Toggle field="xboxAudioRumble" label="Xbox sesten titreşim" hint="Oyun sesinin bas kısmını kola titreşim olarak verir." />
             <Slider field="xboxAudioRumbleThreshold" label="Sesten titreşim eşiği" min={0.01} max={0.5} step={0.01} unit="" />
           </section>
@@ -292,14 +297,17 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Toggle field="psPremium" label="PS Plus Premium aboneliğim var" hint="Açıkken katalogdaki akış oyunları Sahip olduklarım'a dahil olur. Sony aboneliği yalnızca akış başlarken bildirir." />
             <h3>PS5 oyunları</h3>
             <Choice field="psCloudResolution" label="Çözünürlük" options={RESOLUTIONS} />
-            <Choice field="psCloudBitrate" label="Bit hızı" options={PS_BITRATES} />
+            <Choice field="psCloudBitrate" label="Bit hızı" hint={PS_BITRATE_HINT} options={PS_BITRATES} />
             <Choice field="psCloudDatacenter" label="Veri merkezi" hint={dcHint(datacenters.cloud)} options={datacenterOptions(datacenters.cloud)} />
             <h3>PS3 ve PS4 oyunları</h3>
             <Choice field="psNowResolution" label="Çözünürlük" options={RESOLUTIONS} />
-            <Choice field="psNowBitrate" label="Bit hızı" options={PS_BITRATES} />
+            <Choice field="psNowBitrate" label="Bit hızı" hint={PS_BITRATE_HINT} options={PS_BITRATES} />
             <Choice field="psNowDatacenter" label="Veri merkezi" hint={dcHint(datacenters.now)} options={datacenterOptions(datacenters.now)} />
             <h3>Akış</h3>
             <Choice field="psCodec" label="Kodek" hint="Otomatik, ekran kartının desteğine göre seçer." options={[['auto', 'Otomatik'], ['h265', 'H.265'], ['h264', 'H.264']]} />
+            <Toggle field="psFsr" label="FSR" hint={FSR_HINT} />
+            <Slider field="psFsrSharpness" label="Keskinlik" hint="0 kapalı, 10 en keskin." min={0} max={10} step={1} unit="" />
+            <Toggle field="psDeband" label="Bant giderme" hint={DEBAND_HINT} />
             <Choice field="psGameLanguage" label="Oyun dili" hint="Yalnızca o dili sunan veri merkezlerinde geçerlidir." options={[['', 'Hesaba göre'], ...LANGUAGES]} />
             <Slider field="psPacketLossMax" label="Paket kaybı sınırı" hint="Aşılınca akış kalitesi düşürülür." min={1} max={30} step={1} unit="%" />
             <h3>Giriş</h3>
@@ -328,10 +336,11 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <h2>Xbox</h2>
             <h3>Görüntü</h3>
             <Choice field="xboxResolution" label="Çözünürlük" hint="Üst sınırı Microsoft belirler: Ultimate hesapta 720p dışındaki seçenekler 1440p'ye çıkabilir." options={[[720, '720p'], [1080, 'Yüksek'], [1081, 'En yüksek']]} />
-            <Choice field="xboxBitrate" label="Bit hızı" hint="Son değeri akış pazarlığı belirler." options={XBOX_BITRATES} />
-            <Choice field="xboxCodec" label="Kodek" options={[['', 'Otomatik'], ['high', 'H.264 yüksek'], ['main', 'H.264 orta'], ['baseline', 'H.264 düşük']]} />
-            <Toggle field="xboxFsr" label="FSR" hint="Görüntüyü yukarı ölçekler, GPU kullanımını artırır." />
-            <Slider field="xboxFsrSharpness" label="FSR keskinliği" min={0} max={10} step={1} unit="" />
+            <Choice field="xboxBitrate" label="Bit hızı sınırı" hint="Yalnızca düşürür: yavaş bağlantıda takılmayı azaltır. Kaliteyi Microsoft'un verdiğinin üstüne çıkarmaz." options={XBOX_BITRATES} />
+            <Choice field="xboxCodec" label="Kodek" hint="Microsoft yalnızca H.264 gönderiyor; en iyi görüntüyü Main profili verir." options={[['high', 'En iyi (H.264 Main)'], ['main', 'Orta (H.264 Constrained Baseline)'], ['baseline', 'Düşük (H.264 Baseline)']]} />
+            <Toggle field="xboxFsr" label="FSR" hint={`${FSR_HINT} Kapalıyken görüntü, ekran kartının kendi video yolundan geçer.`} />
+            <Slider field="xboxFsrSharpness" label="Keskinlik" hint="0 kapalı, 10 en keskin." min={0} max={10} step={1} unit="" />
+            <Toggle field="xboxDeband" label="Bant giderme" hint={`${DEBAND_HINT} FSR gibi görüntüyü ayrı bir katmandan geçirir; tepkiye bir kare kadar gecikme ekleyebilir.`} />
             <Choice field="xboxGameLanguage" label="Oyun dili" options={[['', 'Varsayılan'], ...LANGUAGES]} />
             <h3>Bağlantı</h3>
             <XboxRegion />

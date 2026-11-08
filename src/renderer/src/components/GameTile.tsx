@@ -11,10 +11,11 @@ interface Props {
 export const GameTile = memo(function GameTile({ item, onOpen, showService }: Props) {
   const open = (e: MouseEvent<HTMLButtonElement>) => onOpen(item, e.currentTarget.querySelector('img'))
   const spotlight = () => setSpotlight(item)
+  const art = item.icon ?? item.art
   return (
     <button className="tile" data-nav data-service={item.service} title={item.name} onClick={open} onMouseEnter={spotlight} onFocus={spotlight}>
       <span className="tile-art">
-        {item.art ? <img src={item.art} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="tile-fallback">{item.name}</span>}
+        {art ? <img src={art} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="tile-fallback">{item.name}</span>}
         <span className="tile-shine" />
       </span>
       {showService && <span className="tile-dot" />}

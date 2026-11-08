@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { XboxDetails } from '../../../shared/types'
-import { canStart, psFacts, serviceLabel, sized, type HubItem } from '../lib/items'
+import type { GameInfo } from '../../../shared/types'
+import { gameInfo, imageAt, knownInfo, ratingText } from '../lib/gameInfo'
+import { canStart, psFacts, serviceLabel, type HubItem } from '../lib/items'
 import { setSpotlight } from '../lib/store'
 import { useSettings } from '../lib/useSettings'
 
 const YEAR = (date?: string) => (date ? new Date(date).getFullYear() || undefined : undefined)
 const SCREENSHOT_WIDTH = 480
 const WIDE_WIDTH = 1920
-
-const cache = new Map<string, XboxDetails>()
 
 interface Props {
   item: HubItem
@@ -19,8 +18,7 @@ interface Props {
 
 export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
   const { psPremium } = useSettings()
-  const productId = item.xbox?.productId
-  const [info, setInfo] = useState<XboxDetails | undefined>(productId ? cache.get(productId) : undefined)
+  const [info, setInfo] = useState<GameInfo | undefined>(() => knownInfo(item))
   const [shot, setShot] = useState<string>()
   const art = useRef<HTMLImageElement>(null)
   const action = useRef<HTMLButtonElement>(null)
@@ -31,20 +29,12 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
   }, [item])
 
   useEffect(() => {
-    if (!productId || cache.has(productId)) return
     let stale = false
-    window.hc.xbox
-      .details(productId)
-      .then((details) => {
-        if (!details) return
-        cache.set(productId, details)
-        if (!stale) setInfo(details)
-      })
-      .catch(() => {})
+    void gameInfo(item).then((found) => !stale && found && setInfo(found))
     return () => {
       stale = true
     }
-  }, [productId])
+  }, [item])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +46,7 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
 
   const startable = canStart(item, psPremium)
   const ps = item.ps && psFacts(item.ps)
-  const backdrop = shot ?? sized(info?.hero, WIDE_WIDTH) ?? item.hero
+  const backdrop = shot ?? (info?.hero && imageAt(info.hero, WIDE_WIDTH)) ?? item.hero
   const publisher = item.xbox?.publisher ?? ps?.publisher
   const facts = [
     serviceLabel(item.service),
@@ -65,6 +55,7 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
     YEAR(info?.release ?? ps?.release),
     info?.rating ?? ps?.rating,
     ...(item.xbox?.categories.slice(0, 2) ?? ps?.genres.slice(0, 2) ?? []),
+    ratingText(info?.community),
   ].filter(Boolean)
 
   return (
@@ -100,8 +91,8 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
         {info && info.screenshots.length > 0 && (
           <div className="detail-shots">
             {info.screenshots.map((url) => (
-              <button key={url} className="detail-shot" data-nav aria-label="Ekran görüntüsü" onFocus={() => setShot(sized(url, WIDE_WIDTH))} onMouseEnter={() => setShot(sized(url, WIDE_WIDTH))}>
-                <img src={sized(url, SCREENSHOT_WIDTH)} alt="" loading="lazy" decoding="async" draggable={false} />
+              <button key={url} className="detail-shot" data-nav aria-label="Ekran görüntüsü" onFocus={() => setShot(imageAt(url, WIDE_WIDTH))} onMouseEnter={() => setShot(imageAt(url, WIDE_WIDTH))}>
+                <img src={imageAt(url, SCREENSHOT_WIDTH)} alt="" loading="lazy" decoding="async" draggable={false} />
               </button>
             ))}
           </div>

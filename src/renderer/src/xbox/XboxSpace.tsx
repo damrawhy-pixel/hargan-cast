@@ -51,20 +51,11 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
         <SkeletonGrid />
       ) : (
         <Library
+          title="Xbox kitaplığı"
           items={items}
           filters={FILTERS}
           onOpen={onOpen}
-          toolbar={
-            <>
-              {status.gamertag && (
-                <span className="account">
-                  {status.gamerpic && <img src={status.gamerpic} alt="" />}
-                  {status.gamertag}
-                </span>
-              )}
-              <button className="ghost" data-nav disabled={loading} onClick={loadXbox}>Yenile</button>
-            </>
-          }
+          toolbar={<button className="ghost" data-nav disabled={loading} onClick={loadXbox}>Yenile</button>}
         />
       )}
     </div>

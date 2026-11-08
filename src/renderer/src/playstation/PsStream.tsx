@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PsGame } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
+import { fitFor } from '../lib/picture'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
 import { rumble, startInput } from './input'
 import { psQuit, psStage } from './stages'
-import type { WorkerCommand, WorkerEvent } from './stream.worker'
+import type { View, WorkerCommand, WorkerEvent } from './stream.worker'
 
 const HEVC = { codec: 'hev1.1.6.L153.B0', hardwareAcceleration: 'prefer-hardware' } as const
 
@@ -37,6 +38,7 @@ export function PsStream({ game, onExit }: Props) {
     let worker: Worker | undefined
     let stopInput: (() => void) | undefined
     let audio: AudioContext | undefined
+    let resizer: ResizeObserver | undefined
     let disposed = false
 
     const leave = (error?: string) => {
@@ -71,8 +73,10 @@ export function PsStream({ game, onExit }: Props) {
       if (disposed) return void window.hc.ps.stop()
 
       const canvas = canvasRef.current!
-      canvas.width = started.width
-      canvas.height = started.height
+      const fit = fitFor(settings.videoFormat)
+      const box = canvas.getBoundingClientRect()
+      const view: View = { width: Math.round(box.width * devicePixelRatio), height: Math.round(box.height * devicePixelRatio), fit }
+      const picture = settings.psFsr || settings.psDeband ? { fsr: settings.psFsr, sharpness: settings.psFsrSharpness, deband: settings.psDeband } : undefined
       const offscreen = canvas.transferControlToOffscreen()
 
       audio = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 })
@@ -92,13 +96,21 @@ export function PsStream({ game, onExit }: Props) {
       worker.onmessage = (e: MessageEvent<WorkerEvent>) => {
         const msg = e.data
         if (msg.type === 'firstFrame') setLive(true)
-        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: `${started.width}×${started.height}` })
+        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: msg.filters ? `${msg.size} · ${msg.filters}` : msg.size })
         else if (msg.type === 'rumble') psVibration && rumble(msg.left, msg.right, nativeDualSense)
         else if (msg.type === 'ended') leave()
         else if (msg.type === 'error') leave(msg.message)
       }
 
-      command({ type: 'init', url: started.url, canvas: offscreen, codec: started.codec, audio: channel.port2, decoder: settings.videoDecoder }, [offscreen, channel.port2])
+      command(
+        { type: 'init', url: started.url, canvas: offscreen, codec: started.codec, audio: channel.port2, decoder: settings.videoDecoder, view, picture },
+        [offscreen, channel.port2],
+      )
+      resizer = new ResizeObserver(([entry]) => {
+        const size = entry.devicePixelContentBoxSize?.[0]
+        if (size) command({ type: 'view', view: { width: size.inlineSize, height: size.blockSize, fit } })
+      })
+      resizer.observe(canvas, { box: 'device-pixel-content-box' })
       stopInput = startInput((report) => command({ type: 'input', report }, [report]), nativeDualSense, {
         deadZone: settings.psDeadZone / 100,
         keyboard: settings.psKeyboard,
@@ -111,6 +123,7 @@ export function PsStream({ game, onExit }: Props) {
     return () => {
       disposed = true
       offEvents()
+      resizer?.disconnect()
       stopInput?.()
       worker?.postMessage({ type: 'close' } satisfies WorkerCommand)
       setTimeout(() => worker?.terminate(), 200)
