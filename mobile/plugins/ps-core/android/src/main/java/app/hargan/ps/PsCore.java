@@ -12,8 +12,19 @@ final class PsCore {
         void onLine(String line);
     }
 
+    /** Kinds match HC_FEEDBACK_* in hargan_ps.h. */
+    interface Feedback {
+        int RESET = 0;
+        int RUMBLE = 1;
+        int TRIGGERS = 2;
+        int LIGHT = 3;
+
+        void onFeedback(int kind, byte[] data);
+    }
+
     private static Boolean loaded;
     static volatile Listener listener;
+    static volatile Feedback feedback;
 
     private PsCore() {}
 
@@ -39,10 +50,22 @@ final class PsCore {
         command(line.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** One motion sample in the console's axes: rad/s and g. */
+    static native void motion(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ, long timestampUs);
+
+    static native void motionReset();
+
     /** Called by the core from its own threads. */
     @Keep
     static void onLine(byte[] line) {
         Listener current = listener;
         if (current != null) current.onLine(new String(line, StandardCharsets.UTF_8));
+    }
+
+    /** Called by the core from the session's threads. */
+    @Keep
+    static void onFeedback(int kind, byte[] data) {
+        Feedback current = feedback;
+        if (current != null) current.onFeedback(kind, data);
     }
 }

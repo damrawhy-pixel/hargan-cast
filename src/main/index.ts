@@ -3,6 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import PlayStationService from './playstation/service'
 import SettingsStore, { readBootSettings } from './settings'
+import { startUpdates } from './updates'
 import XboxService from './xbox/service'
 
 // file:// has an opaque origin, which blocks module workers and audio worklets.
@@ -191,6 +192,7 @@ app.whenReady().then(() => {
   )
   registerIpc()
   createWindow()
+  startUpdates()
 })
 
 app.on('window-all-closed', () => app.quit())

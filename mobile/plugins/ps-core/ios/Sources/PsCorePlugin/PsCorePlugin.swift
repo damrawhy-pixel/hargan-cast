@@ -15,7 +15,9 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "command", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "signIn", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "signOut", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "streaming", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "streaming", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "rumble", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "controllerMotion", returnType: CAPPluginReturnPromise)
     ]
 
     private let queue = DispatchQueue(label: "app.hargan.ps")
@@ -40,6 +42,8 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
             // The OS verifies TLS here, so there is no certificate bundle to hand over.
             let ok = hc_core_start(emitLine, user, PsCorePlugin.cacheDirectory.path, nil, &port, &token, capacity)
             if ok {
+                _ = GamepadFeedback.shared
+                hc_core_set_feedback(feedbackFromCore, nil)
                 call.resolve(["port": Int(port), "token": String(cString: token)])
             } else {
                 call.reject("PlayStation çekirdeği başlatılamadı.")
@@ -87,6 +91,23 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Rumble asked for by an Xbox stream; values 0-1, as the player reports them.
+    @objc func rumble(_ call: CAPPluginCall) {
+        let left = UInt8(max(0, min(255, (call.getDouble("left") ?? 0) * 255)))
+        let right = UInt8(max(0, min(255, (call.getDouble("right") ?? 0) * 255)))
+        let seconds = Double(call.getInt("durationMs") ?? 0) / 1000
+        DispatchQueue.main.async {
+            GamepadFeedback.shared.rumble(left: left, right: right, seconds: seconds)
+            call.resolve()
+        }
+    }
+
+    /// The controller's motion sensors, for as long as a PlayStation stream runs.
+    @objc func controllerMotion(_ call: CAPPluginCall) {
+        GamepadFeedback.shared.motion(call.getBool("on") ?? false)
+        call.resolve()
+    }
+
     /// A stream is watched, not touched: keep the screen from going to sleep.
     @objc func streaming(_ call: CAPPluginCall) {
         let on = call.getBool("on") ?? false
@@ -95,6 +116,12 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve()
         }
     }
+}
+
+/// Called by the core from the session's threads with what the game asks of the controller.
+private func feedbackFromCore(_ kind: Int32, _ data: UnsafePointer<UInt8>?, _ size: Int, _ user: UnsafeMutableRawPointer?) {
+    let bytes = data.map { Array(UnsafeBufferPointer(start: $0, count: size)) } ?? []
+    GamepadFeedback.shared.feedback(kind: kind, data: bytes)
 }
 
 /// Called by the core from its own threads with one complete JSON message.

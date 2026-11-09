@@ -17,6 +17,12 @@ respective owners and are used only to name the services this software connects 
   Modified 2026-11-01: removed the iOS bridge, Raspberry Pi decoder and FFmpeg decoder
   from the build, checked in the generated Takion protobuf code, and added a pluggable
   HTTP transport to `src/curl_http.c` so requests can run on Chromium's network stack.
+- `mobile/plugins/ps-core/ios/Sources/PsCorePlugin/GamepadFeedback.swift`: the
+  translation of DualSense trigger effects to Apple's GameController trigger modes is
+  adapted from Pylux's iOS client (`ios/Pylux/Services/StreamTriggerFeedback.swift`),
+  AGPL-3.0-only. Modified 2026-11-09: driven by the phone build of the protocol
+  library (`native/ps-core/mobile`) instead of the Pylux app, with rumble, light bar
+  and motion handled in the same place.
 - `src/main/xbox/xal`, `src/main/xbox/helpers`, `src/main/xbox/authentication.ts`:
   from XStreaming Desktop (https://github.com/Geocld/XStreamingDesktop).
   Modified 2026-11-01: moved to an encrypted per-account store and an isolated browser

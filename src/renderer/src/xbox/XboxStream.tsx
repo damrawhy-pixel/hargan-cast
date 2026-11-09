@@ -159,7 +159,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       player.setSwapTriggerRumble(settings.xboxSwapTriggerRumble)
       player.setGamepadKernal('Web')
       player.setVibration(settings.xboxVibration)
-      player.setVibrationMode('Webview')
+      // On phones the paired controller is rumbled by the app itself (src/mobile/bridge.ts).
+      player.setVibrationMode(MOBILE ? 'Native' : 'Webview')
       player.setGamepadDeadZone(settings.xboxDeadZone / 100)
       player.setConnectFailHandler(reconnect)
       player.setSdpHandler((_client: unknown, offer: RTCSessionDescriptionInit) => {

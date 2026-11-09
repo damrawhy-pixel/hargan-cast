@@ -30,6 +30,7 @@ public class PsCorePlugin extends Plugin {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private WifiManager.WifiLock wifiLock;
     private PsSignIn activeSignIn;
+    private GamepadFeedback gamepad;
 
     @Override
     public void load() {
@@ -38,6 +39,25 @@ public class PsCorePlugin extends Plugin {
             data.put("line", line);
             notifyListeners("line", data);
         };
+        gamepad = new GamepadFeedback(getContext());
+        gamepad.watchDevices();
+        PsCore.feedback = gamepad;
+    }
+
+    /** Rumble asked for by an Xbox stream; values 0-1, as the player reports them. */
+    @PluginMethod
+    public void rumble(PluginCall call) {
+        int left = Math.round(255 * call.getFloat("left", 0f));
+        int right = Math.round(255 * call.getFloat("right", 0f));
+        gamepad.rumbleFor(left, right, call.getInt("durationMs", 0));
+        call.resolve();
+    }
+
+    /** The controller's motion sensors, for as long as a PlayStation stream runs. */
+    @PluginMethod
+    public void controllerMotion(PluginCall call) {
+        gamepad.motion(Boolean.TRUE.equals(call.getBoolean("on", false)));
+        call.resolve();
     }
 
     @PluginMethod
@@ -122,6 +142,8 @@ public class PsCorePlugin extends Plugin {
     protected void handleOnDestroy() {
         setWifiLock(false);
         PsCore.listener = null;
+        PsCore.feedback = null;
+        gamepad.close();
     }
 
     private void setWifiLock(boolean on) {

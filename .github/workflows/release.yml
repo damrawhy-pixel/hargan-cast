@@ -1,0 +1,204 @@
+name: Release
+
+# Pushing a tag such as v0.3.0 builds every platform and opens a draft GitHub
+# release with the files; publishing that draft is what desktop copies update
+# from. Running it by hand builds the same files without a release.
+#
+# Signing comes from repository secrets and is skipped while they are missing:
+#   Android  ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS
+#   iOS      ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID (TestFlight upload)
+# See docs/RELEASING.md.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      code: ${{ steps.v.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: v
+        name: Version from the tag, or from package.json
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="${GITHUB_REF_NAME#v}"; else name="$(node -p "require('./package.json').version")"; fi
+          IFS=. read -r major minor patch <<< "${name%%-*}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$((major * 10000 + minor * 100 + patch))" >> "$GITHUB_OUTPUT"
+          echo "Hargan Cast $name (build $((major * 10000 + minor * 100 + patch)))"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Toolchain for the PlayStation core
+        shell: pwsh
+        run: |
+          $v = '20260616'
+          Invoke-WebRequest "https://github.com/mstorsjo/llvm-mingw/releases/download/$v/llvm-mingw-$v-ucrt-x86_64.zip" -OutFile "$env:RUNNER_TEMP\llvm-mingw.zip"
+          Expand-Archive "$env:RUNNER_TEMP\llvm-mingw.zip" -DestinationPath C:\llvm-mingw
+          "C:\llvm-mingw\llvm-mingw-$v-ucrt-x86_64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          choco install ninja --no-progress -y
+      - name: PlayStation core
+        run: npm run native
+      - name: Installer
+        run: |
+          npx electron-vite build
+          npx electron-builder --win nsis --publish never "-c.extraMetadata.version=${{ needs.version.outputs.name }}"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-windows
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      HC_VERSION_NAME: ${{ needs.version.outputs.name }}
+      HC_VERSION_CODE: ${{ needs.version.outputs.code }}
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:mobile
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npx cap sync android
+      - name: Upload key
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.p12"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/upload.p12" >> "$GITHUB_ENV"
+      - name: Signed bundle and APK for Google Play
+        if: env.KEYSTORE_BASE64 != ''
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
+      # Without the key there is nothing Google Play would take; an installable test build instead.
+      - name: Test build (no upload key yet)
+        if: env.KEYSTORE_BASE64 == ''
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Collect
+        run: |
+          mkdir out
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            cp mobile/android/app/build/outputs/bundle/release/app-release.aab "out/HarganCast-$HC_VERSION_NAME.aab"
+            cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/HarganCast-$HC_VERSION_NAME.apk"
+          else
+            cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "out/HarganCast-$HC_VERSION_NAME-test.apk"
+          fi
+          ls -la out
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-android
+          path: out/*
+
+  ios:
+    needs: version
+    runs-on: macos-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      HC_VERSION_NAME: ${{ needs.version.outputs.name }}
+      HC_VERSION_CODE: ${{ needs.version.outputs.code }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:mobile
+      - run: npx cap sync ios
+      - name: Use the newest Xcode on the runner
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: PlayStation core
+        run: bash mobile/plugins/ps-core/ios/build-core.sh
+      # Always: an unsigned app that AltStore or Sideloadly can sign with any Apple ID.
+      - name: Unsigned build
+        run: |
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            MARKETING_VERSION="$HC_VERSION_NAME" CURRENT_PROJECT_VERSION="$HC_VERSION_CODE" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload out
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry "out/HarganCast-$HC_VERSION_NAME-unsigned.ipa" Payload
+      # Once an App Store Connect API key is in the secrets: sign through Apple and
+      # upload to TestFlight. Xcode creates the certificate and profile itself.
+      - name: App Store build to TestFlight
+        if: env.ASC_KEY_ID != '' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          key="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s' "$ASC_KEY_P8" > "$key"
+          auth=(-allowProvisioningUpdates -authenticationKeyPath "$key" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/App.xcarchive archive \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$HC_VERSION_NAME" CURRENT_PROJECT_VERSION="$HC_VERSION_CODE" "${auth[@]}"
+          cat > "$RUNNER_TEMP/export.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/App.xcarchive -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath build/export "${auth[@]}"
+          rm -f "$key"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-ios
+          path: out/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, windows, android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          path: out
+          merge-multiple: true
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la out
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Hargan Cast ${{ needs.version.outputs.name }}" --generate-notes

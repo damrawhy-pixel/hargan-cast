@@ -2,6 +2,7 @@
 // from Electron's preload; here it is built from Capacitor plugins.
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
+import { ScreenOrientation } from '@capacitor/screen-orientation'
 import { StatusBar } from '@capacitor/status-bar'
 import XboxService from '../main/xbox/service'
 import type { AppSettings } from '../shared/settings'
@@ -34,9 +35,11 @@ async function fullscreen(on: boolean) {
 }
 
 // Playing with a pad means nobody touches the screen: keep it on, and keep Wi-Fi awake.
+// Games are wide, so a stream holds the screen sideways (either way round) until it ends.
 function streaming(on: boolean) {
   void fullscreen(on)
   void PsCore.streaming({ on }).catch(() => {})
+  void (on ? ScreenOrientation.lock({ orientation: 'landscape' }) : ScreenOrientation.unlock()).catch(() => {})
 }
 
 // The hardware back button behaves like B on a pad: close what is open, then leave.
@@ -49,8 +52,21 @@ function handleBack() {
   void App.minimizeApp()
 }
 
+// The Xbox player's way out to native code (its "Native" vibration mode). Only
+// rumble is wired; Apple and Android give apps no trigger motors to drive.
+function installXboxRumble() {
+  ;(window as unknown as { XStreaming: unknown }).XStreaming = {
+    send: async (_channel: string, name: string, data: { low?: number; high?: number; durationMs?: number }) => {
+      if (name !== 'triggerNativeGamepadTestRumble') return
+      // The player calls the strong (left) motor "high" and the light (right) one "low".
+      await PsCore.rumble({ left: data.high ?? 0, right: data.low ?? 0, durationMs: data.durationMs ?? 0 })
+    },
+  }
+}
+
 export async function installBridge() {
   document.documentElement.dataset.platform = 'mobile'
+  installXboxRumble()
   void StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
   void App.addListener('backButton', handleBack)
 

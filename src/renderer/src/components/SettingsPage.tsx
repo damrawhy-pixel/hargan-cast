@@ -340,7 +340,12 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Slider field="psDeadZone" label="Çubuk ölü bölgesi" hint="DualSense dışındaki kollar için." min={0} max={30} step={1} unit="%" />
             <Toggle field="psButtonsByPosition" label="Düğmeleri konuma göre eşle" hint="Nintendo düzenli kollarda A/B ve X/Y'yi değiştirir." />
             <Toggle field="psOptionsShareForPs" label="Options + Share ile PS düğmesi" hint="İkisine 2 saniye basılı tutunca PS düğmesi gönderilir." />
-            {MOBILE && <Toggle field="psVibration" label="Titreşim" />}
+            {MOBILE && (
+              <>
+                <Toggle field="psVibration" label="Titreşim" />
+                <Toggle field="psTriggers" label="Uyarlanabilir tetikler" hint="iPhone ve iPad'de DualSense ile çalışır; Android uygulamalara tetiklere erişim vermiyor." />
+              </>
+            )}
           </section>
         )}
 

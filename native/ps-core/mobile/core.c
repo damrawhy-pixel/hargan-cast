@@ -15,6 +15,7 @@
 #include <chiaki/common.h>
 #include <chiaki/log.h>
 #include <chiaki/opusdecoder.h>
+#include <chiaki/orientation.h>
 #include <chiaki/session.h>
 
 #include <curl/curl.h>
@@ -45,7 +46,7 @@ typedef struct
 	int id;
 	char *service, *game, *npsso, *country, *lang, *game_lang, *owned_ent, *owned_platform;
 	char *datacenter, *prior_datacenters;
-	bool foreign, attr_passed, hevc, ps_chord;
+	bool foreign, attr_passed, hevc, ps_chord, triggers, vibration;
 	int resolution, bitrate, packet_loss_max;
 } StreamRequest;
 
@@ -76,6 +77,16 @@ static atomic_int key_frame_needed;
 
 static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
 static ChiakiControllerState renderer_state;
+// Motion from the phone's controller, kept apart from the app's buttons and sticks.
+static ChiakiOrientationTracker motion_tracker;
+static ChiakiAccelNewZero motion_zero;
+static bool motion_live;
+
+static pthread_mutex_t feedback_lock = PTHREAD_MUTEX_INITIALIZER;
+static HcFeedbackFn feedback_fn;
+static void *feedback_user;
+// The player's settings, and whether the game itself switched triggers off.
+static bool user_triggers = true, user_vibration = true, game_triggers = true;
 
 static pthread_mutex_t quit_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t quit_cond = PTHREAD_COND_INITIALIZER;
@@ -341,6 +352,17 @@ static void on_audio_frame(int16_t *buf, size_t samples, void *user)
 	media_server_send(MEDIA_AUDIO_PCM, NULL, 0, (const uint8_t *)buf, samples * audio_channels * sizeof(int16_t));
 }
 
+// Buttons and sticks from the app, motion from the phone's controller. Call with input_lock held.
+static void publish_controller_state(void)
+{
+	if(!atomic_load(&session_live))
+		return;
+	ChiakiControllerState state = renderer_state;
+	if(motion_live)
+		chiaki_orientation_tracker_apply_to_controller_state(&motion_tracker, &state);
+	chiaki_session_set_controller_state(&session, &state);
+}
+
 static void on_input(const uint8_t *buf, size_t size, void *user)
 {
 	// Report 2: the decoder lost sync and needs a clean key frame.
@@ -354,9 +376,53 @@ static void on_input(const uint8_t *buf, size_t size, void *user)
 		return;
 	pthread_mutex_lock(&input_lock);
 	renderer_state = state;
-	if(atomic_load(&session_live))
-		chiaki_session_set_controller_state(&session, &renderer_state);
+	publish_controller_state();
 	pthread_mutex_unlock(&input_lock);
+}
+
+void hc_core_motion(float gyro_x, float gyro_y, float gyro_z, float accel_x, float accel_y, float accel_z, unsigned long long timestamp_us)
+{
+	pthread_mutex_lock(&input_lock);
+	if(!motion_live)
+	{
+		chiaki_orientation_tracker_init(&motion_tracker);
+		chiaki_accel_new_zero_set_inactive(&motion_zero, true);
+		motion_live = true;
+	}
+	chiaki_orientation_tracker_update(&motion_tracker, gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z,
+		&motion_zero, true, (uint32_t)timestamp_us);
+	publish_controller_state();
+	pthread_mutex_unlock(&input_lock);
+}
+
+void hc_core_motion_reset(void)
+{
+	pthread_mutex_lock(&input_lock);
+	motion_live = false;
+	publish_controller_state();
+	pthread_mutex_unlock(&input_lock);
+}
+
+void hc_core_set_feedback(HcFeedbackFn fn, void *user)
+{
+	pthread_mutex_lock(&feedback_lock);
+	feedback_fn = fn;
+	feedback_user = user;
+	pthread_mutex_unlock(&feedback_lock);
+}
+
+static void feedback(int kind, const uint8_t *data, size_t size)
+{
+	pthread_mutex_lock(&feedback_lock);
+	if(feedback_fn)
+		feedback_fn(kind, data, size, feedback_user);
+	pthread_mutex_unlock(&feedback_lock);
+}
+
+static void triggers_off(void)
+{
+	uint8_t off[22] = { 0 };
+	feedback(HC_FEEDBACK_TRIGGERS, off, sizeof(off));
 }
 
 static void on_event(ChiakiEvent *event, void *user)
@@ -368,11 +434,38 @@ static void on_event(ChiakiEvent *event, void *user)
 			break;
 		case CHIAKI_EVENT_RUMBLE:
 		{
-			// The app rumbles the controller it reads; there is no driver of our own here.
+			// The app plays it on the controller the phone has paired (feedback); the
+			// stream worker gets it too, for browsers that can rumble a pad themselves.
 			uint8_t head[2] = { event->rumble.left, event->rumble.right };
 			media_server_send(MEDIA_RUMBLE, head, sizeof(head), NULL, 0);
+			if(user_vibration)
+				feedback(HC_FEEDBACK_RUMBLE, head, sizeof(head));
 			break;
 		}
+		case CHIAKI_EVENT_TRIGGER_EFFECTS:
+		{
+			if(!user_triggers || !game_triggers)
+				break;
+			uint8_t effect[22];
+			effect[0] = event->trigger_effects.type_left;
+			memcpy(effect + 1, event->trigger_effects.left, 10);
+			effect[11] = event->trigger_effects.type_right;
+			memcpy(effect + 12, event->trigger_effects.right, 10);
+			feedback(HC_FEEDBACK_TRIGGERS, effect, sizeof(effect));
+			break;
+		}
+		case CHIAKI_EVENT_TRIGGER_INTENSITY:
+			// The console's own "trigger effect intensity" setting set to off.
+			game_triggers = event->intensity != Off;
+			if(!game_triggers)
+				triggers_off();
+			break;
+		case CHIAKI_EVENT_LED_COLOR:
+			feedback(HC_FEEDBACK_LIGHT, event->led_state, 3);
+			break;
+		case CHIAKI_EVENT_MOTION_RESET:
+			hc_core_motion_reset();
+			break;
 		case CHIAKI_EVENT_QUIT:
 		{
 			json_object *o = json_object_new_object();
@@ -520,8 +613,12 @@ static void *stream_thread(void *arg)
 		goto done;
 	}
 
+	user_triggers = req->triggers;
+	user_vibration = req->vibration;
+	game_triggers = true;
 	pthread_mutex_lock(&input_lock);
 	chiaki_controller_state_set_idle(&renderer_state);
+	motion_live = false;
 	atomic_store(&session_live, 1);
 	pthread_mutex_unlock(&input_lock);
 
@@ -544,6 +641,7 @@ static void *stream_thread(void *arg)
 	chiaki_opus_decoder_fini(&opus);
 	chiaki_session_fini(&session);
 	media_server_send(MEDIA_RESET, NULL, 0, NULL, 0);
+	feedback(HC_FEEDBACK_RESET, NULL, 0);
 
 done:
 	chiaki_cloud_provision_result_fini(&res);
@@ -613,6 +711,8 @@ void hc_core_command(const char *line)
 			r->resolution = int_field(cmd, "resolution", 1080);
 			r->bitrate = int_field(cmd, "bitrate", 20000);
 			r->ps_chord = bool_field(cmd, "psChord");
+			r->triggers = bool_field(cmd, "triggers");
+			r->vibration = bool_field(cmd, "vibration");
 			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
 			atomic_store(&stop_requested, 0);
 			if(!spawn(stream_thread, r))

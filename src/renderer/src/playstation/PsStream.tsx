@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PsGame } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
 import { fitFor } from '../lib/picture'
+import { MOBILE } from '../lib/platform'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
 import { rumble, startInput } from './input'
@@ -97,7 +98,8 @@ export function PsStream({ game, onExit }: Props) {
         const msg = e.data
         if (msg.type === 'firstFrame') setLive(true)
         else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: msg.filters ? `${msg.size} · ${msg.filters}` : msg.size })
-        else if (msg.type === 'rumble') psVibration && rumble(msg.left, msg.right, nativeDualSense)
+        // On phones the app rumbles the paired controller itself, straight from the session.
+        else if (msg.type === 'rumble') psVibration && !MOBILE && rumble(msg.left, msg.right, nativeDualSense)
         else if (msg.type === 'ended') leave()
         else if (msg.type === 'error') leave(msg.message)
       }

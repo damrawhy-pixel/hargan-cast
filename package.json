@@ -15,10 +15,12 @@
         "native": "node scripts/build-native.mjs",
         "dist": "electron-vite build && electron-builder --win dir",
         "build:mobile": "vite build --config vite.mobile.config.ts",
-        "mobile:sync": "npm run build:mobile && cap sync"
+        "mobile:sync": "npm run build:mobile && cap sync",
+        "dist:installer": "electron-vite build && electron-builder --win nsis --publish never"
     },
     "dependencies": {
         "axios": "^1.7.7",
+        "electron-updater": "^6.8.11",
         "ip-address": "^9.0.5",
         "jose": "^5.1.0"
     },
@@ -31,6 +33,7 @@
         "@capacitor/core": "^8.6.0",
         "@capacitor/ios": "^8.6.0",
         "@capacitor/preferences": "^8.0.1",
+        "@capacitor/screen-orientation": "^8.0.2",
         "@capacitor/status-bar": "^8.0.4",
         "@noble/curves": "^2.4.0",
         "@noble/hashes": "^2.4.0",
@@ -79,6 +82,23 @@
         "win": {
             "target": "dir",
             "signAndEditExecutable": false
+        },
+        "publish": {
+            "provider": "github",
+            "owner": "damrawhy-pixel",
+            "repo": "hargan-cast",
+            "releaseType": "release"
+        },
+        "nsis": {
+            "oneClick": true,
+            "perMachine": false,
+            "deleteAppDataOnUninstall": false,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "Hargan Cast",
+            "artifactName": "HarganCast-Setup-${version}.${ext}",
+            "installerIcon": "build/icon.ico",
+            "uninstallerIcon": "build/icon.ico"
         }
     }
 }
