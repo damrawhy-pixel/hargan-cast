@@ -242,6 +242,8 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
   useEffect(() => {
     if (!active) return
     void Promise.all([window.hc.ps.datacenters('pscloud'), window.hc.ps.datacenters('psnow')]).then(([cloud, now]) => setDatacenters({ cloud, now }))
+    // Phones route sound themselves, and some of their web views have no mediaDevices.
+    if (MOBILE || !navigator.mediaDevices?.enumerateDevices) return
     void navigator.mediaDevices.enumerateDevices().then((devices) =>
       setOutputs(devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications').map((d, i) => [d.deviceId, d.label || `Hoparlör ${i + 1}`])),
     )

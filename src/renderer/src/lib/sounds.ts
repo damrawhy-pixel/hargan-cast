@@ -7,8 +7,18 @@ let context: AudioContext | undefined
 let last = 0
 const MIN_GAP_MS = 35
 
+// A menu sound must never take the interface down with it: where Web Audio is
+// missing or refuses to start, the cues are simply silent.
 function play(notes: [frequency: number, at: number, length: number][], level: number) {
-  if (!getSettings().uiSounds) return
+  try {
+    cue(notes, level)
+  } catch {
+    // Silent.
+  }
+}
+
+function cue(notes: [frequency: number, at: number, length: number][], level: number) {
+  if (!getSettings().uiSounds || typeof AudioContext === 'undefined') return
   const now = performance.now()
   if (now - last < MIN_GAP_MS) return
   last = now

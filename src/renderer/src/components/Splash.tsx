@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { reducedMotion } from '../lib/motion'
+import { connectedPads } from '../lib/gamepads'
 import { sounds } from '../lib/sounds'
 
 // in: the logo arrives; out: it lifts away while the screen opens from the middle.
@@ -26,7 +27,7 @@ export function Splash({ onReveal, onDone }: Props) {
     window.addEventListener('keydown', skip)
     window.addEventListener('pointerdown', skip)
     let frame = requestAnimationFrame(function poll() {
-      if (navigator.getGamepads().some((p) => p?.buttons.some((b) => b.pressed))) skip()
+      if (connectedPads().some((p) => p.buttons.some((b) => b.pressed))) skip()
       else frame = requestAnimationFrame(poll)
     })
     return () => {

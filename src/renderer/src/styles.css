@@ -489,6 +489,15 @@ button { cursor: pointer; }
 
 .setting-note { display: block; margin-top: 14px; color: var(--ink-faint); font-size: 13px; line-height: 1.5; }
 
+.crash {
+  position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 14px;
+  padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+  background: #05060b; color: #f2f4f8; overflow: auto; -webkit-user-select: text; user-select: text;
+}
+.crash h1 { margin: 0; font-size: 24px; }
+.crash p { margin: 0; max-width: 640px; color: #b4bccb; line-height: 1.5; }
+.crash pre { max-width: 100%; margin: 0; padding: 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: #ffb4a8; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+
 /* --- On-screen controls (phones and tablets) ------------------------------- */
 .touch {
   --u: calc(clamp(34px, 12vh, 62px) * var(--tc-scale, 1));

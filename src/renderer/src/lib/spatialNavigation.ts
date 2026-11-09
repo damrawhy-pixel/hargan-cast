@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { sounds } from './sounds'
+import { connectedPads } from './gamepads'
 
 type Direction = 'up' | 'down' | 'left' | 'right'
 
@@ -120,7 +121,7 @@ export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) 
 
     const poll = () => {
       frame = requestAnimationFrame(poll)
-      const pad = navigator.getGamepads().find((p) => p?.connected)
+      const pad = connectedPads()[0]
       const root = activeRoot()
       if (!pad || !root) return
 

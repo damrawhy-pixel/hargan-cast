@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { MOBILE } from '../lib/platform'
+import { connectedPads } from '../lib/gamepads'
 import { getSettings } from '../lib/useSettings'
 import { physicalPads } from '../lib/virtualPad'
 import { TouchControls, type TouchPlatform } from './TouchControls'
@@ -140,7 +141,7 @@ export function StreamShell({ platform, title, stage, live, stats, queue, contro
 
     const poll = () => {
       frame = requestAnimationFrame(poll)
-      const pad = navigator.getGamepads().find((p) => p?.connected)
+      const pad = connectedPads()[0]
       if (!pad) return
 
       const combo = Boolean(pad.buttons[PAD_VIEW]?.pressed && pad.buttons[PAD_MENU]?.pressed)

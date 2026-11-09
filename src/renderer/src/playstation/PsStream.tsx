@@ -86,7 +86,7 @@ export function PsStream({ game, onExit }: Props) {
       const volume = audio.createGain()
       volume.gain.value = settings.audioVolume / 100
       player.connect(volume).connect(audio.destination)
-      if (settings.audioOutputDevice) await (audio as any).setSinkId(settings.audioOutputDevice).catch(() => {})
+      if (settings.audioOutputDevice) await (audio as any).setSinkId?.(settings.audioOutputDevice)?.catch?.(() => {})
       const channel = new MessageChannel()
       player.port.postMessage(channel.port1, [channel.port1])
       void audio.resume()
@@ -109,10 +109,17 @@ export function PsStream({ game, onExit }: Props) {
         [offscreen, channel.port2],
       )
       resizer = new ResizeObserver(([entry]) => {
-        const size = entry.devicePixelContentBoxSize?.[0]
+        // Safari reports CSS pixels only; scale those to the screen's own.
+        const exact = entry.devicePixelContentBoxSize?.[0]
+        const css = entry.contentBoxSize?.[0]
+        const size = exact ?? (css && { inlineSize: Math.round(css.inlineSize * devicePixelRatio), blockSize: Math.round(css.blockSize * devicePixelRatio) })
         if (size) command({ type: 'view', view: { width: size.inlineSize, height: size.blockSize, fit } })
       })
-      resizer.observe(canvas, { box: 'device-pixel-content-box' })
+      try {
+        resizer.observe(canvas, { box: 'device-pixel-content-box' })
+      } catch {
+        resizer.observe(canvas)
+      }
       stopInput = startInput((report) => command({ type: 'input', report }, [report]), nativeDualSense, {
         deadZone: settings.psDeadZone / 100,
         keyboard: settings.psKeyboard,

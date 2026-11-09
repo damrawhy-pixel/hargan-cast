@@ -4,7 +4,9 @@ const TONE_HZ = 660
 const TONE_SECONDS = 0.8
 const TONE_LEVEL = 0.4
 
-const outputs = async () => (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput')
+// Some web views have no mediaDevices at all; there is no output to choose there.
+const outputs = async () =>
+  navigator.mediaDevices?.enumerateDevices ? (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput') : []
 
 // The controller keeps sound on its headset jack until told otherwise, and forgets
 // the choice when it powers off, so this runs at the start of every stream.

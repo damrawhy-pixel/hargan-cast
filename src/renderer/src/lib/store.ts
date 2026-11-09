@@ -44,7 +44,9 @@ function preloadArt(items: HubItem[]) {
   const load = () => {
     for (const item of items.filter((i) => i.action === 'play').slice(0, PRELOAD_ART)) if (item.art) new Image().src = item.art
   }
-  requestIdleCallback(load, { timeout: 3000 })
+  // Safari has no requestIdleCallback; a short delay does the same job there.
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(load, { timeout: 3000 })
+  else setTimeout(load, 500)
 }
 
 const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')

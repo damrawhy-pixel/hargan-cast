@@ -53,8 +53,9 @@ function snapshot(index: number): Gamepad {
 }
 
 function install() {
-  if (nativeGetGamepads || typeof navigator.getGamepads !== 'function') return
-  const original = navigator.getGamepads.bind(navigator)
+  if (nativeGetGamepads) return
+  // A web view without the Gamepad API still gets the touch controller.
+  const original: () => (Gamepad | null)[] = typeof navigator.getGamepads === 'function' ? navigator.getGamepads.bind(navigator) : () => []
   nativeGetGamepads = () => Array.from(original() ?? [])
   Object.defineProperty(navigator, 'getGamepads', {
     configurable: true,

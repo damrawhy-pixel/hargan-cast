@@ -1,4 +1,5 @@
 // Turns the Gamepad API and keyboard into Chiaki controller reports.
+import { connectedPads } from '../lib/gamepads'
 import { VIRTUAL_PAD_ID, virtualPadState } from '../lib/virtualPad'
 
 const BUTTON = {
@@ -45,7 +46,7 @@ const SONY_VENDOR = /054c|dualsense/i
 // While the sidecar owns a DualSense directly, the browser's view of it would
 // only echo the same input with extra delay.
 function activePad(skipDualSense: () => boolean) {
-  return navigator.getGamepads().find((p) => p?.connected && !(skipDualSense() && SONY_VENDOR.test(p.id)))
+  return connectedPads().find((p) => !(skipDualSense() && SONY_VENDOR.test(p.id)))
 }
 
 export interface InputOptions {
