@@ -1,0 +1,78 @@
+name: Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'mobile/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.ts'
+      - 'vite.mobile.config.ts'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+env:
+  # The desktop shell's binary is not needed to build the phone apps.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck the interface
+        run: npx tsc -p tsconfig.web.json
+      - run: npm run build:mobile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npx cap sync android
+      - name: Build
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HarganCast-android
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+  ios:
+    name: iOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:mobile
+      - run: npx cap sync ios
+      - name: Use the newest Xcode on the runner
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      # Unsigned until an Apple developer account is connected; it can be sideloaded
+      # with AltStore or Sideloadly, which sign it with the user's own Apple ID.
+      - name: Build
+        run: |
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Package
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry HarganCast-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HarganCast-ios
+          path: HarganCast-unsigned.ipa

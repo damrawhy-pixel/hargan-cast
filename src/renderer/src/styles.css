@@ -478,6 +478,24 @@ button { cursor: pointer; }
 .app[data-splash='revealing'] > .space:not([hidden]) { animation: app-reveal 900ms var(--ease) both; }
 @keyframes app-reveal { from { opacity: 0.3; scale: 1.06; } to { opacity: 1; scale: 1; } }
 
+/* --- Phones and tablets: no window controls, room for notches -------------- */
+[data-platform='mobile'] body { -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+[data-platform='mobile'] .topbar { height: calc(64px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) calc(18px + env(safe-area-inset-right)) 0 calc(18px + env(safe-area-inset-left)); }
+[data-platform='mobile'] .launch { min-height: calc(100vh - 64px - env(safe-area-inset-top)); }
+[data-platform='mobile'] .viewer-head { padding-right: var(--gutter); padding-top: calc(18px + env(safe-area-inset-top)); }
+[data-platform='mobile'] .home, [data-platform='mobile'] .library-scroll { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+@media (max-width: 760px) {
+  :root { --gutter: 18px; --launch: 64px; --tile: 104px; }
+  .tabs { gap: 18px; }
+  .tabs button { font-size: 17px; }
+  .clock, .avatar { display: none; }
+  .launch-info h1 { font-size: 34px; }
+  .launch-play { min-width: 0; flex: 1; }
+  .hub { height: 150px; }
+  .hub-about { width: 260px; }
+  .library-head { flex-wrap: wrap; }
+  .search, .search:focus-within { width: 100%; }
+}
 /* --- View transitions ------------------------------------------------------ */
 ::view-transition-group(game-art), ::view-transition-group(launch-art) { animation-duration: 440ms; animation-timing-function: var(--ease); }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 300ms; }

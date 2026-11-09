@@ -4,3 +4,4 @@ dist/
 native/build/
 native/bin/
 *.log
+dist-mobile/
