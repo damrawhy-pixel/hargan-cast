@@ -10,6 +10,7 @@ on:
       - 'package-lock.json'
       - 'capacitor.config.ts'
       - 'vite.mobile.config.ts'
+      - 'tsconfig.mobile.json'
       - '.github/workflows/mobile.yml'
   workflow_dispatch:
 
@@ -28,8 +29,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Typecheck the interface
-        run: npx tsc -p tsconfig.web.json
+      - name: Typecheck the interface and the phone bridge
+        run: |
+          npx tsc -p tsconfig.web.json
+          npx tsc -p tsconfig.mobile.json
       - run: npm run build:mobile
       - uses: actions/setup-java@v5
         with:

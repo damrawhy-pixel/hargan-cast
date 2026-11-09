@@ -11,8 +11,8 @@ import MsalToken from './lib/tokens/msaltoken'
 
 import TokenStore from './tokenstore'
 
-const UUID = require('uuid-1345')
-const nextUUID = () => UUID.v3({ namespace: '6ba7b811-9dad-11d1-80b4-00c04fd430c8', name: Date.now().toString() })
+// Any fresh UUID will do for the device's id and serial number.
+const nextUUID = () => crypto.randomUUID()
 
 interface ICodeChallange {
     value: string

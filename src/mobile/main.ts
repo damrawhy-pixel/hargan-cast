@@ -1,6 +1,7 @@
-// Entry point of the phone and tablet apps: install window.hc, then start the
-// same interface the desktop runs.
-import { installBridge } from './bridge'
+// Entry point of the phone and tablet apps: Node globals first, then window.hc,
+// then the same interface the desktop runs.
+import './shims/globals'
 
-installBridge()
-void import('../renderer/src/main')
+const { installBridge } = await import('./bridge')
+await installBridge()
+await import('../renderer/src/main')

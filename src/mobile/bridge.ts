@@ -3,6 +3,8 @@
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { StatusBar } from '@capacitor/status-bar'
+import XboxService from '../main/xbox/service'
+import type { AppSettings } from '../shared/settings'
 import type { HarganApi, PsStatus, XboxStatus } from '../shared/types'
 import { getSettings, resetSettings, setSettings } from './settings'
 
@@ -25,7 +27,6 @@ function channel<T>() {
 
 const xboxStatus = channel<XboxStatus>()
 const psStatus = channel<PsStatus>()
-let xbox: XboxStatus = { state: 'signedOut', hasCloud: false }
 let ps: PsStatus = { state: 'signedOut' }
 
 const unsupported = () => Promise.reject(new Error(NOT_YET))
@@ -44,10 +45,17 @@ function handleBack() {
   void App.minimizeApp()
 }
 
-export function installBridge() {
+export async function installBridge() {
   document.documentElement.dataset.platform = 'mobile'
   void StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
   void App.addListener('backButton', handleBack)
+
+  // The same Xbox service the desktop runs, on the browser stand-ins in ./shims.
+  const xbox = new XboxService(xboxStatus.emit, await getSettings())
+  const applied = (settings: AppSettings) => {
+    xbox.applySettings(settings)
+    return settings
+  }
 
   const api: HarganApi = {
     platform: {
@@ -58,27 +66,30 @@ export function installBridge() {
       // The licences ship with the source; on a phone they are read where the source lives.
       openLicenses: () => void Browser.open({ url: `${SOURCE_URL}/blob/main/NOTICE.md` }),
     },
-    settings: { get: getSettings, set: setSettings, reset: resetSettings },
+    settings: {
+      get: getSettings,
+      set: (patch) => setSettings(patch).then(applied),
+      reset: () => resetSettings().then(applied),
+    },
     xbox: {
-      status: async () => xbox,
-      signIn: unsupported,
-      signOut: async () => {
-        xbox = { state: 'signedOut', hasCloud: false }
-        xboxStatus.emit(xbox)
+      status: async () => xbox.status(),
+      signIn: async () => xbox.signIn(),
+      signOut: () => xbox.signOut(),
+      titles: () => xbox.titles(),
+      library: () => xbox.library(),
+      info: (productId) => xbox.info(productId),
+      startStream: (titleId) => xbox.startStream(titleId),
+      activeSessions: () => xbox.activeSessions(),
+      adoptSession: async (id, titleId) => xbox.adoptSession(id, titleId),
+      endSession: (id, titleId) => xbox.endSession(id, titleId),
+      session: async (id) => xbox.session(id),
+      stopStream: (id) => xbox.stopStream(id),
+      sendSdp: (id, sdp) => xbox.sendSdp(id, sdp) as Promise<{ sdp: string }>,
+      sendChatSdp: (id, sdp) => xbox.sendChatSdp(id, sdp) as Promise<{ sdp: string }>,
+      sendIce: (id, ice) => xbox.sendIce(id, ice),
+      keepalive: async (id) => {
+        await xbox.keepalive(id)
       },
-      titles: async () => [],
-      library: async () => [],
-      info: async () => ({ screenshots: [] }),
-      startStream: unsupported,
-      activeSessions: async () => [],
-      adoptSession: unsupported,
-      endSession: async () => {},
-      session: async () => null,
-      stopStream: async () => {},
-      sendSdp: unsupported,
-      sendChatSdp: unsupported,
-      sendIce: unsupported,
-      keepalive: async () => {},
       onStatus: xboxStatus.on,
     },
     ps: {

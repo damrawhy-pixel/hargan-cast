@@ -11,7 +11,7 @@
         "dev": "electron-vite dev",
         "build": "electron-vite build",
         "preview": "electron-vite preview",
-        "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+        "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && tsc -p tsconfig.mobile.json",
         "native": "node scripts/build-native.mjs",
         "dist": "electron-vite build && electron-builder --win dir",
         "build:mobile": "vite build --config vite.mobile.config.ts",
@@ -25,10 +25,12 @@
         "@capacitor/ios": "^8.6.0",
         "@capacitor/preferences": "^8.0.1",
         "@capacitor/status-bar": "^8.0.4",
+        "@noble/curves": "^2.4.0",
+        "@noble/hashes": "^2.4.0",
         "axios": "^1.7.7",
+        "buffer": "^6.0.3",
         "ip-address": "^9.0.5",
-        "jose": "^5.1.0",
-        "uuid-1345": "^1.0.2"
+        "jose": "^5.1.0"
     },
     "devDependencies": {
         "@capacitor/assets": "^4.0.0",
@@ -51,7 +53,7 @@
     "build": {
         "appId": "app.hargan.cast",
         "productName": "Hargan Cast",
-        "copyright": "Â© 2026 Hargan Cast",
+        "copyright": "© 2026 Hargan Cast",
         "directories": {
             "output": "dist"
         },
