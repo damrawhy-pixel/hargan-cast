@@ -7,7 +7,7 @@ Hargan Cast'in yeni sürümü tek bir etiketle (tag) çıkar. GitHub üç platfo
 ### Android (Google Play)
 
 1. **Yükleme anahtarı:** Hazır. `Belgeler\Hargan Cast imza anahtari` klasöründe. Klasörü yedekle; içindeki `OKU.txt` her şeyi anlatıyor.
-2. **Anahtarı GitHub'a ekle:** github.com/damrawhy-pixel/hargan-cast > **Settings > Secrets and variables > Actions > New repository secret**:
+2. **Anahtarı GitHub'a ekle:** damrawhy-pixel hesabıyla GitHub'a girmişken https://github.com/damrawhy-pixel/hargan-cast/settings/secrets/actions/new adresini aç. *Name* kutusuna adı, *Secret* kutusuna değeri yazıp **Add secret**'e bas; üç değer için tekrarla:
 
    | Ad | Değer |
    | --- | --- |
@@ -26,7 +26,7 @@ Hargan Cast'in yeni sürümü tek bir etiketle (tag) çıkar. GitHub üç platfo
 1. **Apple Developer Program:** developer.apple.com/programs, yılda 99 $.
 2. **Uygulamayı oluştur:** App Store Connect > Uygulamalar > **+** > Yeni Uygulama. Platform iOS, ad *Hargan Cast*, paket kimliği (Bundle ID) **app.hargan.cast**. Paket kimliği listede yoksa önce developer.apple.com > Identifiers'ta aynı kimlikle oluştur.
 3. **API anahtarı:** App Store Connect > Kullanıcılar ve Erişim > **Entegrasyonlar > App Store Connect API** > anahtar oluştur, rol *App Manager*. `.p8` dosyasını indir; yalnızca bir kez indirilebilir.
-4. **GitHub'a ekle** (aynı Secrets sayfası):
+4. **GitHub'a ekle** (aynı adres: https://github.com/damrawhy-pixel/hargan-cast/settings/secrets/actions/new):
 
    | Ad | Değer |
    | --- | --- |
