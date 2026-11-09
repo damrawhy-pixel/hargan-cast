@@ -11,8 +11,12 @@ android {
     compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
 
     // GitHub's runners carry a current NDK; elsewhere Gradle picks its default.
+    // Gradle wants the version named as well, so it is read from the NDK itself.
     def runnerNdk = System.getenv('ANDROID_NDK_LATEST_HOME')
     if (runnerNdk) {
+        def ndkProps = new Properties()
+        new File(runnerNdk, 'source.properties').withInputStream { ndkProps.load(it) }
+        ndkVersion = ndkProps.getProperty('Pkg.Revision')
         ndkPath = runnerNdk
     }
 
