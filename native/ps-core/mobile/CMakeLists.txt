@@ -181,7 +181,8 @@ target_compile_options(hargan_ps_media PRIVATE -Wno-pointer-sign -Wno-incompatib
 set(HARGAN_PS_SRC core.c $<TARGET_OBJECTS:hargan_ps_media>)
 if(ANDROID)
 	add_library(hargan_ps SHARED ${HARGAN_PS_SRC} jni.c)
-	target_link_options(hargan_ps PRIVATE -Wl,--gc-sections -Wl,-z,max-page-size=16384)
+	# Stripped here: Gradle cannot always find a strip tool for the runner's NDK.
+	target_link_options(hargan_ps PRIVATE -Wl,--gc-sections -Wl,--strip-all -Wl,-z,max-page-size=16384)
 else()
 	add_library(hargan_ps STATIC ${HARGAN_PS_SRC})
 endif()
