@@ -1,0 +1,21 @@
+{
+  "name": "hargan-ps-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PlayStation streaming core for the Hargan Cast phone apps",
+  "license": "AGPL-3.0-only",
+  "author": "Hargan Cast",
+  "files": [
+    "android/",
+    "ios/",
+    "Package.swift"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}

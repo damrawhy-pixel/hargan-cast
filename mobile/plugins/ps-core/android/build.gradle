@@ -1,0 +1,62 @@
+// PlayStation core for the Android app: the plugin classes, plus the native
+// library built from native/ps-core/mobile with the NDK.
+apply plugin: 'com.android.library'
+
+// Gradle may see this folder through node_modules; the native sources are found
+// from where it really lives in the repository.
+def repoRoot = new File(projectDir.canonicalFile, '../../../..').canonicalFile
+
+android {
+    namespace = "app.hargan.ps"
+    compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
+
+    // GitHub's runners carry a current NDK; elsewhere Gradle picks its default.
+    def runnerNdk = System.getenv('ANDROID_NDK_LATEST_HOME')
+    if (runnerNdk) {
+        ndkPath = runnerNdk
+    }
+
+    defaultConfig {
+        minSdkVersion project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 24
+        targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 36
+        ndk {
+            // Phones and tablets; the library is optional at run time, so other devices still get Xbox.
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON', '-DCMAKE_BUILD_TYPE=Release'
+            }
+        }
+        consumerProguardFiles 'proguard-rules.pro'
+    }
+    externalNativeBuild {
+        cmake {
+            path new File(repoRoot, 'native/ps-core/mobile/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+    buildTypes {
+        debug {
+            // The stream is unusable unoptimised; debug builds get the release library.
+            externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=Release' } }
+        }
+    }
+    lint {
+        abortOnError = false
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation "androidx.appcompat:appcompat:${project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.1'}"
+}

@@ -13,3 +13,6 @@ project(':capacitor-preferences').projectDir = new File('../../node_modules/@cap
 
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../../node_modules/@capacitor/status-bar/android')
+
+include ':hargan-ps-core'
+project(':hargan-ps-core').projectDir = new File('../plugins/ps-core/android')

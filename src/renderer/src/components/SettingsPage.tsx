@@ -27,6 +27,11 @@ const SECTIONS = [
 ] as const
 type Section = (typeof SECTIONS)[number][0]
 
+// Phones and tablets hand the controller, the window and the audio device to the OS,
+// so the desktop-only settings would do nothing there and are left out.
+const MOBILE = document.documentElement.dataset.platform === 'mobile'
+const VISIBLE_SECTIONS = MOBILE ? SECTIONS.filter(([id]) => id !== 'dualsense') : SECTIONS
+
 const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
 function Row({ label, hint, children }: { label: string; hint?: string; children?: ReactNode }) {
@@ -246,7 +251,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
   return (
     <div className="settings">
       <nav className="settings-nav" aria-label="Ayar bölümleri">
-        {SECTIONS.map(([id, label]) => <button key={id} data-nav aria-current={section === id} onClick={() => setSection(id)}>{label}</button>)}
+        {VISIBLE_SECTIONS.map(([id, label]) => <button key={id} data-nav aria-current={section === id} onClick={() => setSection(id)}>{label}</button>)}
       </nav>
 
       <div className="settings-body">
@@ -255,13 +260,21 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <h2>Genel</h2>
             <Slider field="fontSize" label="Yazı boyutu" min={12} max={20} step={1} unit=" px" />
             <Choice field="motion" label="Animasyonlar" hint="Windows'ta animasyon efektleri kapalı olsa da uygulamadakiler çalışır; istersen Windows'a uydurabilirsin." options={[['on', 'Açık'], ['system', "Windows'a göre"], ['off', 'Kapalı']]} />
-            <Toggle field="startFullscreen" label="Tam ekran başlat" hint="Uygulama açılırken tam ekrana geçer." />
-            <Toggle field="fullscreenOnStream" label="Akışta tam ekran" />
-            <Toggle field="doubleClickFullscreen" label="Çift tıkla tam ekran" />
-            <Toggle field="hideCursor" label="İmleci gizle" hint="Akışta fare hareketsiz kalınca." />
+            {!MOBILE && (
+              <>
+                <Toggle field="startFullscreen" label="Tam ekran başlat" hint="Uygulama açılırken tam ekrana geçer." />
+                <Toggle field="fullscreenOnStream" label="Akışta tam ekran" />
+                <Toggle field="doubleClickFullscreen" label="Çift tıkla tam ekran" />
+                <Toggle field="hideCursor" label="İmleci gizle" hint="Akışta fare hareketsiz kalınca." />
+              </>
+            )}
             <Toggle field="showGameImage" label="Yüklenirken oyun görselini göster" />
-            <Toggle field="backgroundKeepalive" label="Arka planda canlı tut" hint="Pencere arkadayken de akış yavaşlatılmaz." />
-            <Toggle field="useVulkan" label="Vulkan" hint="Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur." />
+            {!MOBILE && (
+              <>
+                <Toggle field="backgroundKeepalive" label="Arka planda canlı tut" hint="Pencere arkadayken de akış yavaşlatılmaz." />
+                <Toggle field="useVulkan" label="Vulkan" hint="Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur." />
+              </>
+            )}
             <h3>İstatistikler</h3>
             <Toggle field="showStats" label="İstatistikleri göster" hint="Akışta F3 ile de açılıp kapanır." />
             <Toggle field="statsVertical" label="Dikey düzen" />
@@ -283,7 +296,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
           <section>
             <h2>Ses</h2>
             <Toggle field="uiSounds" label="Arayüz sesleri" hint="Menüde gezinirken ve seçim yaparken kısa sesler çalar." />
-            <Choice field="audioOutputDevice" label="Çıkış aygıtı" options={[['', 'Windows varsayılanı'], ...outputs]} />
+            {!MOBILE && <Choice field="audioOutputDevice" label="Çıkış aygıtı" options={[['', 'Windows varsayılanı'], ...outputs]} />}
             <Slider field="audioVolume" label="Akış sesi" min={0} max={100} step={1} unit="%" />
             <Slider field="psAudioBufferMs" label="PlayStation ses tamponu" hint="Düşük değer daha az gecikme, yüksek değer daha az cızırtı demektir." min={10} max={100} step={5} unit=" ms" />
             <Toggle field="xboxAudioRumble" label="Xbox sesten titreşim" hint="Oyun sesinin bas kısmını kola titreşim olarak verir." />
@@ -315,6 +328,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Slider field="psDeadZone" label="Çubuk ölü bölgesi" hint="DualSense dışındaki kollar için." min={0} max={30} step={1} unit="%" />
             <Toggle field="psButtonsByPosition" label="Düğmeleri konuma göre eşle" hint="Nintendo düzenli kollarda A/B ve X/Y'yi değiştirir." />
             <Toggle field="psOptionsShareForPs" label="Options + Share ile PS düğmesi" hint="İkisine 2 saniye basılı tutunca PS düğmesi gönderilir." />
+            {MOBILE && <Toggle field="psVibration" label="Titreşim" />}
           </section>
         )}
 

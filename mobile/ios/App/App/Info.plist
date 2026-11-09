@@ -8,6 +8,12 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
         <string>Hargan Cast</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- The PlayStation core's media socket on 127.0.0.1; it never leaves the device. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -5,11 +5,11 @@ import { Browser } from '@capacitor/browser'
 import { StatusBar } from '@capacitor/status-bar'
 import XboxService from '../main/xbox/service'
 import type { AppSettings } from '../shared/settings'
-import type { HarganApi, PsStatus, XboxStatus } from '../shared/types'
+import type { HarganApi, PsEvent, PsStatus, XboxStatus } from '../shared/types'
+import MobilePlayStation, { PsCore } from './playstation'
 import { getSettings, resetSettings, setSettings } from './settings'
 
 const SOURCE_URL = 'https://github.com/damrawhy-pixel/hargan-cast'
-const NOT_YET = 'Bu hesap mobil sürümde henüz bağlanamıyor. Bir sonraki sürümde gelecek.'
 
 // Listeners for status changes the services report on their own.
 function channel<T>() {
@@ -27,12 +27,16 @@ function channel<T>() {
 
 const xboxStatus = channel<XboxStatus>()
 const psStatus = channel<PsStatus>()
-let ps: PsStatus = { state: 'signedOut' }
-
-const unsupported = () => Promise.reject(new Error(NOT_YET))
+const psEvents = channel<PsEvent>()
 
 async function fullscreen(on: boolean) {
   await (on ? StatusBar.hide() : StatusBar.show()).catch(() => {})
+}
+
+// Playing with a pad means nobody touches the screen: keep it on, and keep Wi-Fi awake.
+function streaming(on: boolean) {
+  void fullscreen(on)
+  void PsCore.streaming({ on }).catch(() => {})
 }
 
 // The hardware back button behaves like B on a pad: close what is open, then leave.
@@ -51,8 +55,11 @@ export async function installBridge() {
   void App.addListener('backButton', handleBack)
 
   // The same Xbox service the desktop runs, on the browser stand-ins in ./shims.
-  const xbox = new XboxService(xboxStatus.emit, await getSettings())
+  let current = await getSettings()
+  const xbox = new XboxService(xboxStatus.emit, current)
+  const ps = new MobilePlayStation(psStatus.emit, psEvents.emit, () => current)
   const applied = (settings: AppSettings) => {
+    current = settings
     xbox.applySettings(settings)
     return settings
   }
@@ -61,7 +68,7 @@ export async function installBridge() {
     platform: {
       fullscreen: (on) => void fullscreen(on),
       toggleFullscreen: () => void StatusBar.getInfo().then((info) => fullscreen(info.visible)).catch(() => {}),
-      streaming: (on) => void fullscreen(on),
+      streaming,
       openExternal: (url) => void Browser.open({ url }),
       // The licences ship with the source; on a phone they are read where the source lives.
       openLicenses: () => void Browser.open({ url: `${SOURCE_URL}/blob/main/NOTICE.md` }),
@@ -93,22 +100,20 @@ export async function installBridge() {
       onStatus: xboxStatus.on,
     },
     ps: {
-      status: async () => ps,
-      signIn: unsupported,
-      signInWithToken: unsupported,
-      signOut: async () => {
-        ps = { state: 'signedOut' }
-        psStatus.emit(ps)
-      },
-      catalog: unsupported,
-      datacenters: async () => [],
-      stream: unsupported,
-      stop: async () => {},
+      status: async () => ps.status(),
+      signIn: async () => ps.signIn(),
+      signInWithToken: async (token) => ps.signInWithToken(token),
+      signOut: () => ps.signOut(),
+      catalog: (force) => ps.catalog(force),
+      datacenters: async (service) => ps.datacenters(service),
+      stream: (game, opts) => ps.stream(game, opts),
+      stop: () => ps.stop(),
+      // The desktop drives a DualSense itself; on a phone the OS owns the controller.
       testHaptics: async () => false,
       routeSpeaker: async () => false,
-      info: async () => ({ screenshots: [] }),
+      info: (game) => ps.info(game),
       onStatus: psStatus.on,
-      onEvent: () => () => {},
+      onEvent: psEvents.on,
     },
   }
   window.hc = api

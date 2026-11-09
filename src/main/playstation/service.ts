@@ -8,39 +8,33 @@ import type { AppSettings } from '../../shared/settings'
 import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
 import { log, safeUrl } from '../log'
 import SecureStore from '../secureStore'
+import {
+  CATALOG_WARNING,
+  DEFAULT_CONTEXT,
+  SESSION_EXPIRED,
+  SESSION_URL,
+  SIGN_IN_PAGE_HOST,
+  catalogContext,
+  datacentersKey,
+  extractNpsso,
+  friendlyError,
+  parseDatacenters,
+  parseStorePage,
+  signInUrl,
+  storePageHasDetails,
+  storePages,
+  streamArgs,
+  type CatalogContext,
+} from './common'
 import { HttpBridge } from './httpBridge'
 
 const PARTITION = 'persist:playstation'
-const SIGN_IN_URL = 'https://ca.account.sony.com/api/authz/v3/oauth/authorize'
-const SIGN_IN_PARAMS = {
-  client_id: 'ba495a24-818c-472b-b12d-ff231c1b5745',
-  redirect_uri: 'https://remoteplay.dl.playstation.net/remoteplay/redirect',
-  scope: 'psn:clientapp referenceDataService:countryConfig.read pushNotification:webSocket.desktop.connect sessionManager:remotePlaySession.system.update',
-  response_type: 'code',
-  service_entity: 'urn:service-entity:psn',
-  access_type: 'offline',
-  smcid: 'remoteplay',
-  layout_type: 'popup',
-  PlatformPrivacyWs1: 'minimal',
-  no_captcha: 'true',
-}
-const SIGN_IN_PAGE_HOST = 'my.account.sony.com'
-const SESSION_URL = 'https://ca.account.sony.com/api/v1/ssocookie'
 const SIGN_IN_POLL_MS = 1500
 const CORE_LOG_LINES = 300
-// kb/s per resolution when bit rate is left on automatic. Sony asks for about 38 Mb/s at 4K.
-const AUTO_BITRATE: Record<number, number> = { 720: 10000, 1080: 20000, 1440: 30000, 2160: 40000 }
-const NPSSO_PATTERN = /[A-Za-z0-9]{40,128}/
 
 interface Pending {
   resolve(value: any): void
   reject(error: Error): void
-}
-
-interface CatalogContext {
-  country: string
-  lang: string
-  foreign: boolean
 }
 
 export default class PlayStationService {
@@ -52,7 +46,7 @@ export default class PlayStationService {
   private pending = new Map<number, Pending>()
   private nextId = 1
   private coreLog: string[] = []
-  private context: CatalogContext = { country: 'US', lang: 'en', foreign: false }
+  private context: CatalogContext = DEFAULT_CONTEXT
   private infoCache = new Map<string, GameInfo>()
   private signInWindow?: BrowserWindow
   private _status: PsStatus
@@ -134,10 +128,7 @@ export default class PlayStationService {
       if (this._status.state === 'signingIn') this.setStatus({ state: 'signedOut' })
     })
 
-    const url = new URL(SIGN_IN_URL)
-    for (const [k, v] of Object.entries(SIGN_IN_PARAMS)) url.searchParams.set(k, v)
-    url.searchParams.set('cid', crypto.randomUUID())
-    win.loadURL(url.toString()).catch(() => {
+    win.loadURL(signInUrl(crypto.randomUUID())).catch(() => {
       this.setStatus({ state: 'signedOut', error: 'Sony giriş sayfasına ulaşılamadı. Ağ bağlantını kontrol et.' })
       win.destroy()
     })
@@ -152,9 +143,7 @@ export default class PlayStationService {
   // Sony sometimes refuses embedded logins; the token page in a normal browser
   // is the documented way out. Accepts the raw value or the page's JSON.
   signInWithToken(input: string) {
-    const match = input.match(NPSSO_PATTERN)
-    if (!match) throw new Error('Bu bir NPSSO değerine benzemiyor')
-    this.acceptToken(match[0])
+    this.acceptToken(extractNpsso(input))
   }
 
   async signOut() {
@@ -219,7 +208,7 @@ export default class PlayStationService {
 
   private expire() {
     this.vault.delete('npsso')
-    this.setStatus({ state: 'signedOut', error: 'PlayStation oturumunun süresi doldu. Tekrar giriş yap.' })
+    this.setStatus({ state: 'signedOut', error: SESSION_EXPIRED })
   }
 
   private call(cmd: string, args: Record<string, unknown>) {
@@ -248,48 +237,25 @@ export default class PlayStationService {
 
     // The lib settles region and language; streaming must reuse them verbatim.
     if (catalog.settledLocale) this.vault.set('locale', catalog.settledLocale)
-    const [lang = 'en', country = 'US'] = String(catalog.settledLocale || 'en-US').split('-')
-    this.context = {
-      country: (catalog.fallbackRegion || country).toUpperCase(),
-      lang: (catalog.resolvedStoreLang || lang).toLowerCase(),
-      foreign: !catalog.nativeMode,
-    }
-    const warning = catalog.warning ? 'Oturumun süresi doldu. Sahip olduğun oyunları görmek için tekrar giriş yap.' : ''
+    this.context = catalogContext(catalog)
+    const warning = catalog.warning ? CATALOG_WARNING : ''
     return { games: catalog.games ?? [], warning, nativeMode: catalog.nativeMode }
   }
 
   async stream(game: PsGame, opts: PsStreamOptions): Promise<PsStreamStarted> {
     await this.ensureCore()
-    const datacentersKey = `datacenters.${game.streamServiceType}`
-    const owned = game.isOwned && game.streamServiceType === 'psnow'
-    const settings = this.settings()
-    const cloud = game.streamServiceType === 'pscloud'
-    const resolution = cloud ? settings.psCloudResolution : settings.psNowResolution
-    const reply = await this.call('stream', {
-      service: game.streamServiceType,
-      game: game.streamIdentifier,
-      npsso: this.npsso(),
-      country: this.context.country,
-      lang: this.context.lang,
-      gameLang: settings.psGameLanguage || this.vault.get('locale', 'en-US'),
-      ownedEntitlement: owned ? game.entitlementId ?? '' : '',
-      ownedPlatform: owned ? game.platform : '',
-      foreign: this.context.foreign,
-      attrPassed: this.vault.get('attrPassed', false),
-      datacenter: cloud ? settings.psCloudDatacenter : settings.psNowDatacenter,
-      priorDatacenters: this.vault.get(datacentersKey, '[]'),
-      hevc: opts.hevc,
-      resolution,
-      bitrate: (cloud ? settings.psCloudBitrate : settings.psNowBitrate) || (AUTO_BITRATE[resolution] ?? AUTO_BITRATE[1080]),
-      packetLossMax: settings.psPacketLossMax,
-      psChord: settings.psOptionsShareForPs,
-      nativeDualSense: settings.psNativeDualSense,
-      hapticStrength: settings.psHapticStrength,
-      triggers: settings.psTriggers,
-      vibration: settings.psVibration,
-    })
+    const key = datacentersKey(game.streamServiceType)
+    const reply = await this.call(
+      'stream',
+      streamArgs(game, opts, this.settings(), this.context, {
+        npsso: this.npsso(),
+        locale: this.vault.get('locale', 'en-US'),
+        attrPassed: this.vault.get('attrPassed', false),
+        priorDatacenters: this.vault.get(key, '[]'),
+      }),
+    )
     this.vault.set('attrPassed', true)
-    if (reply.datacenters) this.vault.set(datacentersKey, reply.datacenters)
+    if (reply.datacenters) this.vault.set(key, reply.datacenters)
     return {
       url: `ws://127.0.0.1:${this.media!.port}/${this.media!.token}`,
       codec: reply.codec,
@@ -298,53 +264,23 @@ export default class PlayStationService {
     }
   }
 
-  // Filled in by previous streams, which is when the servers get pinged.
   datacenters(service: 'pscloud' | 'psnow'): PsDatacenter[] {
-    let list: { dataCenter?: string; rtt?: number }[] = []
-    try {
-      list = JSON.parse(this.vault.get(`datacenters.${service}`, '[]'))
-    } catch {
-      return []
-    }
-    return list
-      .filter((d) => d.dataCenter)
-      .map((d) => ({ name: d.dataCenter!, rttMs: d.rtt }))
-      .sort((a, b) => (a.rttMs ?? Infinity) - (b.rttMs ?? Infinity))
+    return parseDatacenters(this.vault.get(datacentersKey(service), '[]'))
   }
 
-  // The store page carries the long description, screenshots, logo and player
-  // rating inside its embedded data; the cloud catalog has none of them.
   async info(game: PsGame): Promise<GameInfo> {
     const cached = this.infoCache.get(game.productId)
     if (cached) return cached
-    const locale = `${this.context.lang}-${this.context.country.toLowerCase()}`
-    const pages = [`https://store.playstation.com/${locale}/product/${encodeURIComponent(game.productId)}`, game.conceptUrl].filter(Boolean) as string[]
+    const { locale, pages } = storePages(game, this.context)
     let html = ''
     for (const page of pages) {
       const res = await net.fetch(page, { headers: { 'Accept-Language': locale } }).catch(() => undefined)
       if (res?.ok) {
         html = await res.text()
-        if (html.includes('"role":"SCREENSHOT"') || html.includes('"type":"LONG"')) break
+        if (storePageHasDetails(html)) break
       }
     }
-    const unescape = (s: string) => {
-      try {
-        return JSON.parse(`"${s}"`) as string
-      } catch {
-        return s
-      }
-    }
-    const media = (role: string) => [...new Set([...html.matchAll(new RegExp(`"role":"${role}","type":"IMAGE","url":"(https:[^"]+)"`, 'g'))].map((m) => m[1]))]
-    const long = html.match(/"__typename":"Description","type":"LONG","value":"((?:[^"\\]|\\.)*)"/)?.[1]
-    const stars = html.match(/"averageRating":([\d.]+),"totalRatingsCount":(\d+)/)
-    const info: GameInfo = {
-      description: long && unescape(long).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim(),
-      // The art the console itself shows behind a game.
-      hero: media('GAMEHUB_COVER_ART')[0],
-      logo: media('LOGO')[0],
-      screenshots: media('SCREENSHOT').slice(0, 12),
-      community: stars && Number(stars[2]) > 0 ? { average: Number(stars[1]), count: Number(stars[2]) } : undefined,
-    }
+    const info = parseStorePage(html)
     this.infoCache.set(game.productId, info)
     return info
   }
@@ -368,18 +304,4 @@ export default class PlayStationService {
   shutdown() {
     this.core?.stdin.end()
   }
-}
-
-function friendlyError(message: string) {
-  if (message === 'AUTHORIZATION_FAILED') return 'PlayStation oturumunun süresi doldu. Tekrar giriş yap.'
-  if (message === 'PS_PLUS_SUBSCRIPTION_REQUIRED') return 'Bu oyun için PS Plus Premium aboneliği gerekiyor.'
-  if (message === 'PING_TIMEOUT') return 'Veri merkezlerine ulaşılamadı. Bağlantını kontrol edip tekrar dene.'
-  if (message === 'ACCOUNT_PRIVACY_SETTINGS') return 'Hesabının gizlilik ayarları bu oyuna izin vermiyor.'
-  if (message.startsWith('Selected datacenter')) return 'Seçtiğin veri merkezi şu an kullanılamıyor. Ayarlardan başka birini seç.'
-  if (message.startsWith('Timed out waiting')) return 'Akış sunucusu beklenirken süre doldu. Tekrar dene.'
-  if (message.startsWith("Couldn't reach") || message.startsWith('Network error')) return 'PlayStation sunucularına ulaşılamadı. Bağlantını kontrol edip tekrar dene.'
-  if (message.startsWith('Failed to fetch')) return 'PlayStation kataloğu alınamadı. Tekrar dene.'
-  // What Sony sends back is a raw response body, not a sentence.
-  if (message.startsWith('{')) return 'PlayStation isteği reddetti. Biraz sonra tekrar dene.'
-  return message
 }

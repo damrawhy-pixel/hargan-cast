@@ -6,6 +6,8 @@ on:
     paths:
       - 'src/**'
       - 'mobile/**'
+      - 'native/ps-core/**'
+      - 'native/third_party/**'
       - 'package.json'
       - 'package-lock.json'
       - 'capacitor.config.ts'
@@ -39,6 +41,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npx cap sync android
+      # Also builds the PlayStation core (native/ps-core/mobile) with the runner's NDK.
       - name: Build
         working-directory: mobile/android
         run: ./gradlew --no-daemon assembleDebug
@@ -63,6 +66,8 @@ jobs:
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           xcodebuild -version
+      - name: Build the PlayStation core
+        run: bash mobile/plugins/ps-core/ios/build-core.sh
       # Unsigned until an Apple developer account is connected; it can be sideloaded
       # with AltStore or Sideloadly, which sign it with the user's own Apple ID.
       - name: Build

@@ -5,3 +5,7 @@ native/build/
 native/bin/
 *.log
 dist-mobile/
+native/build-ios/
+mobile/plugins/ps-core/ios/HarganPsCoreC.xcframework/
+mobile/plugins/ps-core/android/.cxx/
+mobile/plugins/ps-core/android/build/
