@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
+import { physicalPads } from '../lib/virtualPad'
+import { TouchControls, type TouchPlatform } from './TouchControls'
 
 export interface StreamStats {
   fps: number
@@ -16,6 +19,7 @@ export interface StreamQueue {
 }
 
 interface Props {
+  platform: TouchPlatform
   title: string
   stage: string
   live: boolean
@@ -59,7 +63,29 @@ function QueueCard({ queue }: { queue: StreamQueue }) {
   )
 }
 
-export function StreamShell({ title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
+// Phones and tablets only. On 'auto' the controls step aside once a real controller
+// has been used; browsers only report one after its first button press.
+function useTouchControls() {
+  const mode = getSettings().touchControls
+  const watch = MOBILE && mode === 'auto'
+  const [padInUse, setPadInUse] = useState(() => watch && physicalPads().length > 0)
+  useEffect(() => {
+    if (!watch) return
+    const check = () => setPadInUse(physicalPads().length > 0)
+    const timer = setInterval(check, 1000)
+    window.addEventListener('gamepadconnected', check)
+    window.addEventListener('gamepaddisconnected', check)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('gamepadconnected', check)
+      window.removeEventListener('gamepaddisconnected', check)
+    }
+  }, [watch])
+  return MOBILE && (mode === 'on' || (mode === 'auto' && !padInUse))
+}
+
+export function StreamShell({ platform, title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
+  const touch = useTouchControls()
   const settings = getSettings()
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
   // Any CSS filter, even a neutral one, keeps video off the GPU's direct path to the screen.
@@ -158,6 +184,8 @@ export function StreamShell({ title, stage, live, stats, queue, controller, imag
       onDoubleClick={() => settings.doubleClickFullscreen && window.hc.platform.toggleFullscreen()}
     >
       <div className={`stream-picture ${ratio ? 'stream-picture--ratio' : ''}`} style={pictureStyle}>{children}</div>
+
+      {touch && live && !menu && <TouchControls platform={platform} onMenu={() => setMenu(true)} />}
 
       {!live && (
         <div className="stream-veil" style={image && settings.showGameImage ? { backgroundImage: `linear-gradient(rgba(6, 7, 10, 0.72), rgba(6, 7, 10, 0.9)), url("${image}")` } : undefined}>

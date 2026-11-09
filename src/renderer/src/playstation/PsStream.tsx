@@ -136,7 +136,7 @@ export function PsStream({ game, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell title={game.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
+    <StreamShell platform="playstation" title={game.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
       <canvas ref={canvasRef} className="stream-surface" />
     </StreamShell>
   )

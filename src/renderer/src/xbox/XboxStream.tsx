@@ -3,6 +3,7 @@ import type { XboxTitle } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
 import { Picture, fitFor, outputSize, pictureLabel, type Fit, type PictureOptions, type Size } from '../lib/picture'
 import { routeDualSenseSpeaker } from '../lib/speaker'
+import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
 
 const HOLDER_ID = 'xbox-video-holder'
@@ -149,7 +150,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       player.setAudioControl(settings.audioVolume !== 100)
       if (settings.xboxAudioRumble) player.setAudioRumble(true, settings.xboxAudioRumbleThreshold)
       player.setGamepadIndex(settings.xboxGamepadIndex)
-      player.setGamepadMix(settings.xboxGamepadMix)
+      // The touch controls are a controller of their own; mixing lets a real one join them.
+      player.setGamepadMix(settings.xboxGamepadMix || (MOBILE && settings.touchControls !== 'off'))
       player.setPollRate(settings.xboxPollingRate)
       player.setCoOpMode(settings.xboxCoop)
       player.setMouseSensitive(settings.xboxMouseSensitivity)
@@ -242,7 +244,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
+    <StreamShell platform="xbox" title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
       <div id={HOLDER_ID} className="stream-surface" />
     </StreamShell>
   )

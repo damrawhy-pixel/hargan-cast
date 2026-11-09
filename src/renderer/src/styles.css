@@ -484,6 +484,86 @@ button { cursor: pointer; }
 [data-platform='mobile'] .launch { min-height: calc(100vh - 64px - env(safe-area-inset-top)); }
 [data-platform='mobile'] .viewer-head { padding-right: var(--gutter); padding-top: calc(18px + env(safe-area-inset-top)); }
 [data-platform='mobile'] .home, [data-platform='mobile'] .library-scroll { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+/* Out of the thumbs' way: just above the middle row of the touch controls. */
+[data-platform='mobile'] .stream-stats { pointer-events: none; top: auto; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 16vh); transform: translateX(-50%); white-space: nowrap; }
+
+.setting-note { display: block; margin-top: 14px; color: var(--ink-faint); font-size: 13px; line-height: 1.5; }
+
+/* --- On-screen controls (phones and tablets) ------------------------------- */
+.touch {
+  --u: calc(clamp(34px, 12vh, 62px) * var(--tc-scale, 1));
+  --tc-left: calc(2.5vw + env(safe-area-inset-left));
+  --tc-right: calc(2.5vw + env(safe-area-inset-right));
+  --tc-top: calc(2.5vh + env(safe-area-inset-top));
+  --tc-bottom: calc(2.5vh + env(safe-area-inset-bottom));
+  position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+.tc-zone { position: absolute; pointer-events: auto; touch-action: none; }
+.tc-key {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, 0.6); background: rgba(12, 14, 20, 0.42); color: #fff;
+  font: 700 calc(var(--u) * 0.3) / 1 system-ui, sans-serif; letter-spacing: 0.02em;
+  opacity: var(--tc-opacity, 0.6); transition: transform 70ms ease-out, background-color 70ms, color 70ms, opacity 70ms;
+}
+.tc-key svg { width: 46%; height: 46%; }
+.tc-key.is-on { background: rgba(255, 255, 255, 0.9); color: #0c0e14; opacity: max(var(--tc-opacity, 0.6), 0.85); transform: scale(0.92); }
+
+.tc-l2, .tc-l1, .tc-r2, .tc-r1 { width: calc(var(--u) * 2.1); height: calc(var(--u) * 0.78); }
+.tc-l2 .tc-key, .tc-l1 .tc-key, .tc-r2 .tc-key, .tc-r1 .tc-key { border-radius: calc(var(--u) * 0.28); }
+.tc-l2 { left: var(--tc-left); top: var(--tc-top); }
+.tc-l1 { left: var(--tc-left); top: calc(var(--tc-top) + var(--u) * 0.9); }
+.tc-r2 { right: var(--tc-right); top: var(--tc-top); }
+.tc-r1 { right: var(--tc-right); top: calc(var(--tc-top) + var(--u) * 0.9); }
+
+.tc-top { position: absolute; top: var(--tc-top); left: 50%; display: flex; align-items: center; gap: calc(var(--u) * 0.3); transform: translateX(-50%); }
+.tc-pause {
+  width: calc(var(--u) * 0.78); height: calc(var(--u) * 0.78); padding: 0; display: grid; place-items: center;
+  border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.6); background: rgba(12, 14, 20, 0.42); color: #fff;
+  opacity: var(--tc-opacity, 0.6); pointer-events: auto; touch-action: manipulation;
+}
+.tc-pause svg { width: 42%; height: 42%; }
+.tc-touchpad { position: relative; width: calc(var(--u) * 3.6); height: calc(var(--u) * 0.78); }
+.tc-touchpad .tc-key { border-radius: calc(var(--u) * 0.22); font-size: calc(var(--u) * 0.2); font-weight: 600; }
+
+.tc-dpad { left: var(--tc-left); top: calc(var(--tc-top) + var(--u) * 1.9); width: calc(var(--u) * 2.6); height: calc(var(--u) * 2.6); }
+.tc-arrow { inset: auto; width: 34%; height: 34%; border-radius: calc(var(--u) * 0.16); }
+.tc-arrow-up { left: 33%; top: 0; }
+.tc-arrow-down { left: 33%; bottom: 0; }
+.tc-arrow-left { left: 0; top: 33%; }
+.tc-arrow-right { right: 0; top: 33%; }
+.tc-arrow::after { content: ''; border: calc(var(--u) * 0.12) solid transparent; }
+.tc-arrow-up::after { border-top-width: 0; border-bottom-color: currentColor; }
+.tc-arrow-down::after { border-bottom-width: 0; border-top-color: currentColor; }
+.tc-arrow-left::after { border-left-width: 0; border-right-color: currentColor; }
+.tc-arrow-right::after { border-right-width: 0; border-left-color: currentColor; }
+
+.tc-face { right: var(--tc-right); top: calc(var(--tc-top) + var(--u) * 1.8); width: calc(var(--u) * 2.9); height: calc(var(--u) * 2.9); }
+.tc-face .tc-key { inset: auto; width: 34%; height: 34%; font-size: calc(var(--u) * 0.36); transform: translate(-50%, -50%); }
+.tc-face .tc-key.is-on { transform: translate(-50%, -50%) scale(0.92); }
+.tc-face .tc-face-n { left: 50%; top: 17%; }
+.tc-face .tc-face-e { left: 83%; top: 50%; }
+.tc-face .tc-face-s { left: 50%; top: 83%; }
+.tc-face .tc-face-w { left: 17%; top: 50%; }
+
+.tc-stick { bottom: 0; }
+/* Each stick area ends where the middle row (about 4.9 units wide) begins. */
+.tc-stick-left { left: 0; width: min(34vw, calc(50vw - var(--u) * 2.55)); height: max(28vh, calc(100% - var(--tc-top) - var(--u) * 4.6)); }
+.tc-stick-right { right: 0; width: min(32vw, calc(50vw - var(--u) * 2.55)); height: max(26vh, calc(100% - var(--tc-top) - var(--u) * 4.8)); }
+.tc-stick-base {
+  position: absolute; left: 50%; top: 55%; width: calc(var(--u) * 2.1); height: calc(var(--u) * 2.1); transform: translate(-50%, -50%);
+  border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.45); background: rgba(12, 14, 20, 0.3);
+  opacity: var(--tc-opacity, 0.6); pointer-events: none; transition: opacity 120ms;
+}
+.tc-stick-base.is-on { opacity: max(var(--tc-opacity, 0.6), 0.8); }
+.tc-stick-knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; border-radius: 50%; background: rgba(255, 255, 255, 0.78); }
+.tc-stick-base:not(.is-on) .tc-stick-knob { transition: transform 120ms ease-out; }
+.tc-stick-base.is-clicked .tc-stick-knob { background: #fff; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35); }
+
+.tc-middle { position: absolute; left: 50%; bottom: var(--tc-bottom); display: flex; align-items: center; gap: calc(var(--u) * 0.22); transform: translateX(-50%); }
+.tc-small { position: relative; width: calc(var(--u) * 0.78); height: calc(var(--u) * 0.78); }
+.tc-small .tc-key { font-size: calc(var(--u) * 0.24); }
+.tc-small.tc-home { width: calc(var(--u) * 0.92); height: calc(var(--u) * 0.92); }
 @media (max-width: 760px) {
   :root { --gutter: 18px; --launch: 64px; --tile: 104px; }
   .tabs { gap: 18px; }

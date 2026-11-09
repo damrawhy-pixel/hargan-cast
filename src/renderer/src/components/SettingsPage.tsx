@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { XBOX_REGIONS, type AppSettings } from '../../../shared/settings'
 import type { PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
+import { MOBILE } from '../lib/platform'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
 
@@ -22,15 +23,15 @@ const XBOX_BITRATES: [number, string][] = [[0, 'Sınırsız'], ...[5, 10, 15, 20
 const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.25, 27.78, 25, 22.73, 20.83, 19.23, 17.86, 16.67].map((r) => [r, `${r} Hz`])
 
 const SECTIONS = [
-  ['general', 'Genel'], ['picture', 'Görüntü'], ['sound', 'Ses'], ['playstation', 'PlayStation'],
+  ['general', 'Genel'], ['picture', 'Görüntü'], ['sound', 'Ses'], ['touch', 'Dokunmatik'], ['playstation', 'PlayStation'],
   ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['accounts', 'Hesaplar'],
 ] as const
 type Section = (typeof SECTIONS)[number][0]
 
 // Phones and tablets hand the controller, the window and the audio device to the OS,
-// so the desktop-only settings would do nothing there and are left out.
-const MOBILE = document.documentElement.dataset.platform === 'mobile'
-const VISIBLE_SECTIONS = MOBILE ? SECTIONS.filter(([id]) => id !== 'dualsense') : SECTIONS
+// so the desktop-only settings would do nothing there and are left out; the
+// on-screen controls exist only there.
+const VISIBLE_SECTIONS = SECTIONS.filter(([id]) => (MOBILE ? id !== 'dualsense' : id !== 'touch'))
 
 const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
@@ -301,6 +302,17 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Slider field="psAudioBufferMs" label="PlayStation ses tamponu" hint="Düşük değer daha az gecikme, yüksek değer daha az cızırtı demektir." min={10} max={100} step={5} unit=" ms" />
             <Toggle field="xboxAudioRumble" label="Xbox sesten titreşim" hint="Oyun sesinin bas kısmını kola titreşim olarak verir." />
             <Slider field="xboxAudioRumbleThreshold" label="Sesten titreşim eşiği" min={0.01} max={0.5} step={0.01} unit="" />
+          </section>
+        )}
+
+        {section === 'touch' && (
+          <section>
+            <h2>Dokunmatik kontroller</h2>
+            <Choice field="touchControls" label="Ekran kontrolleri" hint="Otomatik: bir kol kullanmaya başlayınca kendiliğinden gizlenir." options={[['auto', 'Otomatik'], ['on', 'Her zaman göster'], ['off', 'Kapalı']]} />
+            <Slider field="touchOpacity" label="Görünürlük" min={15} max={100} step={5} unit="%" />
+            <Slider field="touchSize" label="Boyut" min={70} max={140} step={5} unit="%" />
+            <Toggle field="touchVibrate" label="Dokununca titret" hint="Düğmeye basınca telefon kısaca titrer. iPhone'da bu özellik yok." />
+            <small className="setting-note">Çubuklar parmağın değdiği yerde belirir. Çubuğa hızlıca iki kez dokunup basılı tutmak L3/R3 düğmesine basar.</small>
           </section>
         )}
 

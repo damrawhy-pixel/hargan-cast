@@ -5,4 +5,6 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Keeps Wi-Fi out of power saving while a stream runs. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- The short tick under the finger on the on-screen controls. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

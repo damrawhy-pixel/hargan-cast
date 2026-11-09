@@ -18,6 +18,12 @@ export interface AppSettings {
   showStats: boolean
   statsVertical: boolean
 
+  // On-screen controls, phones and tablets only. 'auto' hides them once a controller is used.
+  touchControls: 'auto' | 'on' | 'off'
+  touchOpacity: number
+  touchSize: number
+  touchVibrate: boolean
+
   // Picture, shared by both services
   videoFormat: VideoFormat
   brightness: number
@@ -96,6 +102,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   showStats: false,
   statsVertical: false,
+
+  touchControls: 'auto',
+  touchOpacity: 60,
+  touchSize: 100,
+  touchVibrate: true,
 
   videoFormat: '',
   brightness: 100,

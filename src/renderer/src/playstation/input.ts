@@ -1,4 +1,5 @@
 // Turns the Gamepad API and keyboard into Chiaki controller reports.
+import { VIRTUAL_PAD_ID, virtualPadState } from '../lib/virtualPad'
 
 const BUTTON = {
   CROSS: 1 << 0,
@@ -86,13 +87,28 @@ export function startInput(send: (report: ArrayBuffer) => void, nativeDualSense:
 
     const pad = activePad(nativeDualSense)
     if (pad) {
-      for (const [index, bit] of STANDARD_BUTTONS) if (pad.buttons[index]?.pressed) buttons |= (buttonsByPosition && FACE_BY_POSITION[bit]) || bit
+      // The on-screen controls are drawn in the controller's own layout; never swap them.
+      const swap = buttonsByPosition && pad.id !== VIRTUAL_PAD_ID
+      for (const [index, bit] of STANDARD_BUTTONS) if (pad.buttons[index]?.pressed) buttons |= (swap && FACE_BY_POSITION[bit]) || bit
       l2 = Math.max(l2, trigger(pad.buttons[6]?.value ?? 0))
       r2 = Math.max(r2, trigger(pad.buttons[7]?.value ?? 0))
       lx = axis(pad.axes[0] ?? 0)
       ly = axis(pad.axes[1] ?? 0)
       rx = axis(pad.axes[2] ?? 0)
       ry = axis(pad.axes[3] ?? 0)
+    }
+
+    // On-screen controls left visible next to a real controller add to it.
+    const touch = pad?.id === VIRTUAL_PAD_ID ? undefined : virtualPadState()
+    if (touch) {
+      const stronger = (a: number, b: number) => (Math.abs(b) > Math.abs(a) ? b : a)
+      for (const [index, bit] of STANDARD_BUTTONS) if (touch.values[index] > 0.5) buttons |= bit
+      l2 = Math.max(l2, trigger(touch.values[6]))
+      r2 = Math.max(r2, trigger(touch.values[7]))
+      lx = stronger(lx, axis(touch.axes[0]))
+      ly = stronger(ly, axis(touch.axes[1]))
+      rx = stronger(rx, axis(touch.axes[2]))
+      ry = stronger(ry, axis(touch.axes[3]))
     }
 
     const report = new ArrayBuffer(REPORT_SIZE)
