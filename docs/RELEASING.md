@@ -93,3 +93,8 @@ Her sürümdeki dosyalar GitHub'ın imzalı derleme kaydını (build provenance)
 ```bash
 gh attestation verify HarganCast-Setup-0.3.0.exe --repo damrawhy-pixel/hargan-cast
 ```
+
+## Kademeli dağıtım ve beta
+
+- **Kademeli dağıtım:** Depo ayarlarında (*Settings > Secrets and variables > Actions > Variables*) `ROLLOUT_PERCENT` değişkenini örneğin `20` yaparsan yeni masaüstü sürümü önce kurulu kopyaların %20'sine gider. Sorun görünmezse GitHub > Actions > **Rollout** işini çalıştırıp etiketi ve yeni yüzdeyi gir (ör. `50`, sonra `100`). Kötü bir sürümü durdurmak için `0` gir; güncellemiş olanlar o sürümde kalır, düzeltmeyi yeni bir sürümle çıkar. Değişken yoksa sürüm herkese gider.
+- **Beta:** Etiketin bir ön sürüm kısmı varsa (`v0.4.0-beta.1`) GitHub'da *pre-release* olarak açılır. Bunu yalnızca Ayarlar > Genel > **Beta sürümleri al** açık olan kopyalar kurar; diğerleri bir sonraki kararlı sürümü bekler.

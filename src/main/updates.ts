@@ -1,6 +1,12 @@
 // Copies installed with the setup program keep themselves current from the
 // project's GitHub releases: a new version downloads in the background and is
 // installed when the app closes. A copy run straight from a build folder is left alone.
+//
+// Two channels: stable follows normal releases; beta also takes GitHub
+// pre-releases (tags such as v0.4.0-beta.1) and every stable release after them.
+// The GitHub provider finds each release's feed from its tag, so no channel name is
+// set here. A release may reach only part of the installs first (stagingPercentage
+// in its feed, see .github/workflows/rollout.yml).
 import { app, Notification } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { t } from '../shared/i18n'
@@ -16,10 +22,18 @@ function installedBySetup() {
   return fs.readdirSync(folder).some((name) => /^Uninstall .*\.exe$/i.test(name))
 }
 
-export function startUpdates() {
+/** Picks the update channel; safe to call before or after startUpdates. */
+export function applyUpdateChannel(beta: boolean) {
+  autoUpdater.allowPrerelease = beta
+  // Leaving beta keeps the installed pre-release until a newer stable one exists.
+  autoUpdater.allowDowngrade = false
+}
+
+export function startUpdates(beta: boolean) {
   if (!app.isPackaged || !fs.existsSync(path.join(process.resourcesPath, 'app-update.yml')) || !installedBySetup()) return
 
   autoUpdater.logger = null
+  applyUpdateChannel(beta)
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('update-downloaded', (info) => {

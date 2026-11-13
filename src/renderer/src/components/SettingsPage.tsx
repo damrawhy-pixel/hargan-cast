@@ -339,6 +339,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
               <>
                 <Toggle field="backgroundKeepalive" label={t('Arka planda canlı tut')} hint={t('Pencere arkadayken de akış yavaşlatılmaz.')} />
                 <Toggle field="useVulkan" label={t('Vulkan')} hint={t('Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.')} />
+                <Toggle field="betaUpdates" label={t('Beta sürümleri al')} hint={t('Yeni sürümleri herkesten önce alırsın; arada hata çıkabilir. Kapatınca bir sonraki kararlı sürüme kadar beta sürümde kalırsın.')} />
                 <Toggle field="ignoreGpuBlocklist" label={t('Ekran kartı kara listesini yok say')} hint={t("Chromium'un sorunlu saydığı sürücülerde de donanım hızlandırmayı zorlar. Çökme yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.")} />
               </>
             )}

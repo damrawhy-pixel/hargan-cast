@@ -1,0 +1,44 @@
+name: Rollout
+
+# Changes how many desktop installs a published release reaches. Run it by hand
+# after a staged release looks healthy (for example 20 → 50 → 100), or set 0 to
+# stop a bad release from spreading while a fix is prepared. Installs that already
+# updated keep the version they have.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.4.0
+        required: true
+      percent:
+        description: Share of installs that may update, 0-100
+        required: true
+        default: '100'
+
+permissions:
+  contents: write
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rewrite the update feeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          PERCENT: ${{ inputs.percent }}
+        run: |
+          if ! [[ "$PERCENT" =~ ^[0-9]+$ ]] || (( PERCENT > 100 )); then
+            echo "::error::percent must be a whole number from 0 to 100"
+            exit 1
+          fi
+          mkdir feeds && cd feeds
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'latest.yml' --pattern 'beta.yml'
+          for feed in *.yml; do
+            sed -i '/^stagingPercentage:/d' "$feed"
+            # electron-updater treats a missing value as 100%.
+            (( PERCENT < 100 )) && echo "stagingPercentage: $PERCENT" >> "$feed"
+            echo "--- $feed"; cat "$feed"
+          done
+          gh release upload "$TAG" *.yml --repo "$GITHUB_REPOSITORY" --clobber

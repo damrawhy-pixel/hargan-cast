@@ -8,7 +8,7 @@ import { resolveLanguage, setLanguage, t } from '../shared/i18n'
 import type { AppSettings } from '../shared/settings'
 import PlayStationService from './playstation/service'
 import SettingsStore, { readBootSettings } from './settings'
-import { startUpdates } from './updates'
+import { applyUpdateChannel, startUpdates } from './updates'
 import XboxService from './xbox/service'
 
 // file:// has an opaque origin, which blocks module workers and audio worklets.
@@ -256,6 +256,7 @@ function registerIpc() {
     'settings:set': (patch) => {
       const next = settings.update(patch)
       xbox.applySettings(next)
+      applyUpdateChannel(next.betaUpdates)
       applyWindowSettings()
       return next
     },
@@ -320,7 +321,7 @@ app.whenReady().then(() => {
   )
   registerIpc()
   createWindow()
-  startUpdates()
+  startUpdates(settings.get().betaUpdates)
 })
 
 // A GPU process that keeps dying usually means a driver that dislikes the

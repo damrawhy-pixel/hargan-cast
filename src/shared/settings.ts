@@ -15,6 +15,8 @@ export interface AppSettings {
   useVulkan: boolean
   /** Forces GPU features on drivers Chromium distrusts; off by default since it can crash them. */
   ignoreGpuBlocklist: boolean
+  /** Desktop: also install pre-releases. */
+  betaUpdates: boolean
   fontSize: number
   uiSounds: boolean
   /** 'system' follows Windows' "Animation effects" switch. */
@@ -104,6 +106,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundKeepalive: false,
   useVulkan: false,
   ignoreGpuBlocklist: false,
+  betaUpdates: false,
   fontSize: 15,
   uiSounds: true,
   motion: 'on',

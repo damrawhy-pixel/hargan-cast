@@ -415,4 +415,6 @@ export const en = {
   "PlayStation hesap sunucusu": "PlayStation account server",
   "Xbox bulut bölgesi": "Xbox cloud region",
   "PlayStation veri merkezi (son akış)": "PlayStation data center (last stream)",
+  "Beta sürümleri al": "Get beta versions",
+  "Yeni sürümleri herkesten önce alırsın; arada hata çıkabilir. Kapatınca bir sonraki kararlı sürüme kadar beta sürümde kalırsın.": "You get new versions before everyone else; expect the odd bug. Turning it off keeps the beta until the next stable version comes out.",
 } as const satisfies Record<string, string>

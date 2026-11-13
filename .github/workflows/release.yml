@@ -128,6 +128,8 @@ jobs:
             dist/*.exe
             dist/*.blockmap
             dist/latest.yml
+            dist/beta.yml
+            dist/alpha.yml
             dist/*-sbom.cdx.json
 
   android:
@@ -265,14 +267,33 @@ jobs:
           merge-multiple: true
       # Lets anyone check a file was built here from the tagged commit:
       #   gh attestation verify <file> --repo damrawhy-pixel/hargan-cast
+      # The update feeds (*.yml) are left out: rollout.yml edits them later.
       - name: Build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: out/*
+          subject-path: |
+            out/*.exe
+            out/*.apk
+            out/*.aab
+            out/*.ipa
+            out/*.json
+      # The repository variable ROLLOUT_PERCENT (1-99) sends a new desktop version
+      # to only that share of installs at first; raise it with rollout.yml.
+      # Unset means everyone. A tag with a pre-release part (v0.4.0-beta.1)
+      # becomes a GitHub pre-release, which only the beta channel installs.
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          ROLLOUT_PERCENT: ${{ vars.ROLLOUT_PERCENT }}
         run: |
+          if [[ "$ROLLOUT_PERCENT" =~ ^[0-9]+$ ]] && (( ROLLOUT_PERCENT > 0 && ROLLOUT_PERCENT < 100 )); then
+            for feed in out/latest.yml out/beta.yml; do
+              [ -f "$feed" ] && echo "stagingPercentage: $ROLLOUT_PERCENT" >> "$feed"
+            done
+            echo "Staged rollout: $ROLLOUT_PERCENT%"
+          fi
+          pre=()
+          [[ "$GITHUB_REF_NAME" == *-* ]] && pre=(--prerelease)
           ls -la out
-          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --draft \
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --draft "${pre[@]}" \
             --title "Hargan Cast ${{ needs.version.outputs.name }}" --generate-notes
