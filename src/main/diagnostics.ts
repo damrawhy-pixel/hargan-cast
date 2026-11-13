@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { AppSettings } from '../shared/settings'
 import { logFile, redact } from './log'
+import { t } from '../shared/i18n'
 
 const PRIVATE_SETTINGS: (keyof AppSettings)[] = ['xboxTurnUsername', 'xboxTurnCredential']
 
@@ -20,9 +21,9 @@ function readLog(file: string) {
 export async function exportDiagnostics(win: BrowserWindow | undefined, settings: AppSettings) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const options = {
-    title: 'Tanılama dosyasını kaydet',
+    title: t('Tanılama dosyasını kaydet'),
     defaultPath: path.join(app.getPath('desktop'), `HarganCast-tanilama-${stamp}.txt`),
-    filters: [{ name: 'Metin', extensions: ['txt'] }],
+    filters: [{ name: t('Metin'), extensions: ['txt'] }],
   }
   const { canceled, filePath } = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
   if (canceled || !filePath) return undefined

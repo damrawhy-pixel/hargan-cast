@@ -1,4 +1,5 @@
 import { Preferences } from '@capacitor/preferences'
+import { t } from '../shared/i18n'
 import { DEFAULT_SETTINGS, sanitizeSettings, type AppSettings } from '../shared/settings'
 
 const KEY = 'settings'
@@ -24,7 +25,7 @@ export async function setSettings(input: Partial<AppSettings>): Promise<AppSetti
     patch.xboxRegionIp = patch.xboxRegionIp.trim()
     // Goes straight into an HTTP header, so only a bare address may pass.
     if (patch.xboxRegionIp && !IPV4.test(patch.xboxRegionIp) && !(patch.xboxRegionIp.includes(':') && IPV6.test(patch.xboxRegionIp)))
-      throw new Error('Geçerli bir IP adresi gir')
+      throw new Error(t('Geçerli bir IP adresi gir'))
   }
   const next = { ...(await getSettings()), ...patch }
   await Preferences.set({ key: KEY, value: JSON.stringify(next) })

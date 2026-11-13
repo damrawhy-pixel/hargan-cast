@@ -4,6 +4,7 @@ import type { PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
 import { MOBILE } from '../lib/platform'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
+import { t, type Message } from '../../../shared/i18n'
 
 const LANGUAGES: [string, string][] = [
   ['tr-TR', 'Türkçe'], ['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['de-DE', 'Deutsch'], ['fr-FR', 'Français'],
@@ -14,18 +15,19 @@ const LANGUAGES: [string, string][] = [
   ['zh-CN', '简体中文'], ['zh-TW', '繁體中文'],
 ]
 const RESOLUTIONS: [number, string][] = [[720, '720p'], [1080, '1080p'], [1440, '1440p'], [2160, '4K']]
-const PS_BITRATES: [number, string][] = [[0, 'Otomatik'], ...[5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b): [number, string] => [b, `${b / 1000} Mb/sn`])]
-const PS_BITRATE_HINT = 'Otomatik, çözünürlüğe göre seçer: 1080p için 20, 4K için 40 Mb/sn.'
-const FSR_HINT = 'Görüntüyü ekran boyutuna AMD FSR ile büyütür ve keskinleştirir. Görüntü ekrandan küçükse en çok fark eder.'
-const DEBAND_HINT = 'Koyu ve düz renk geçişlerinde sıkıştırmanın bıraktığı basamakları yumuşatır.'
+// Built per render: the words follow the interface language.
+const psBitrates = (): [number, string][] => [[0, t('Otomatik')], ...[5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b): [number, string] => [b, t('{n} Mb/sn', { n: b / 1000 })])]
+const psBitrateHint = () => t('Otomatik, çözünürlüğe göre seçer: 1080p için 20, 4K için 40 Mb/sn.')
+const fsrHint = () => t('Görüntüyü ekran boyutuna AMD FSR ile büyütür ve keskinleştirir. Görüntü ekrandan küçükse en çok fark eder.')
+const debandHint = () => t('Koyu ve düz renk geçişlerinde sıkıştırmanın bıraktığı basamakları yumuşatır.')
 // Microsoft sends at most about 27 Mb/s, so a higher cap would change nothing.
-const XBOX_BITRATES: [number, string][] = [[0, 'Sınırsız'], ...[5, 10, 15, 20].map((b): [number, string] => [b, `En fazla ${b} Mb/sn`])]
+const xboxBitrates = (): [number, string][] => [[0, t('Sınırsız')], ...[5, 10, 15, 20].map((b): [number, string] => [b, t('En fazla {n} Mb/sn', { n: b })])]
 const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.25, 27.78, 25, 22.73, 20.83, 19.23, 17.86, 16.67].map((r) => [r, `${r} Hz`])
 
 const SECTIONS = [
   ['general', 'Genel'], ['picture', 'Görüntü'], ['sound', 'Ses'], ['touch', 'Dokunmatik'], ['playstation', 'PlayStation'],
   ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['accounts', 'Hesaplar'],
-] as const
+] as const satisfies readonly (readonly [string, Message])[]
 type Section = (typeof SECTIONS)[number][0]
 
 // Phones and tablets hand the controller, the window and the audio device to the OS,
@@ -49,13 +51,13 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 
 function HapticTest() {
   const [state, setState] = useState<'idle' | 'playing'>('idle')
-  const [note, setNote] = useState('Kol USB ile bağlıyken titreşim sol tutamaktan sağa geçer.')
+  const [note, setNote] = useState(() => t('Kol USB ile bağlıyken titreşim sol tutamaktan sağa geçer.'))
 
   const run = async () => {
     setState('playing')
     try {
       const played = await window.hc.ps.testHaptics()
-      setNote(played ? 'Çalındı. Sol ve sağ tutamakta hissetmen gerekiyor.' : 'Kol bulunamadı. Dokunsal geri bildirim yalnızca USB bağlantısında çalışır.')
+      setNote(played ? t('Çalındı. Sol ve sağ tutamakta hissetmen gerekiyor.') : t('Kol bulunamadı. Dokunsal geri bildirim yalnızca USB bağlantısında çalışır.'))
     } catch (e) {
       setNote(clean(e as Error))
     }
@@ -63,20 +65,20 @@ function HapticTest() {
   }
 
   return (
-    <Row label="Titreşimi dene" hint={note}>
-      <button className="ghost" data-nav disabled={state === 'playing'} onClick={() => void run()}>{state === 'playing' ? 'Çalıyor' : 'Dene'}</button>
+    <Row label={t('Titreşimi dene')} hint={note}>
+      <button className="ghost" data-nav disabled={state === 'playing'} onClick={() => void run()}>{state === 'playing' ? t('Çalıyor') : t('Dene')}</button>
     </Row>
   )
 }
 
 function SpeakerTest() {
   const [playing, setPlaying] = useState(false)
-  const [note, setNote] = useState('Windows ses düzeyi kısıksa duyulmaz.')
+  const [note, setNote] = useState(() => t('Windows ses düzeyi kısıksa duyulmaz.'))
 
   const run = async () => {
     setPlaying(true)
     try {
-      setNote((await testDualSenseSpeaker()) ? 'Çalındı. Sesi koldan duyman gerekiyor.' : 'Kol bulunamadı. Hoparlör yalnızca USB bağlantısında çalışır.')
+      setNote((await testDualSenseSpeaker()) ? t('Çalındı. Sesi koldan duyman gerekiyor.') : t('Kol bulunamadı. Hoparlör yalnızca USB bağlantısında çalışır.'))
     } catch (e) {
       setNote(clean(e as Error))
     }
@@ -84,8 +86,8 @@ function SpeakerTest() {
   }
 
   return (
-    <Row label="Hoparlörü dene" hint={note}>
-      <button className="ghost" data-nav disabled={playing} onClick={() => void run()}>{playing ? 'Çalıyor' : 'Dene'}</button>
+    <Row label={t('Hoparlörü dene')} hint={note}>
+      <button className="ghost" data-nav disabled={playing} onClick={() => void run()}>{playing ? t('Çalıyor') : t('Dene')}</button>
     </Row>
   )
 }
@@ -162,7 +164,7 @@ function Text({ field, label, hint, secret, placeholder }: { field: keyof AppSet
         }}
       >
         <input data-nav aria-label={label} type={secret ? 'password' : 'text'} value={value} placeholder={placeholder} autoComplete="off" spellCheck={false} onChange={(e) => setValue(e.target.value)} />
-        <button className="ghost" data-nav disabled={value === saved}>Kaydet</button>
+        <button className="ghost" data-nav disabled={value === saved}>{t('Kaydet')}</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
     </Row>
@@ -177,10 +179,10 @@ function XboxRegion() {
   const [custom, setCustom] = useState(!known)
   return (
     <>
-      <Row label="Bölge" hint="İsteğin seçilen bölgeden geliyormuş gibi Microsoft'a bildirilir. Kullanım koşullarına aykırı olabilir, hesap riski sana aittir.">
+      <Row label={t('Bölge')} hint={t("İsteğin seçilen bölgeden geliyormuş gibi Microsoft'a bildirilir. Kullanım koşullarına aykırı olabilir, hesap riski sana aittir.")}>
         <select
           data-nav
-          aria-label="Bölge"
+          aria-label={t('Bölge')}
           value={custom ? CUSTOM_REGION : settings.xboxRegionIp}
           onChange={(e) => {
             const isCustom = e.target.value === CUSTOM_REGION
@@ -188,11 +190,11 @@ function XboxRegion() {
             if (!isCustom) void updateSettings({ xboxRegionIp: e.target.value })
           }}
         >
-          {XBOX_REGIONS.map(([ip, name]) => <option key={ip} value={ip}>{name}</option>)}
-          <option value={CUSTOM_REGION}>Özel IP</option>
+          {XBOX_REGIONS.map(([ip, name]) => <option key={ip} value={ip}>{t(name)}</option>)}
+          <option value={CUSTOM_REGION}>{t('Özel IP')}</option>
         </select>
       </Row>
-      {custom && <Text field="xboxRegionIp" label="Özel IP" placeholder="0.0.0.0" />}
+      {custom && <Text field="xboxRegionIp" label={t('Özel IP')} placeholder="0.0.0.0" />}
     </>
   )
 }
@@ -205,8 +207,8 @@ function Diagnostics() {
     if (file) setSaved(file)
   }
   return (
-    <Row label="Tanılama dosyası" hint={saved ? `Kaydedildi: ${saved}` : 'Bir sorun bildirirken ekle. Hesap bilgisi ve şifre içermez.'}>
-      <button className="ghost" data-nav onClick={() => void save()}>Kaydet</button>
+    <Row label={t('Tanılama dosyası')} hint={saved ? t('Kaydedildi: {file}', { file: saved }) : t('Bir sorun bildirirken ekle. Hesap bilgisi ve şifre içermez.')}>
+      <button className="ghost" data-nav onClick={() => void save()}>{t('Kaydet')}</button>
     </Row>
   )
 }
@@ -226,21 +228,21 @@ function Accounts({ onAbout }: { onAbout(): void }) {
   }, [])
   return (
     <>
-      <Row label="PlayStation" hint={ps?.state === 'signedIn' ? 'Bağlı' : 'Bağlı değil'}>
-        {ps?.state === 'signedIn' && <button className="ghost" data-nav onClick={() => void window.hc.ps.signOut()}>Çıkış yap</button>}
+      <Row label={t('PlayStation')} hint={ps?.state === 'signedIn' ? t('Bağlı') : t('Bağlı değil')}>
+        {ps?.state === 'signedIn' && <button className="ghost" data-nav onClick={() => void window.hc.ps.signOut()}>{t('Çıkış yap')}</button>}
       </Row>
-      <Row label="Xbox" hint={xbox?.state === 'signedIn' ? xbox.gamertag ?? 'Bağlı' : 'Bağlı değil'}>
-        {xbox?.state === 'signedIn' && <button className="ghost" data-nav onClick={() => void window.hc.xbox.signOut()}>Çıkış yap</button>}
+      <Row label={t('Xbox')} hint={xbox?.state === 'signedIn' ? xbox.gamertag ?? t('Bağlı') : t('Bağlı değil')}>
+        {xbox?.state === 'signedIn' && <button className="ghost" data-nav onClick={() => void window.hc.xbox.signOut()}>{t('Çıkış yap')}</button>}
       </Row>
-      <Row label="Hakkında" hint="Sürüm, lisanslar ve yasal bildirimler"><button className="ghost" data-nav onClick={onAbout}>Aç</button></Row>
-      <Row label="Varsayılanlara dön" hint="Hesaplarına dokunmaz."><button className="ghost" data-nav onClick={() => void resetSettings()}>Sıfırla</button></Row>
+      <Row label={t('Hakkında')} hint={t('Sürüm, lisanslar ve yasal bildirimler')}><button className="ghost" data-nav onClick={onAbout}>{t('Aç')}</button></Row>
+      <Row label={t('Varsayılanlara dön')} hint={t('Hesaplarına dokunmaz.')}><button className="ghost" data-nav onClick={() => void resetSettings()}>{t('Sıfırla')}</button></Row>
       {window.hc.platform.exportDiagnostics && <Diagnostics />}
     </>
   )
 }
 
 function datacenterOptions(list: PsDatacenter[]): [string, string][] {
-  return [['Auto', 'Otomatik (en hızlısı)'], ...list.map((d): [string, string] => [d.name, d.rttMs ? `${d.name} · ${d.rttMs} ms` : d.name])]
+  return [['Auto', t('Otomatik (en hızlısı)')], ...list.map((d): [string, string] => [d.name, d.rttMs ? `${d.name} · ${d.rttMs} ms` : d.name])]
 }
 
 export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): void }) {
@@ -260,108 +262,109 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
     // Phones route sound themselves, and some of their web views have no mediaDevices.
     if (MOBILE || !navigator.mediaDevices?.enumerateDevices) return
     void navigator.mediaDevices.enumerateDevices().then((devices) =>
-      setOutputs(devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications').map((d, i) => [d.deviceId, d.label || `Hoparlör ${i + 1}`])),
+      setOutputs(devices.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications').map((d, i) => [d.deviceId, d.label || t('Hoparlör {n}', { n: i + 1 })])),
     )
   }, [active])
 
-  const dcHint = (list: PsDatacenter[]) => (list.length ? undefined : 'Sony listeyi ilk akışta verir, o zamana kadar otomatik seçilir.')
+  const dcHint = (list: PsDatacenter[]) => (list.length ? undefined : t('Sony listeyi ilk akışta verir, o zamana kadar otomatik seçilir.'))
 
   return (
     <div className="settings">
-      <nav className="settings-nav" aria-label="Ayar bölümleri">
-        {VISIBLE_SECTIONS.map(([id, label]) => <button key={id} data-nav aria-current={section === id} onClick={() => setSection(id)}>{label}</button>)}
+      <nav className="settings-nav" aria-label={t('Ayar bölümleri')}>
+        {VISIBLE_SECTIONS.map(([id, label]) => <button key={id} data-nav aria-current={section === id} onClick={() => setSection(id)}>{t(label)}</button>)}
       </nav>
 
       <div className="settings-body">
         {section === 'general' && (
           <section>
-            <h2>Genel</h2>
-            <Slider field="fontSize" label="Yazı boyutu" min={12} max={20} step={1} unit=" px" />
-            <Choice field="motion" label="Animasyonlar" hint="Windows'ta animasyon efektleri kapalı olsa da uygulamadakiler çalışır; istersen Windows'a uydurabilirsin." options={[['on', 'Açık'], ['system', "Windows'a göre"], ['off', 'Kapalı']]} />
+            <h2>{t('Genel')}</h2>
+            <Choice field="language" label={t('Dil')} options={[['', t('Sistem diline göre')], ['tr', 'Türkçe'], ['en', 'English']]} />
+            <Slider field="fontSize" label={t('Yazı boyutu')} min={12} max={20} step={1} unit=" px" />
+            <Choice field="motion" label={t('Animasyonlar')} hint={t("Windows'ta animasyon efektleri kapalı olsa da uygulamadakiler çalışır; istersen Windows'a uydurabilirsin.")} options={[['on', t('Açık')], ['system', "Windows'a göre"], ['off', t('Kapalı')]]} />
             {!MOBILE && (
               <>
-                <Toggle field="startFullscreen" label="Tam ekran başlat" hint="Uygulama açılırken tam ekrana geçer." />
-                <Toggle field="fullscreenOnStream" label="Akışta tam ekran" />
-                <Toggle field="doubleClickFullscreen" label="Çift tıkla tam ekran" />
-                <Toggle field="hideCursor" label="İmleci gizle" hint="Akışta fare hareketsiz kalınca." />
+                <Toggle field="startFullscreen" label={t('Tam ekran başlat')} hint={t('Uygulama açılırken tam ekrana geçer.')} />
+                <Toggle field="fullscreenOnStream" label={t('Akışta tam ekran')} />
+                <Toggle field="doubleClickFullscreen" label={t('Çift tıkla tam ekran')} />
+                <Toggle field="hideCursor" label={t('İmleci gizle')} hint={t('Akışta fare hareketsiz kalınca.')} />
               </>
             )}
-            <Toggle field="showGameImage" label="Yüklenirken oyun görselini göster" />
+            <Toggle field="showGameImage" label={t('Yüklenirken oyun görselini göster')} />
             {!MOBILE && (
               <>
-                <Toggle field="backgroundKeepalive" label="Arka planda canlı tut" hint="Pencere arkadayken de akış yavaşlatılmaz." />
-                <Toggle field="useVulkan" label="Vulkan" hint="Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur." />
-                <Toggle field="ignoreGpuBlocklist" label="Ekran kartı kara listesini yok say" hint="Chromium'un sorunlu saydığı sürücülerde de donanım hızlandırmayı zorlar. Çökme yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur." />
+                <Toggle field="backgroundKeepalive" label={t('Arka planda canlı tut')} hint={t('Pencere arkadayken de akış yavaşlatılmaz.')} />
+                <Toggle field="useVulkan" label={t('Vulkan')} hint={t('Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.')} />
+                <Toggle field="ignoreGpuBlocklist" label={t('Ekran kartı kara listesini yok say')} hint={t("Chromium'un sorunlu saydığı sürücülerde de donanım hızlandırmayı zorlar. Çökme yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.")} />
               </>
             )}
-            <h3>İstatistikler</h3>
-            <Toggle field="showStats" label="İstatistikleri göster" hint="Akışta F3 ile de açılıp kapanır." />
-            <Toggle field="statsVertical" label="Dikey düzen" />
+            <h3>{t('İstatistikler')}</h3>
+            <Toggle field="showStats" label={t('İstatistikleri göster')} hint={t('Akışta F3 ile de açılıp kapanır.')} />
+            <Toggle field="statsVertical" label={t('Dikey düzen')} />
           </section>
         )}
 
         {section === 'picture' && (
           <section>
-            <h2>Görüntü</h2>
-            <Choice field="videoFormat" label="Görüntü biçimi" options={[['', 'En boy oranını koru'], ['Stretch', 'Esnet'], ['Zoom', 'Yakınlaştır'], ['16:10', '16:10'], ['18:9', '18:9'], ['21:9', '21:9'], ['4:3', '4:3']]} />
-            <Slider field="brightness" label="Parlaklık" min={50} max={150} step={1} unit="%" />
-            <Slider field="contrast" label="Kontrast" min={50} max={150} step={1} unit="%" />
-            <Slider field="saturation" label="Doygunluk" min={0} max={200} step={1} unit="%" />
-            <Choice field="videoDecoder" label="PlayStation video çözücü" options={[['prefer-hardware', 'Donanım'], ['prefer-software', 'Yazılım'], ['no-preference', 'Otomatik']]} />
+            <h2>{t('Görüntü')}</h2>
+            <Choice field="videoFormat" label={t('Görüntü biçimi')} options={[['', t('En boy oranını koru')], ['Stretch', t('Esnet')], ['Zoom', t('Yakınlaştır')], ['16:10', t('16:10')], ['18:9', t('18:9')], ['21:9', t('21:9')], ['4:3', t('4:3')]]} />
+            <Slider field="brightness" label={t('Parlaklık')} min={50} max={150} step={1} unit="%" />
+            <Slider field="contrast" label={t('Kontrast')} min={50} max={150} step={1} unit="%" />
+            <Slider field="saturation" label={t('Doygunluk')} min={0} max={200} step={1} unit="%" />
+            <Choice field="videoDecoder" label={t('PlayStation video çözücü')} options={[['prefer-hardware', t('Donanım')], ['prefer-software', t('Yazılım')], ['no-preference', t('Otomatik')]]} />
           </section>
         )}
 
         {section === 'sound' && (
           <section>
-            <h2>Ses</h2>
-            <Toggle field="uiSounds" label="Arayüz sesleri" hint="Menüde gezinirken ve seçim yaparken kısa sesler çalar." />
-            {!MOBILE && <Choice field="audioOutputDevice" label="Çıkış aygıtı" options={[['', 'Windows varsayılanı'], ...outputs]} />}
-            <Slider field="audioVolume" label="Akış sesi" min={0} max={100} step={1} unit="%" />
-            <Slider field="psAudioBufferMs" label="PlayStation ses tamponu" hint="Düşük değer daha az gecikme, yüksek değer daha az cızırtı demektir." min={10} max={100} step={5} unit=" ms" />
-            <Toggle field="xboxAudioRumble" label="Xbox sesten titreşim" hint="Oyun sesinin bas kısmını kola titreşim olarak verir." />
-            <Slider field="xboxAudioRumbleThreshold" label="Sesten titreşim eşiği" min={0.01} max={0.5} step={0.01} unit="" />
+            <h2>{t('Ses')}</h2>
+            <Toggle field="uiSounds" label={t('Arayüz sesleri')} hint={t('Menüde gezinirken ve seçim yaparken kısa sesler çalar.')} />
+            {!MOBILE && <Choice field="audioOutputDevice" label={t('Çıkış aygıtı')} options={[['', t('Windows varsayılanı')], ...outputs]} />}
+            <Slider field="audioVolume" label={t('Akış sesi')} min={0} max={100} step={1} unit="%" />
+            <Slider field="psAudioBufferMs" label={t('PlayStation ses tamponu')} hint={t('Düşük değer daha az gecikme, yüksek değer daha az cızırtı demektir.')} min={10} max={100} step={5} unit=" ms" />
+            <Toggle field="xboxAudioRumble" label={t('Xbox sesten titreşim')} hint={t('Oyun sesinin bas kısmını kola titreşim olarak verir.')} />
+            <Slider field="xboxAudioRumbleThreshold" label={t('Sesten titreşim eşiği')} min={0.01} max={0.5} step={0.01} unit="" />
           </section>
         )}
 
         {section === 'touch' && (
           <section>
-            <h2>Dokunmatik kontroller</h2>
-            <Choice field="touchControls" label="Ekran kontrolleri" hint="Otomatik: bir kol kullanmaya başlayınca kendiliğinden gizlenir." options={[['auto', 'Otomatik'], ['on', 'Her zaman göster'], ['off', 'Kapalı']]} />
-            <Slider field="touchOpacity" label="Görünürlük" min={15} max={100} step={5} unit="%" />
-            <Slider field="touchSize" label="Boyut" min={70} max={140} step={5} unit="%" />
-            <Toggle field="touchVibrate" label="Dokununca titret" hint="Düğmeye basınca telefon kısaca titrer. iPhone'da bu özellik yok." />
-            <small className="setting-note">Çubuklar parmağın değdiği yerde belirir. Çubuğa hızlıca iki kez dokunup basılı tutmak L3/R3 düğmesine basar.</small>
+            <h2>{t('Dokunmatik kontroller')}</h2>
+            <Choice field="touchControls" label={t('Ekran kontrolleri')} hint={t('Otomatik: bir kol kullanmaya başlayınca kendiliğinden gizlenir.')} options={[['auto', t('Otomatik')], ['on', t('Her zaman göster')], ['off', t('Kapalı')]]} />
+            <Slider field="touchOpacity" label={t('Görünürlük')} min={15} max={100} step={5} unit="%" />
+            <Slider field="touchSize" label={t('Boyut')} min={70} max={140} step={5} unit="%" />
+            <Toggle field="touchVibrate" label={t('Dokununca titret')} hint={t("Düğmeye basınca telefon kısaca titrer. iPhone'da bu özellik yok.")} />
+            <small className="setting-note">{t('Çubuklar parmağın değdiği yerde belirir. Çubuğa hızlıca iki kez dokunup basılı tutmak L3/R3 düğmesine basar.')}</small>
           </section>
         )}
 
         {section === 'playstation' && (
           <section data-theme="playstation">
-            <h2>PlayStation</h2>
-            <Toggle field="psPremium" label="PS Plus Premium aboneliğim var" hint="Açıkken katalogdaki akış oyunları Sahip olduklarım'a dahil olur. Sony aboneliği yalnızca akış başlarken bildirir." />
-            <h3>PS5 oyunları</h3>
-            <Choice field="psCloudResolution" label="Çözünürlük" options={RESOLUTIONS} />
-            <Choice field="psCloudBitrate" label="Bit hızı" hint={PS_BITRATE_HINT} options={PS_BITRATES} />
-            <Choice field="psCloudDatacenter" label="Veri merkezi" hint={dcHint(datacenters.cloud)} options={datacenterOptions(datacenters.cloud)} />
-            <h3>PS3 ve PS4 oyunları</h3>
-            <Choice field="psNowResolution" label="Çözünürlük" options={RESOLUTIONS} />
-            <Choice field="psNowBitrate" label="Bit hızı" hint={PS_BITRATE_HINT} options={PS_BITRATES} />
-            <Choice field="psNowDatacenter" label="Veri merkezi" hint={dcHint(datacenters.now)} options={datacenterOptions(datacenters.now)} />
-            <h3>Akış</h3>
-            <Choice field="psCodec" label="Kodek" hint="Otomatik, ekran kartının desteğine göre seçer." options={[['auto', 'Otomatik'], ['h265', 'H.265'], ['h264', 'H.264']]} />
-            <Toggle field="psFsr" label="FSR" hint={FSR_HINT} />
-            <Slider field="psFsrSharpness" label="Keskinlik" hint="0 kapalı, 10 en keskin." min={0} max={10} step={1} unit="" />
-            <Toggle field="psDeband" label="Bant giderme" hint={DEBAND_HINT} />
-            <Choice field="psGameLanguage" label="Oyun dili" hint="Yalnızca o dili sunan veri merkezlerinde geçerlidir." options={[['', 'Hesaba göre'], ...LANGUAGES]} />
-            <Slider field="psPacketLossMax" label="Paket kaybı sınırı" hint="Aşılınca akış kalitesi düşürülür." min={1} max={30} step={1} unit="%" />
-            <h3>Giriş</h3>
-            <Toggle field="psKeyboard" label="Klavye girişi" />
-            <Slider field="psDeadZone" label="Çubuk ölü bölgesi" hint="DualSense dışındaki kollar için." min={0} max={30} step={1} unit="%" />
-            <Toggle field="psButtonsByPosition" label="Düğmeleri konuma göre eşle" hint="Nintendo düzenli kollarda A/B ve X/Y'yi değiştirir." />
-            <Toggle field="psOptionsShareForPs" label="Options + Share ile PS düğmesi" hint="İkisine 2 saniye basılı tutunca PS düğmesi gönderilir." />
+            <h2>{t('PlayStation')}</h2>
+            <Toggle field="psPremium" label={t('PS Plus Premium aboneliğim var')} hint={t("Açıkken katalogdaki akış oyunları Sahip olduklarım'a dahil olur. Sony aboneliği yalnızca akış başlarken bildirir.")} />
+            <h3>{t('PS5 oyunları')}</h3>
+            <Choice field="psCloudResolution" label={t('Çözünürlük')} options={RESOLUTIONS} />
+            <Choice field="psCloudBitrate" label={t('Bit hızı')} hint={psBitrateHint()} options={psBitrates()} />
+            <Choice field="psCloudDatacenter" label={t('Veri merkezi')} hint={dcHint(datacenters.cloud)} options={datacenterOptions(datacenters.cloud)} />
+            <h3>{t('PS3 ve PS4 oyunları')}</h3>
+            <Choice field="psNowResolution" label={t('Çözünürlük')} options={RESOLUTIONS} />
+            <Choice field="psNowBitrate" label={t('Bit hızı')} hint={psBitrateHint()} options={psBitrates()} />
+            <Choice field="psNowDatacenter" label={t('Veri merkezi')} hint={dcHint(datacenters.now)} options={datacenterOptions(datacenters.now)} />
+            <h3>{t('Akış')}</h3>
+            <Choice field="psCodec" label={t('Kodek')} hint={t('Otomatik, ekran kartının desteğine göre seçer.')} options={[['auto', t('Otomatik')], ['h265', t('H.265')], ['h264', t('H.264')]]} />
+            <Toggle field="psFsr" label={t('FSR')} hint={fsrHint()} />
+            <Slider field="psFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />
+            <Toggle field="psDeband" label={t('Bant giderme')} hint={debandHint()} />
+            <Choice field="psGameLanguage" label={t('Oyun dili')} hint={t('Yalnızca o dili sunan veri merkezlerinde geçerlidir.')} options={[['', t('Hesaba göre')], ...LANGUAGES]} />
+            <Slider field="psPacketLossMax" label={t('Paket kaybı sınırı')} hint={t('Aşılınca akış kalitesi düşürülür.')} min={1} max={30} step={1} unit="%" />
+            <h3>{t('Giriş')}</h3>
+            <Toggle field="psKeyboard" label={t('Klavye girişi')} />
+            <Slider field="psDeadZone" label={t('Çubuk ölü bölgesi')} hint={t('DualSense dışındaki kollar için.')} min={0} max={30} step={1} unit="%" />
+            <Toggle field="psButtonsByPosition" label={t('Düğmeleri konuma göre eşle')} hint={t("Nintendo düzenli kollarda A/B ve X/Y'yi değiştirir.")} />
+            <Toggle field="psOptionsShareForPs" label={t('Options + Share ile PS düğmesi')} hint={t('İkisine 2 saniye basılı tutunca PS düğmesi gönderilir.')} />
             {MOBILE && (
               <>
-                <Toggle field="psVibration" label="Titreşim" />
-                <Toggle field="psTriggers" label="Uyarlanabilir tetikler" hint="iPhone ve iPad'de DualSense ile çalışır; Android uygulamalara tetiklere erişim vermiyor." />
+                <Toggle field="psVibration" label={t('Titreşim')} />
+                <Toggle field="psTriggers" label={t('Uyarlanabilir tetikler')} hint={t("iPhone ve iPad'de DualSense ile çalışır; Android uygulamalara tetiklere erişim vermiyor.")} />
               </>
             )}
           </section>
@@ -369,59 +372,59 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
 
         {section === 'dualsense' && (
           <section data-theme="playstation">
-            <h2>DualSense</h2>
-            <Toggle field="psNativeDualSense" label="Doğrudan bağlantı" hint="Jiroskop, dokunmatik yüzey ve uyarlanabilir tetikler için gerekir. Sonraki akışta geçerli olur." />
-            <Toggle field="psTriggers" label="Uyarlanabilir tetikler" />
-            <Slider field="psHapticStrength" label="Dokunsal geri bildirim gücü" hint="0, kapalı demektir." min={0} max={100} step={5} unit="%" />
+            <h2>{t('DualSense')}</h2>
+            <Toggle field="psNativeDualSense" label={t('Doğrudan bağlantı')} hint={t('Jiroskop, dokunmatik yüzey ve uyarlanabilir tetikler için gerekir. Sonraki akışta geçerli olur.')} />
+            <Toggle field="psTriggers" label={t('Uyarlanabilir tetikler')} />
+            <Slider field="psHapticStrength" label={t('Dokunsal geri bildirim gücü')} hint={t('0, kapalı demektir.')} min={0} max={100} step={5} unit="%" />
             <HapticTest />
-            <Toggle field="dualSenseSpeaker" label="Tüm oyun sesini koldan çal" hint="Ses çıkışı DualSense ise akışın bütün sesi kolun hoparlörüne gider. Oyunların kola özel efektlerini ayırmaz." />
+            <Toggle field="dualSenseSpeaker" label={t('Tüm oyun sesini koldan çal')} hint={t('Ses çıkışı DualSense ise akışın bütün sesi kolun hoparlörüne gider. Oyunların kola özel efektlerini ayırmaz.')} />
             <SpeakerTest />
-            <Toggle field="psVibration" label="Titreşim" />
+            <Toggle field="psVibration" label={t('Titreşim')} />
           </section>
         )}
 
         {section === 'xbox' && (
           <section data-theme="xbox">
-            <h2>Xbox</h2>
-            <h3>Görüntü</h3>
-            <Choice field="xboxResolution" label="Çözünürlük" hint="Üst sınırı Microsoft belirler: Ultimate hesapta 720p dışındaki seçenekler 1440p'ye çıkabilir." options={[[720, '720p'], [1080, 'Yüksek'], [1081, 'En yüksek']]} />
-            <Choice field="xboxBitrate" label="Bit hızı sınırı" hint="Yalnızca düşürür: yavaş bağlantıda takılmayı azaltır. Kaliteyi Microsoft'un verdiğinin üstüne çıkarmaz." options={XBOX_BITRATES} />
-            <Choice field="xboxCodec" label="Kodek" hint="Microsoft yalnızca H.264 gönderiyor; en iyi görüntüyü Main profili verir." options={[['high', 'En iyi (H.264 Main)'], ['main', 'Orta (H.264 Constrained Baseline)'], ['baseline', 'Düşük (H.264 Baseline)']]} />
-            <Toggle field="xboxFsr" label="FSR" hint={`${FSR_HINT} Kapalıyken görüntü, ekran kartının kendi video yolundan geçer.`} />
-            <Slider field="xboxFsrSharpness" label="Keskinlik" hint="0 kapalı, 10 en keskin." min={0} max={10} step={1} unit="" />
-            <Toggle field="xboxDeband" label="Bant giderme" hint={`${DEBAND_HINT} FSR gibi görüntüyü ayrı bir katmandan geçirir; tepkiye bir kare kadar gecikme ekleyebilir.`} />
-            <Choice field="xboxGameLanguage" label="Oyun dili" options={[['', 'Varsayılan'], ...LANGUAGES]} />
-            <h3>Bağlantı</h3>
+            <h2>{t('Xbox')}</h2>
+            <h3>{t('Görüntü')}</h3>
+            <Choice field="xboxResolution" label={t('Çözünürlük')} hint={t("Üst sınırı Microsoft belirler: Ultimate hesapta 720p dışındaki seçenekler 1440p'ye çıkabilir.")} options={[[720, t('720p')], [1080, t('Yüksek')], [1081, t('En yüksek')]]} />
+            <Choice field="xboxBitrate" label={t('Bit hızı sınırı')} hint={t("Yalnızca düşürür: yavaş bağlantıda takılmayı azaltır. Kaliteyi Microsoft'un verdiğinin üstüne çıkarmaz.")} options={xboxBitrates()} />
+            <Choice field="xboxCodec" label={t('Kodek')} hint={t('Microsoft yalnızca H.264 gönderiyor; en iyi görüntüyü Main profili verir.')} options={[['high', t('En iyi (H.264 Main)')], ['main', t('Orta (H.264 Constrained Baseline)')], ['baseline', t('Düşük (H.264 Baseline)')]]} />
+            <Toggle field="xboxFsr" label={t('FSR')} hint={`${fsrHint()} ${t('Kapalıyken görüntü, ekran kartının kendi video yolundan geçer.')}`} />
+            <Slider field="xboxFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />
+            <Toggle field="xboxDeband" label={t('Bant giderme')} hint={`${debandHint()} ${t('FSR gibi görüntüyü ayrı bir katmandan geçirir; tepkiye bir kare kadar gecikme ekleyebilir.')}`} />
+            <Choice field="xboxGameLanguage" label={t('Oyun dili')} options={[['', t('Varsayılan')], ...LANGUAGES]} />
+            <h3>{t('Bağlantı')}</h3>
             <XboxRegion />
-            <Choice field="xboxSignalServer" label="Sinyal sunucusu" hint={servers.length ? 'Bağlanamıyorsan farklı bir sunucu dene.' : 'Microsoft listeyi bulut erişimi verince gönderir, şu an boş.'} options={[['', 'Otomatik'], ...servers.map((s): [string, string] => [s, s])]} />
-            <Toggle field="xboxIpv6" label="IPv6'yı tercih et" />
-            <h3>TURN sunucusu</h3>
-            <Text field="xboxTurnUrl" label="Adres" hint="Doğrudan bağlantı kurulamıyorsa kendi TURN sunucunu kullan." placeholder="turn:adres:3478" />
-            <Text field="xboxTurnUsername" label="Kullanıcı adı" />
-            <Text field="xboxTurnCredential" label="Parola" secret />
+            <Choice field="xboxSignalServer" label={t('Sinyal sunucusu')} hint={servers.length ? t('Bağlanamıyorsan farklı bir sunucu dene.') : t('Microsoft listeyi bulut erişimi verince gönderir, şu an boş.')} options={[['', t('Otomatik')], ...servers.map((s): [string, string] => [s, s])]} />
+            <Toggle field="xboxIpv6" label={t("IPv6'yı tercih et")} />
+            <h3>{t('TURN sunucusu')}</h3>
+            <Text field="xboxTurnUrl" label={t('Adres')} hint={t('Doğrudan bağlantı kurulamıyorsa kendi TURN sunucunu kullan.')} placeholder={t('turn:adres:3478')} />
+            <Text field="xboxTurnUsername" label={t('Kullanıcı adı')} />
+            <Text field="xboxTurnCredential" label={t('Parola')} secret />
           </section>
         )}
 
         {section === 'xboxInput' && (
           <section data-theme="xbox">
-            <h2>Xbox kol ve giriş</h2>
-            <Choice field="xboxGamepadIndex" label="Kol seçimi" options={[[-1, 'Otomatik'], [0, '1. kol'], [1, '2. kol'], [2, '3. kol'], [3, '4. kol']]} />
-            <Toggle field="xboxGamepadMix" label="Kolları birleştir" hint="Tüm bağlı kollar tek kol gibi davranır." />
-            <Toggle field="xboxCoop" label="Co-op" hint="Bağlı kolları ayrı oyuncular olarak gönderir." />
-            <Choice field="xboxPollingRate" label="Yoklama hızı" hint="Kol girdisinin sunucuya gönderilme sıklığı." options={POLL_RATES} />
-            <Slider field="xboxDeadZone" label="Çubuk ölü bölgesi" min={0} max={90} step={1} unit="%" />
-            <Toggle field="xboxVibration" label="Titreşim" />
-            <Choice field="xboxTriggerRumble" label="Tetik titreşimi" options={[['', 'Kapalı'], ['all', 'İki tetik'], ['left', 'Sol tetik'], ['right', 'Sağ tetik']]} />
-            <Toggle field="xboxSwapTriggerRumble" label="Tetik titreşimini değiştir" />
-            <h3>Fare ve klavye</h3>
-            <Toggle field="xboxMouseKeyboard" label="Yerel fare ve klavye" hint="Yalnızca destekleyen oyunlarda çalışır." />
-            <Slider field="xboxMouseSensitivity" label="Fare hassasiyeti" min={0.1} max={5} step={0.1} unit="" />
+            <h2>{t('Xbox kol ve giriş')}</h2>
+            <Choice field="xboxGamepadIndex" label={t('Kol seçimi')} options={[[-1, t('Otomatik')], [0, t('1. kol')], [1, t('2. kol')], [2, t('3. kol')], [3, t('4. kol')]]} />
+            <Toggle field="xboxGamepadMix" label={t('Kolları birleştir')} hint={t('Tüm bağlı kollar tek kol gibi davranır.')} />
+            <Toggle field="xboxCoop" label={t('Co-op')} hint={t('Bağlı kolları ayrı oyuncular olarak gönderir.')} />
+            <Choice field="xboxPollingRate" label={t('Yoklama hızı')} hint={t('Kol girdisinin sunucuya gönderilme sıklığı.')} options={POLL_RATES} />
+            <Slider field="xboxDeadZone" label={t('Çubuk ölü bölgesi')} min={0} max={90} step={1} unit="%" />
+            <Toggle field="xboxVibration" label={t('Titreşim')} />
+            <Choice field="xboxTriggerRumble" label={t('Tetik titreşimi')} options={[['', t('Kapalı')], ['all', t('İki tetik')], ['left', t('Sol tetik')], ['right', t('Sağ tetik')]]} />
+            <Toggle field="xboxSwapTriggerRumble" label={t('Tetik titreşimini değiştir')} />
+            <h3>{t('Fare ve klavye')}</h3>
+            <Toggle field="xboxMouseKeyboard" label={t('Yerel fare ve klavye')} hint={t('Yalnızca destekleyen oyunlarda çalışır.')} />
+            <Slider field="xboxMouseSensitivity" label={t('Fare hassasiyeti')} min={0.1} max={5} step={0.1} unit="" />
           </section>
         )}
 
         {section === 'accounts' && (
           <section>
-            <h2>Hesaplar ve uygulama</h2>
+            <h2>{t('Hesaplar ve uygulama')}</h2>
             <Accounts onAbout={onAbout} />
           </section>
         )}

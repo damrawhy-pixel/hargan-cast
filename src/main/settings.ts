@@ -2,6 +2,7 @@ import { app } from 'electron'
 import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
+import { t } from '../shared/i18n'
 import { DEFAULT_SETTINGS, sanitizeSettings, type AppSettings } from '../shared/settings'
 import SecureStore from './secureStore'
 
@@ -39,7 +40,7 @@ export default class SettingsStore {
     if (patch.xboxRegionIp !== undefined) {
       patch.xboxRegionIp = patch.xboxRegionIp.trim()
       // Goes straight into an HTTP header, so only a bare address may pass.
-      if (patch.xboxRegionIp && !net.isIP(patch.xboxRegionIp)) throw new Error('Geçerli bir IP adresi gir')
+      if (patch.xboxRegionIp && !net.isIP(patch.xboxRegionIp)) throw new Error(t('Geçerli bir IP adresi gir'))
     }
     const next = { ...this.get(), ...patch }
     this.save(next)

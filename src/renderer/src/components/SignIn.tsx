@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { t } from '../../../shared/i18n'
 import type { AccountState } from '../../../shared/types'
 
 interface Props {
@@ -20,7 +21,7 @@ export function SignIn({ service, state, lines, error, onSignIn, children }: Pro
         {lines.map((line) => <p key={line}>{line}</p>)}
         {error && <p className="error" role="alert">{error}</p>}
         <button className="primary big" data-nav disabled={busy} onClick={onSignIn}>
-          {state === 'restoring' ? 'Oturum açılıyor' : state === 'signingIn' ? 'Giriş penceresi açık' : `${service} ile giriş yap`}
+          {state === 'restoring' ? t('Oturum açılıyor') : state === 'signingIn' ? t('Giriş penceresi açık') : t('{service} ile giriş yap', { service })}
         </button>
         {children}
       </div>

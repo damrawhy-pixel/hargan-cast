@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PsGame } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
-import { fitFor } from '../lib/picture'
+import { fitFor, pictureLabel } from '../lib/picture'
 import { MOBILE } from '../lib/platform'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
+import { t } from '../../../shared/i18n'
 import { rumble, startInput } from './input'
 import { psQuit, psStage } from './stages'
 import type { View, WorkerCommand, WorkerEvent } from './stream.worker'
@@ -26,7 +27,7 @@ interface Props {
 
 export function PsStream({ game, onExit }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [stage, setStage] = useState('Oturum hazırlanıyor')
+  const [stage, setStage] = useState(() => t('Oturum hazırlanıyor'))
   const [live, setLive] = useState(false)
   const [stats, setStats] = useState<StreamStats>()
   const [queue, setQueue] = useState<StreamQueue>()
@@ -54,7 +55,7 @@ export function PsStream({ game, onExit }: Props) {
         setStage(text)
         setQueue(position === undefined ? undefined : { position })
       } else if (e.ev === 'connected') {
-        setStage('Görüntü bekleniyor')
+        setStage(t('Görüntü bekleniyor'))
         setQueue(undefined)
       } else if (e.ev === 'quit') leave(e.error ? psQuit(e.reason) : undefined)
       else if (e.ev === 'dualsense') {
@@ -97,11 +98,11 @@ export function PsStream({ game, onExit }: Props) {
       worker.onmessage = (e: MessageEvent<WorkerEvent>) => {
         const msg = e.data
         if (msg.type === 'firstFrame') setLive(true)
-        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: msg.filters ? `${msg.size} · ${msg.filters}` : msg.size })
+        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: msg.filters && picture ? `${msg.size} · ${pictureLabel(picture)}` : msg.size })
         // On phones the app rumbles the paired controller itself, straight from the session.
         else if (msg.type === 'rumble') psVibration && !MOBILE && rumble(msg.left, msg.right, nativeDualSense)
         else if (msg.type === 'ended') leave()
-        else if (msg.type === 'error') leave(msg.message)
+        else if (msg.type === 'error') leave(t(msg.message))
       }
 
       command(

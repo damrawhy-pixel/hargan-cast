@@ -18,7 +18,9 @@ import {
 } from './helpers/webTokenStore';
 import { defaultSettings } from './settings';
 
-const SIGN_IN_EXPIRED = "Xbox oturumu yenilenemedi. Tekrar giriş yap.";
+import { t } from "../../shared/i18n";
+
+const signInExpired = () => t("Xbox oturumu yenilenemedi. Tekrar giriş yap.");
 
 export default class Authentication {
   _application: Application;
@@ -187,7 +189,7 @@ export default class Authentication {
                 clearStreamToken();
                 clearWebToken();
                 this._tokenStore.clear();
-                this._application.signInFailed(SIGN_IN_EXPIRED);
+                this._application.signInFailed(signInExpired());
               });
           }
         }
@@ -243,7 +245,7 @@ export default class Authentication {
                   clearStreamToken();
                   clearWebToken();
                   this._tokenStore.clear();
-                  this._application.signInFailed(SIGN_IN_EXPIRED);
+                  this._application.signInFailed(signInExpired());
                 });
             })
             .catch((err) => {
@@ -255,7 +257,7 @@ export default class Authentication {
               clearStreamToken();
               clearWebToken();
               this._tokenStore.clear();
-              this._application.signInFailed(SIGN_IN_EXPIRED);
+              this._application.signInFailed(signInExpired());
             });
         })
         .catch(e => {
@@ -263,7 +265,7 @@ export default class Authentication {
           clearStreamToken();
           clearWebToken();
           this._tokenStore.clear();
-          this._application.signInFailed(SIGN_IN_EXPIRED);
+          this._application.signInFailed(signInExpired());
         });
     }
   }
@@ -303,7 +305,7 @@ export default class Authentication {
                 "[startAuthFlow()] Error authenticating user:",
                 err
               );
-              this._application.signInFailed("Microsoft girişi tamamlanamadı.");
+              this._application.signInFailed(t("Microsoft girişi tamamlanamadı."));
             });
         };
       })
@@ -313,7 +315,7 @@ export default class Authentication {
           "[startAuthFlow()] Error getting redirect URI:",
           err
         );
-        this._application.signInFailed("Xbox giriş sunucusuna ulaşılamadı. Ağ bağlantını kontrol et.");
+        this._application.signInFailed(t("Xbox giriş sunucusuna ulaşılamadı. Ağ bağlantını kontrol et."));
       });
   }
 
@@ -353,7 +355,7 @@ export default class Authentication {
               "[startWebviewHooks()] Authentication Callback is not defined:",
               this._authCallback
             );
-            this._application.signInFailed("Xbox girişi tamamlanamadı. Tekrar dene.");
+            this._application.signInFailed(t("Xbox girişi tamamlanamadı. Tekrar dene."));
           }
 
           callback({ cancel: true });
@@ -368,7 +370,7 @@ export default class Authentication {
     const authWindow = new BrowserWindow({
       width: 520,
       height: 680,
-      title: "Xbox hesabı",
+      title: t("Xbox hesabı"),
       autoHideMenuBar: true,
       backgroundColor: "#ffffff",
       webPreferences: { partition: "persist:xbox", sandbox: true },

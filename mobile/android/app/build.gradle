@@ -33,8 +33,11 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8 trims unused library code; proguard-rules.pro keeps what the
+            // web side and the PlayStation core reach by name.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (releaseKeystore) signingConfig signingConfigs.release
         }
     }

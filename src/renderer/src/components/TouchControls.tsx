@@ -2,6 +2,7 @@
 // face buttons, shoulders and the middle row, labelled for the console being
 // streamed. It drives the virtual pad (lib/virtualPad), which both services read.
 // Presses update the DOM directly; nothing here re-renders while a finger moves.
+import { t } from '../../../shared/i18n'
 import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { getSettings } from '../lib/useSettings'
 import { PAD, setButton, setStick, setVirtualPad } from '../lib/virtualPad'
@@ -123,7 +124,7 @@ function FaceButtons({ platform }: { platform: TouchPlatform }) {
     apply(el, next)
   }
   return (
-    <div className="tc-zone tc-face" aria-label="Yüz düğmeleri" {...pointerHandlers(points, onChange)}>
+    <div className="tc-zone tc-face" aria-label={t('Yüz düğmeleri')} {...pointerHandlers(points, onChange)}>
       {FACE.map((f) => (
         <span key={f.slot} className={`tc-key tc-face-${f.slot}`} data-b={f.button}>
           {platform === 'playstation' ? <PsSymbol slot={f.slot} /> : letters[f.slot]}
@@ -152,7 +153,7 @@ function DPad() {
     apply(el, next)
   }
   return (
-    <div className="tc-zone tc-dpad" aria-label="Yön tuşları" {...pointerHandlers(points, onChange)}>
+    <div className="tc-zone tc-dpad" aria-label={t('Yön tuşları')} {...pointerHandlers(points, onChange)}>
       <span className="tc-key tc-arrow tc-arrow-up" data-b={PAD.UP} />
       <span className="tc-key tc-arrow tc-arrow-right" data-b={PAD.RIGHT} />
       <span className="tc-key tc-arrow tc-arrow-down" data-b={PAD.DOWN} />
@@ -203,7 +204,7 @@ function Stick({ side }: { side: 'left' | 'right' }) {
   return (
     <div
       className={`tc-zone tc-stick tc-stick-${side}`}
-      aria-label={side === 'left' ? 'Sol çubuk' : 'Sağ çubuk'}
+      aria-label={side === 'left' ? t('Sol çubuk') : t('Sağ çubuk')}
       onPointerDown={(e) => {
         if (finger.current !== undefined) return
         e.preventDefault()
@@ -292,10 +293,10 @@ export function TouchControls({ platform, onMenu }: { platform: TouchPlatform; o
       <Key button={PAD.R1} className="tc-r1" label={ps ? 'R1' : 'RB'}>{ps ? 'R1' : 'RB'}</Key>
 
       <div className="tc-top">
-        <button className="tc-pause" aria-label="Akış menüsü" onClick={onMenu}>{ICON.pause}</button>
+        <button className="tc-pause" aria-label={t('Akış menüsü')} onClick={onMenu}>{ICON.pause}</button>
         {ps && (
-          <Key button={PAD.TOUCHPAD} className="tc-touchpad" label="Dokunmatik yüzey">
-            Dokunmatik yüzey
+          <Key button={PAD.TOUCHPAD} className="tc-touchpad" label={t('Dokunmatik yüzey')}>
+            {t('Dokunmatik yüzey')}
           </Key>
         )}
       </div>
@@ -306,11 +307,11 @@ export function TouchControls({ platform, onMenu }: { platform: TouchPlatform; o
       <Stick side="right" />
 
       <div className="tc-middle">
-        <Key button={PAD.L3} className="tc-small" label={ps ? 'L3' : 'Sol çubuk tıklaması'}>{ps ? 'L3' : 'LS'}</Key>
-        <Key button={PAD.VIEW} className="tc-small" label={ps ? 'Oluştur' : 'Görünüm'}>{ICON.view}</Key>
-        <Key button={PAD.HOME} className="tc-small tc-home" label={ps ? 'PS düğmesi' : 'Xbox düğmesi'}>{ICON.home}</Key>
-        <Key button={PAD.MENU} className="tc-small" label={ps ? 'Seçenekler' : 'Menü'}>{ICON.menu}</Key>
-        <Key button={PAD.R3} className="tc-small" label={ps ? 'R3' : 'Sağ çubuk tıklaması'}>{ps ? 'R3' : 'RS'}</Key>
+        <Key button={PAD.L3} className="tc-small" label={ps ? 'L3' : t('Sol çubuk tıklaması')}>{ps ? 'L3' : 'LS'}</Key>
+        <Key button={PAD.VIEW} className="tc-small" label={ps ? t('Oluştur') : t('Görünüm')}>{ICON.view}</Key>
+        <Key button={PAD.HOME} className="tc-small tc-home" label={ps ? t('PS düğmesi') : t('Xbox düğmesi')}>{ICON.home}</Key>
+        <Key button={PAD.MENU} className="tc-small" label={ps ? t('Seçenekler') : t('Menü')}>{ICON.menu}</Key>
+        <Key button={PAD.R3} className="tc-small" label={ps ? 'R3' : t('Sağ çubuk tıklaması')}>{ps ? 'R3' : 'RS'}</Key>
       </div>
     </div>
   )

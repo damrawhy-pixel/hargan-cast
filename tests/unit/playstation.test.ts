@@ -5,7 +5,7 @@ import {
   friendlyError,
   parseDatacenters,
   parseStorePage,
-  SESSION_EXPIRED,
+  sessionExpired,
   signInUrl,
   storePageHasDetails,
   storePages,
@@ -117,7 +117,7 @@ describe('store page', () => {
 
 describe('messages', () => {
   it('words Sony errors for people', () => {
-    expect(friendlyError('AUTHORIZATION_FAILED')).toBe(SESSION_EXPIRED)
+    expect(friendlyError('AUTHORIZATION_FAILED')).toBe(sessionExpired())
     expect(friendlyError('{"error":1}')).not.toContain('{')
     expect(friendlyError('Something new')).toBe('Something new')
   })

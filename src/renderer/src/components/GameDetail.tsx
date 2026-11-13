@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { GameInfo } from '../../../shared/types'
 import { gameInfo, imageAt, knownInfo, ratingText } from '../lib/gameInfo'
@@ -75,15 +76,15 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
             {info?.description && <p className="detail-text">{info.description}</p>}
             <div className="detail-actions">
               {item.action === 'store' ? (
-                <button ref={action} className="primary big" data-nav onClick={() => onPlay(item, null)}>Mağazada aç</button>
+                <button ref={action} className="primary big" data-nav onClick={() => onPlay(item, null)}>{t('Mağazada aç')}</button>
               ) : item.action === 'none' ? (
-                <button ref={action} className="primary big" data-nav disabled>{item.xbox?.cloud ? 'Hesabınla açılmıyor' : 'Cloud Gaming kataloğunda yok'}</button>
+                <button ref={action} className="primary big" data-nav disabled>{item.xbox?.cloud ? t('Hesabınla açılmıyor') : t('Cloud Gaming kataloğunda yok')}</button>
               ) : startable ? (
-                <button ref={action} className="primary big" data-nav onClick={() => onPlay(item, art.current)}>Oyna</button>
+                <button ref={action} className="primary big" data-nav onClick={() => onPlay(item, art.current)}>{t('Oyna')}</button>
               ) : (
-                <button ref={action} className="primary big" data-nav onClick={onOpenSettings}>PS Plus Premium gerekiyor</button>
+                <button ref={action} className="primary big" data-nav onClick={onOpenSettings}>{t('PS Plus Premium gerekiyor')}</button>
               )}
-              <button className="ghost big detail-back" data-nav onClick={onClose}>Geri</button>
+              <button className="ghost big detail-back" data-nav onClick={onClose}>{t('Geri')}</button>
             </div>
           </div>
         </div>
@@ -91,7 +92,7 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
         {info && info.screenshots.length > 0 && (
           <div className="detail-shots">
             {info.screenshots.map((url) => (
-              <button key={url} className="detail-shot" data-nav aria-label="Ekran görüntüsü" onFocus={() => setShot(imageAt(url, WIDE_WIDTH))} onMouseEnter={() => setShot(imageAt(url, WIDE_WIDTH))}>
+              <button key={url} className="detail-shot" data-nav aria-label={t('Ekran görüntüsü')} onFocus={() => setShot(imageAt(url, WIDE_WIDTH))} onMouseEnter={() => setShot(imageAt(url, WIDE_WIDTH))}>
                 <img src={imageAt(url, SCREENSHOT_WIDTH)} alt="" loading="lazy" decoding="async" draggable={false} />
               </button>
             ))}

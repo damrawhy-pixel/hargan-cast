@@ -1,4 +1,5 @@
 import type { PsGame, XboxTitle } from '../../../shared/types'
+import { t, type Message } from '../../../shared/i18n'
 
 export type Service = 'playstation' | 'xbox'
 
@@ -25,7 +26,7 @@ export const serviceLabel = (service: Service) => SERVICE_LABEL[service]
 // Every PlayStation cloud stream needs Premium, which the catalog cannot report.
 export const canStart = (item: HubItem, psPremium: boolean) => item.action === 'play' && (item.service === 'xbox' || psPremium)
 
-const GENRES: Record<string, string> = {
+const GENRES: Record<string, Message> = {
   ACTION: 'Aksiyon', ADVENTURE: 'Macera', ROLE_PLAYING_GAMES: 'Rol yapma', ROLE_PLAYING_GAME: 'Rol yapma', SHOOTER: 'Nişancı',
   RACING: 'Yarış', SPORTS: 'Spor', STRATEGY: 'Strateji', PUZZLE: 'Bulmaca', FIGHTING: 'Dövüş', SIMULATION: 'Simülasyon',
   SIMULATOR: 'Simülasyon', ARCADE: 'Arcade', FAMILY: 'Aile', HORROR: 'Korku', MUSIC: 'Müzik', MUSIC_RHYTHM: 'Müzik', PARTY: 'Parti',
@@ -36,7 +37,7 @@ const GENRES: Record<string, string> = {
 export function psFacts(game: PsGame) {
   const raw = game.genre ?? game.metadata?.genre?.values ?? []
   return {
-    genres: (Array.isArray(raw) ? raw : [raw]).map((g) => GENRES[g] ?? g.charAt(0) + g.slice(1).toLowerCase().replaceAll('_', ' ')),
+    genres: (Array.isArray(raw) ? raw : [raw]).map((g) => (GENRES[g] ? t(GENRES[g]) : undefined) ?? g.charAt(0) + g.slice(1).toLowerCase().replaceAll('_', ' ')),
     publisher: game.provider_name,
     release: game.releaseDate ?? game.release_date,
     rating: game.ageRating?.description ?? (game.age_limit ? `${game.age_limit}+` : undefined),
@@ -56,8 +57,8 @@ export function psItem(game: PsGame): HubItem {
     art: game.imageUrl || game.landscapeImageUrl,
     icon: game.imageUrl || game.landscapeImageUrl,
     hero: game.landscapeImageUrl || undefined,
-    subtitle: [platform, genre, game.freeToPlay ? 'Ücretsiz' : store ? 'Mağazada' : undefined].filter(Boolean).join(' · '),
-    badge: game.isOwned ? 'Sahip' : game.freeToPlay ? 'Ücretsiz' : platform,
+    subtitle: [platform, genre, game.freeToPlay ? t('Ücretsiz') : store ? t('Mağazada') : undefined].filter(Boolean).join(' · '),
+    badge: game.isOwned ? t('Sahip') : game.freeToPlay ? t('Ücretsiz') : platform,
     action: store ? 'store' : 'play',
     storeUrl: game.conceptUrl,
     ps: game,
@@ -79,7 +80,7 @@ export function xboxItem(title: XboxTitle): HubItem {
     icon: sized(title.image ?? title.poster, 320),
     hero: sized(title.hero, 1920),
     subtitle: [title.publisher, title.categories[0]].filter(Boolean).join(' · ') || 'Xbox',
-    badge: title.owned ? 'Sahip' : title.entitled ? 'Game Pass' : undefined,
+    badge: title.owned ? t('Sahip') : title.entitled ? 'Game Pass' : undefined,
     action: title.entitled ? 'play' : 'none',
     xbox: title,
   }

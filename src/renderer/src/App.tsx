@@ -15,6 +15,7 @@ import { rememberPlayed } from './lib/store'
 import { getSettings } from './lib/useSettings'
 import { PlayStationSpace } from './playstation/PlayStationSpace'
 import { XboxSpace } from './xbox/XboxSpace'
+import { t } from '../../shared/i18n'
 
 const PsStream = lazy(() => import('./playstation/PsStream').then((m) => ({ default: m.PsStream })))
 const XboxStream = lazy(() => import('./xbox/XboxStream').then((m) => ({ default: m.XboxStream })))
@@ -85,11 +86,11 @@ export function App() {
         return
       }
       if (item.action === 'none') {
-        showToast(item.xbox?.cloud ? 'Bu oyun hesabınla bulutta açılmıyor.' : 'Bu oyun Cloud Gaming kataloğunda yok.')
+        showToast(item.xbox?.cloud ? t('Bu oyun hesabınla bulutta açılmıyor.') : t('Bu oyun Cloud Gaming kataloğunda yok.'))
         return
       }
       if (!canStart(item, getSettings().psPremium)) {
-        showToast('Bu oyun için PS Plus Premium gerekiyor. Aboneliğin varsa Ayarlar > PlayStation kısmından aç.')
+        showToast(t('Bu oyun için PS Plus Premium gerekiyor. Aboneliğin varsa Ayarlar > PlayStation kısmından aç.'))
         return
       }
       rememberPlayed(item)

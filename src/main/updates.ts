@@ -3,6 +3,7 @@
 // installed when the app closes. A copy run straight from a build folder is left alone.
 import { app, Notification } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { t } from '../shared/i18n'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -23,8 +24,8 @@ export function startUpdates() {
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('update-downloaded', (info) => {
     new Notification({
-      title: 'Hargan Cast güncellemesi hazır',
-      body: `${info.version} sürümü, uygulamayı kapattığında kurulacak.`,
+      title: t('Hargan Cast güncellemesi hazır'),
+      body: t('{version} sürümü, uygulamayı kapattığında kurulacak.', { version: info.version }),
     }).show()
   })
   // No connection or no release yet: try again at the next check.

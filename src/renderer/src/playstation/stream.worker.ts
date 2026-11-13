@@ -1,6 +1,7 @@
 // Runs the whole media path off the UI thread: socket, decode, paint.
 
 import { Picture, outputSize, pictureLabel, type Fit, type PictureOptions, type Size } from '../lib/picture'
+import type { Message } from '../../../shared/i18n'
 
 /** The canvas's box on screen, in device pixels. */
 export interface View extends Size {
@@ -22,11 +23,13 @@ export interface WorkerInit {
 export type WorkerCommand = WorkerInit | { type: 'view'; view: View } | { type: 'input'; report: ArrayBuffer } | { type: 'close' }
 
 export type WorkerEvent =
+  /** `filters` is non-empty when post-processing runs; the page words it. */
   | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string }
   | { type: 'firstFrame' }
   | { type: 'rumble'; left: number; right: number }
   | { type: 'ended' }
-  | { type: 'error'; message: string }
+  /** Translated on the page, which knows the interface language. */
+  | { type: 'error'; message: Message }
 
 const MEDIA_VIDEO = 1
 const MEDIA_AUDIO_FORMAT = 2

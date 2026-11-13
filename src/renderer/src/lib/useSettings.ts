@@ -1,11 +1,19 @@
 import { useSyncExternalStore } from 'react'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings'
+import { getLanguage, resolveLanguage, setLanguage } from '../../../shared/i18n'
 
 let current = DEFAULT_SETTINGS
 const listeners = new Set<() => void>()
 
+function applyLanguage(settings: AppSettings) {
+  setLanguage(resolveLanguage(settings.language, navigator.language))
+  document.documentElement.lang = getLanguage()
+}
+applyLanguage(current)
+
 function publish(next: AppSettings) {
   current = next
+  applyLanguage(next)
   listeners.forEach((l) => l())
   return next
 }

@@ -1,3 +1,4 @@
+import { locale, t } from '../../../shared/i18n'
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { HubItem } from '../lib/items'
 import { GameTile } from './GameTile'
@@ -21,7 +22,7 @@ const SKELETON_TILES = 21
 
 export function SkeletonGrid() {
   return (
-    <div className="library-scroll" aria-label="Oyunlar yükleniyor">
+    <div className="library-scroll" aria-label={t('Oyunlar yükleniyor')}>
       <div className="grid">
         {Array.from({ length: SKELETON_TILES }, (_, i) => <span key={i} className="skeleton" />)}
       </div>
@@ -76,7 +77,7 @@ export function Library({ title, items, filters, onOpen, toolbar }: Props) {
         <div className="library-tools">
           <label className="search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.2 10.4l4.4 4.4-1.4 1.4-4.4-4.4A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" /></svg>
-            <input data-nav type="search" placeholder={`${items.length.toLocaleString('tr')} oyunda ara`} value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input data-nav type="search" placeholder={t('{n} oyunda ara', { n: items.length.toLocaleString(locale()) })} value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
           {toolbar}
         </div>
@@ -91,7 +92,7 @@ export function Library({ title, items, filters, onOpen, toolbar }: Props) {
 
       <div className="library-scroll" ref={scroller}>
         {visible.length === 0 ? (
-          <p className="empty">Bu görünümde oyun yok.</p>
+          <p className="empty">{t('Bu görünümde oyun yok.')}</p>
         ) : (
           <div className="grid" key={filterId}>
             {visible.slice(0, shown).map((item) => <GameTile key={item.key} item={item} onOpen={onOpen} />)}

@@ -40,7 +40,28 @@ Hargan Cast'in yeni sürümü tek bir etiketle (tag) çıkar. GitHub üç platfo
 
 ### Windows
 
-Ek hazırlık yok. Kurulum dosyası imzasız olduğu için Windows ilk açılışta "Windows kişisel bilgisayarınızı korudu" uyarısı gösterebilir (*Ek bilgi > Yine de çalıştır*). Bu uyarıyı kaldırmak için bir kod imzalama sertifikası gerekir; istersen sonra eklenir.
+İmza olmadan kurulum dosyası yine derlenir, ama Windows ilk açılışta "Windows kişisel bilgisayarınızı korudu" uyarısı gösterir (*Ek bilgi > Yine de çalıştır*). Uyarıyı kaldırmak için **Azure Trusted Signing** kullanılır (aylık yaklaşık 10 $):
+
+1. **Azure hesabı:** portal.azure.com, kredi kartıyla açılır.
+2. **Trusted Signing hesabı:** Portalda *Trusted Signing Accounts* > **Create**. Bölge seç (ör. West Europe), plan *Basic*. Oluşunca *Overview*'daki **Account URI** (ör. `https://weu.codesigning.azure.net/`) ve hesabın adı lazım olacak.
+3. **Kimlik doğrulaması:** Hesabın *Identity validations* sayfasında bireysel (*Individual*) doğrulama başlat. Kimlik belgesiyle yapılır, birkaç gün sürebilir.
+4. **Sertifika profili:** Doğrulama onaylanınca *Certificate profiles* > **Create**, tür *Public Trust*. Profilin adı ve sertifikadaki ad (*Subject* içindeki CN, genelde kendi adın) lazım olacak.
+5. **GitHub için uygulama kaydı:** *Microsoft Entra ID* > *App registrations* > **New registration** (ad: `hargan-cast-release`). *Certificates & secrets* > **New client secret**; değeri hemen kopyala. Ardından Trusted Signing hesabının *Access control (IAM)* sayfasında bu uygulamaya **Trusted Signing Certificate Profile Signer** rolünü ver.
+6. **GitHub'a ekle** (https://github.com/damrawhy-pixel/hargan-cast/settings/secrets/actions/new):
+
+   | Ad | Değer |
+   | --- | --- |
+   | `AZURE_TENANT_ID` | Uygulama kaydının *Directory (tenant) ID* değeri |
+   | `AZURE_CLIENT_ID` | Uygulama kaydının *Application (client) ID* değeri |
+   | `AZURE_CLIENT_SECRET` | 5. adımda kopyaladığın gizli değer |
+   | `AZURE_SIGN_ENDPOINT` | Account URI |
+   | `AZURE_SIGN_ACCOUNT` | Trusted Signing hesabının adı |
+   | `AZURE_SIGN_PROFILE` | Sertifika profilinin adı |
+   | `AZURE_SIGN_PUBLISHER` | Sertifikadaki ad (CN), harfi harfine |
+
+Bunlar eklenince her sürümde kurulum dosyası imzalanır ve imzası iş içinde denetlenir. Eksikken iş bir uyarı yazar ve imzasız devam eder.
+
+> İmzalı ilk sürümden sonra yayıncı adını değiştirme: kurulu kopyalar güncellemenin aynı yayıncıdan geldiğini denetler.
 
 ## Her sürümde
 
@@ -63,4 +84,4 @@ Ek hazırlık yok. Kurulum dosyası imzasız olduğu için Windows ilk açılı�
 4. Testlerden sonra taslağı **Publish release** ile yayımla. Windows'ta kurulu kopyalar yeni sürümü arka planda indirir ve uygulama kapanınca kurar.
 5. `.aab` dosyasını Play Console'a yükle. iOS derlemesi TestFlight'ta kendiliğinden belirir; oradan incelemeye gönder.
 
-Sürüm numarası paketlere kendiliğinden işlenir: `0.3.0` için Android ve iOS derleme numarası `300` olur (her sürüm bir öncekinden büyük olmalıdır).
+Sürüm numarası paketlere kendiliğinden işlenir: `0.3.0` için Android ve iOS derleme numarası `30099`, ön sürüm `0.3.0-beta.2` için `30002` olur; böylece ön sürümler asıl sürümden önce sıralanır. Ara ve yama numarası en fazla 99, ön sürüm numarası 1-98 olabilir; uymayan bir etiket derlemeyi durdurur.

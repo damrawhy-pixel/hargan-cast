@@ -4,6 +4,7 @@ import { connectedPads } from '../lib/gamepads'
 import { getSettings } from '../lib/useSettings'
 import { physicalPads } from '../lib/virtualPad'
 import { TouchControls, type TouchPlatform } from './TouchControls'
+import { t } from '../../../shared/i18n'
 
 export interface StreamStats {
   fps: number
@@ -56,10 +57,10 @@ function QueueCard({ queue }: { queue: StreamQueue }) {
   const left = queue.seconds === undefined ? undefined : queue.seconds - waited
   return (
     <div className="queue" role="status">
-      <span>Sıradasın</span>
-      {queue.position !== undefined && <b>{queue.position}. sıra</b>}
-      {left !== undefined && <b>{left > 0 ? `Yaklaşık ${clock(left)}` : 'Az kaldı'}</b>}
-      <small>{clock(waited)} bekledin. Sıra gelince oyun kendiliğinden açılır.</small>
+      <span>{t('Sıradasın')}</span>
+      {queue.position !== undefined && <b>{t('{n}. sıra', { n: queue.position })}</b>}
+      {left !== undefined && <b>{left > 0 ? t('Yaklaşık {time}', { time: clock(left) }) : t('Az kaldı')}</b>}
+      <small>{t('{time} bekledin. Sıra gelince oyun kendiliğinden açılır.', { time: clock(waited) })}</small>
     </div>
   )
 }
@@ -194,27 +195,27 @@ export function StreamShell({ platform, title, stage, live, stats, queue, contro
           <h2>{title}</h2>
           <div className="launch-bar" aria-hidden="true"><span /></div>
           {queue ? <QueueCard queue={queue} /> : <p>{stage}</p>}
-          <button className="ghost" onClick={onExit}>Vazgeç</button>
+          <button className="ghost" onClick={onExit}>{t('Vazgeç')}</button>
         </div>
       )}
 
       {showStats && stats && (
         <div className={`stream-stats ${settings.statsVertical ? 'stream-stats--vertical' : ''}`}>
-          <b>{stats.fps}</b> kare/sn · <b>{stats.mbps.toFixed(1)}</b> Mb/sn · kayıp <b>{stats.lost}</b>
-          {stats.rttMs !== undefined && <> · gecikme <b>{stats.rttMs}</b> ms</>}
-          {stats.decodeMs !== undefined && <> · çözme <b>{stats.decodeMs.toFixed(1)}</b> ms</>}
+          <b>{stats.fps}</b> {t('kare/sn')} · <b>{stats.mbps.toFixed(1)}</b> Mb/{t('sn')} · {t('kayıp')} <b>{stats.lost}</b>
+          {stats.rttMs !== undefined && <> · {t('gecikme')} <b>{stats.rttMs}</b> ms</>}
+          {stats.decodeMs !== undefined && <> · {t('çözme')} <b>{stats.decodeMs.toFixed(1)}</b> ms</>}
           {stats.size && <> · {stats.size}</>}
           {controller && <> · {controller}</>}
         </div>
       )}
 
       {menu && (
-        <div className="stream-menu" role="dialog" aria-label="Akış menüsü" ref={menuRef}>
+        <div className="stream-menu" role="dialog" aria-label={t('Akış menüsü')} ref={menuRef}>
           <h3>{title}</h3>
-          <button className="primary" onClick={() => setMenu(false)}>Oyuna dön</button>
-          <button className="ghost" onClick={() => setShowStats((s) => !s)}>{showStats ? 'İstatistikleri gizle' : 'İstatistikleri göster'}</button>
-          <button className="ghost danger" onClick={onExit}>Akışı bitir</button>
-          <small>Kolda View + Menu düğmelerini basılı tutarak açılır.</small>
+          <button className="primary" onClick={() => setMenu(false)}>{t('Oyuna dön')}</button>
+          <button className="ghost" onClick={() => setShowStats((s) => !s)}>{showStats ? t('İstatistikleri gizle') : t('İstatistikleri göster')}</button>
+          <button className="ghost danger" onClick={onExit}>{t('Akışı bitir')}</button>
+          <small>{t('Kolda View + Menu düğmelerini basılı tutarak açılır.')}</small>
         </div>
       )}
     </div>

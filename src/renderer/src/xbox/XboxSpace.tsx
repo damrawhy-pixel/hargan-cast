@@ -2,13 +2,14 @@ import { Library, SkeletonGrid, type LibraryFilter } from '../components/Library
 import { SignIn } from '../components/SignIn'
 import type { HubItem } from '../lib/items'
 import { loadXbox, useStore } from '../lib/store'
+import { t } from '../../../shared/i18n'
 
-const FILTERS: LibraryFilter[] = [
+const filters = (): LibraryFilter[] => [
   // Everything this account can start right now, however it got access.
-  { id: 'owned', label: 'Sahip olduklarım', test: (i) => i.action === 'play' },
+  { id: 'owned', label: t('Sahip olduklarım'), test: (i) => i.action === 'play' },
   { id: 'gamepass', label: 'Game Pass', test: (i) => i.action === 'play' && !i.xbox?.owned },
-  { id: 'recent', label: 'Son oynananlar', test: (i) => Boolean(i.xbox?.recent || i.xbox?.lastPlayed) },
-  { id: 'all', label: 'Tümü', test: () => true },
+  { id: 'recent', label: t('Son oynananlar'), test: (i) => Boolean(i.xbox?.recent || i.xbox?.lastPlayed) },
+  { id: 'all', label: t('Tümü'), test: () => true },
 ]
 
 interface Props {
@@ -28,7 +29,7 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
         service="Xbox"
         state={status.state}
         error={status.error}
-        lines={['Giriş Microsoft’un kendi penceresinde yapılır, şifren bu uygulamaya hiç uğramaz.']}
+        lines={[t('Giriş Microsoft’un kendi penceresinde yapılır, şifren bu uygulamaya hiç uğramaz.')]}
         onSignIn={() => void window.hc.xbox.signIn()}
       />
     )
@@ -40,10 +41,10 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
         <div className="banner banner--info" role="status">
           <span>
             {status.cloudError?.includes('InvalidCountry')
-              ? 'Microsoft, Cloud Gaming\'i bulunduğun ülkede sunmuyor. Oyun kütüphanen görünür ama akış başlatılamaz.'
-              : 'Bulut oyun erişimi yok. Oyun kütüphanen görünür ama akış başlatılamaz.'}
+              ? t("Microsoft, Cloud Gaming'i bulunduğun ülkede sunmuyor. Oyun kütüphanen görünür ama akış başlatılamaz.")
+              : t('Bulut oyun erişimi yok. Oyun kütüphanen görünür ama akış başlatılamaz.')}
           </span>
-          <button className="ghost" data-nav onClick={onOpenSettings}>Ayarlar</button>
+          <button className="ghost" data-nav onClick={onOpenSettings}>{t('Ayarlar')}</button>
         </div>
       )}
       {error && <p className="banner" role="alert">{error}</p>}
@@ -51,11 +52,11 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
         <SkeletonGrid />
       ) : (
         <Library
-          title="Xbox kitaplığı"
+          title={t('Xbox kitaplığı')}
           items={items}
-          filters={FILTERS}
+          filters={filters()}
           onOpen={onOpen}
-          toolbar={<button className="ghost" data-nav disabled={loading} onClick={loadXbox}>Yenile</button>}
+          toolbar={<button className="ghost" data-nav disabled={loading} onClick={loadXbox}>{t('Yenile')}</button>}
         />
       )}
     </div>

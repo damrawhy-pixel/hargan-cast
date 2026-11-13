@@ -3,6 +3,8 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { exportDiagnostics } from './diagnostics'
 import { log } from './log'
+import { resolveLanguage, setLanguage } from '../shared/i18n'
+import type { AppSettings } from '../shared/settings'
 import PlayStationService from './playstation/service'
 import SettingsStore, { readBootSettings } from './settings'
 import { startUpdates } from './updates'
@@ -62,8 +64,12 @@ const send = (channel: string, payload: unknown) => win?.webContents.send(channe
 
 const BASE_FONT_PX = 15
 
+// Errors and notices from this process are worded in the interface language too.
+const applyLanguage = (current: AppSettings) => setLanguage(resolveLanguage(current.language, app.getLocale()))
+
 function applyWindowSettings() {
   const current = settings.get()
+  applyLanguage(current)
   win?.webContents.setZoomFactor(current.fontSize / BASE_FONT_PX)
   win?.webContents.setBackgroundThrottling(!current.backgroundKeepalive && !streaming)
 }
@@ -218,6 +224,7 @@ app.whenReady().then(() => {
   serveRenderer()
 
   settings = new SettingsStore()
+  applyLanguage(settings.get())
   xbox = new XboxService((s) => send('xbox:statusChanged', s), settings.get())
   ps = new PlayStationService(
     (s) => send('ps:statusChanged', s),

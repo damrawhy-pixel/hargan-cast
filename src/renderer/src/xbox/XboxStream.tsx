@@ -5,6 +5,7 @@ import { Picture, fitFor, outputSize, pictureLabel, type Fit, type PictureOption
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
+import { t } from '../../../shared/i18n'
 
 const HOLDER_ID = 'xbox-video-holder'
 const POLL_MS = 1000
@@ -66,7 +67,7 @@ interface Props {
 }
 
 export function XboxStream({ title, resumeId, onExit }: Props) {
-  const [stage, setStage] = useState(resumeId ? 'Oturuma dönülüyor' : 'Sunucu ayrılıyor')
+  const [stage, setStage] = useState(() => (resumeId ? t('Oturuma dönülüyor') : t('Sunucu ayrılıyor')))
   const [live, setLive] = useState(false)
   const [stats, setStats] = useState<StreamStats>()
   const [queue, setQueue] = useState<StreamQueue>()
@@ -96,10 +97,10 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       clearInterval(keepalive)
       clearInterval(meter)
       stopPicture?.()
-      if (attempts >= RECONNECT_ATTEMPTS) return leave('Bağlantı koptu ve yeniden kurulamadı')
+      if (attempts >= RECONNECT_ATTEMPTS) return leave(t('Bağlantı koptu ve yeniden kurulamadı'))
       attempts++
       setLive(false)
-      setStage(`Bağlantı koptu, yeniden bağlanılıyor (${attempts}/${RECONNECT_ATTEMPTS})`)
+      setStage(t('Bağlantı koptu, yeniden bağlanılıyor ({n}/{max})', { n: attempts, max: RECONNECT_ATTEMPTS }))
       player?.close()
       player = undefined
       document.getElementById(HOLDER_ID)?.replaceChildren()
@@ -173,7 +174,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         if (event.state !== 'connected') return
         attempts = 0
         // The picture starts a few seconds after the connection; keep the veil until then.
-        setStage('Görüntü bekleniyor')
+        setStage(t('Görüntü bekleniyor'))
         const video = document.querySelector<HTMLVideoElement>(`#${HOLDER_ID} video`)
         if (video && !video.videoWidth) video.addEventListener('loadeddata', () => setLive(true), { once: true })
         else setLive(true)
@@ -189,7 +190,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         meter = setInterval(() => void measure(video), STATS_MS)
       })
 
-      setStage((current) => (attempts > 0 ? current : 'Bağlantı kuruluyor'))
+      setStage((current) => (attempts > 0 ? current : t('Bağlantı kuruluyor')))
       const offer = await player.createOffer()
       const answer = await xbox.sendSdp(sessionId, offer.sdp)
       player.setRemoteOffer(answer.sdp)
@@ -211,15 +212,15 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         const session = await xbox.session(sessionId).catch(() => undefined).finally(() => (busy = false))
         if (disposed) return
         if (session === undefined) return
-        if (!session) return leave('Oturum sunucuda sonlandı')
+        if (!session) return leave(t('Oturum sunucuda sonlandı'))
         if (session.state === 'WaitingForResources') since = Date.now()
         else if (session.playerState !== 'started' && Date.now() - since > PROVISION_TIMEOUT_MS) {
           clearInterval(poll)
-          return leave('Sunucu zamanında hazır olmadı. Tekrar dene.')
+          return leave(t('Sunucu zamanında hazır olmadı. Tekrar dene.'))
         }
         if (session.playerState === 'failed') {
           clearInterval(poll)
-          leave(session.error ?? 'Oturum başlatılamadı')
+          leave(session.error ?? t('Oturum başlatılamadı'))
         } else if (session.playerState === 'started') {
           clearInterval(poll)
           setQueue(undefined)
@@ -234,7 +235,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     window.hc.platform.streaming(true)
     void routeDualSenseSpeaker().catch(() => {})
     if (resumeId) {
-      xbox.adoptSession(resumeId, title.titleId).then(() => negotiate()).catch(() => leave('Oturuma dönülemedi, oyunu yeniden başlat'))
+      xbox.adoptSession(resumeId, title.titleId).then(() => negotiate()).catch(() => leave(t('Oturuma dönülemedi, oyunu yeniden başlat')))
     } else {
       xbox
         .startStream(title.titleId)

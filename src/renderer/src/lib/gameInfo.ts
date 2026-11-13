@@ -1,3 +1,4 @@
+import { locale, t } from '../../../shared/i18n'
 import type { GameInfo } from '../../../shared/types'
 import { sized, type HubItem } from './items'
 
@@ -33,4 +34,4 @@ export function imageAt(url: string, width: number) {
 }
 
 export const ratingText = (community: GameInfo['community']) =>
-  community ? `★ ${community.average.toLocaleString('tr', { maximumFractionDigits: 1 })} · ${community.count.toLocaleString('tr')} oy` : undefined
+  community ? `★ ${community.average.toLocaleString(locale(), { maximumFractionDigits: 1 })} · ${t('{n} oy', { n: community.count.toLocaleString(locale()) })}` : undefined

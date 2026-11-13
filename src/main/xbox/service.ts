@@ -3,6 +3,7 @@ import axios from 'axios'
 import { app, session } from 'electron'
 import type { GameInfo, XboxActiveSession, XboxSession, XboxStatus, XboxTitle } from '../../shared/types'
 import { log } from '../log'
+import { locale, t } from '../../shared/i18n'
 import Authentication from './authentication'
 import { clearStreamToken, saveStreamToken } from './helpers/streamTokenStore'
 import StreamManager from './helpers/streammanager'
@@ -185,8 +186,10 @@ export default class XboxService {
   }
 
   // The cloud catalog and the Microsoft Store each know part of a game's page.
+  // Text comes in the interface language. The market stays US: the cloud catalog
+  // this account streams from is the US offering, and other markets may not list it.
   async info(productId: string): Promise<GameInfo> {
-    const language = app.getLocale().startsWith('tr') ? 'tr-TR' : 'en-US'
+    const language = locale()
     const [cloud, store] = await Promise.allSettled([
       axios.post(
         `https://catalog.gamepass.com/v3/products?market=US&language=${language}&hydration=RemoteHighSapphire0`,
@@ -251,7 +254,7 @@ export default class XboxService {
 
   private cloudApi() {
     const token = this.streamingTokens?.xCloudToken
-    if (!token) throw new Error('Bu hesapta Cloud Gaming erişimi yok')
+    if (!token) throw new Error(t('Bu hesapta Cloud Gaming erişimi yok'))
     return new xCloudApi(this as any, token.getDefaultRegion().baseUri.substring(8), token.data.gsToken, 'cloud')
   }
 

@@ -5,6 +5,8 @@
 //   3. sharpening: FSR 1.0 RCAS
 // The last pass dithers, so a smoothed gradient does not band again at 8 bits.
 
+import { t } from '../../../shared/i18n'
+
 export type Fit = 'contain' | 'cover' | 'fill'
 
 export interface Size {
@@ -20,7 +22,7 @@ export interface PictureOptions {
 }
 
 /** What the stats line says is running, or '' when nothing is. */
-export const pictureLabel = (o: PictureOptions) => [o.fsr && 'FSR', o.deband && 'bant giderme'].filter(Boolean).join(' · ')
+export const pictureLabel = (o: PictureOptions) => [o.fsr && 'FSR', o.deband && t('bant giderme')].filter(Boolean).join(' · ')
 
 // Picture formats with a fixed ratio size their own box, so the frame fills it.
 export const fitFor = (videoFormat: string): Fit => (videoFormat === 'Zoom' ? 'cover' : videoFormat === '' ? 'contain' : 'fill')

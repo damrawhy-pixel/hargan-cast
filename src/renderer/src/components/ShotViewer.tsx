@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { imageAt } from '../lib/gameInfo'
 
@@ -29,16 +30,16 @@ export function ShotViewer({ title, shots, start, onClose }: Props) {
   }, [onClose])
 
   return (
-    <section className="viewer" role="dialog" aria-label={`${title} görüntüleri`}>
+    <section className="viewer" role="dialog" aria-label={t('{title} görüntüleri', { title })}>
       <img key={shots[index]} className="viewer-image" src={imageAt(shots[index], FULL_WIDTH)} alt="" draggable={false} />
       <header className="viewer-head">
         <span>{title}</span>
         <span>{index + 1} / {shots.length}</span>
-        <button className="ghost detail-back" data-nav onClick={onClose}>Kapat</button>
+        <button className="ghost detail-back" data-nav onClick={onClose}>{t('Kapat')}</button>
       </header>
       <div className="viewer-strip" ref={strip}>
         {shots.map((url, i) => (
-          <button key={url} className="viewer-thumb" data-nav aria-current={i === index} aria-label={`Görüntü ${i + 1}`} onFocus={() => setIndex(i)} onClick={() => setIndex(i)}>
+          <button key={url} className="viewer-thumb" data-nav aria-current={i === index} aria-label={t('Görüntü {n}', { n: i + 1 })} onFocus={() => setIndex(i)} onClick={() => setIndex(i)}>
             <img src={imageAt(url, THUMB_WIDTH)} alt="" loading="lazy" draggable={false} />
           </button>
         ))}

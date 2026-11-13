@@ -1,5 +1,6 @@
 import https from 'https'
 import Application from '../service'
+import { t } from '../../../shared/i18n'
 
 const REQUEST_TIMEOUT_MS = 20_000
 const MAX_NOT_READY_RETRIES = 40
@@ -41,7 +42,7 @@ export default class Http {
 
                         if(response.statusCode === 204){
                             if(attempt + 1 >= MAX_NOT_READY_RETRIES){
-                                reject(new Error('Sunucu yanıtı hazırlayamadı: ' + host))
+                                reject(new Error(t('Sunucu yanıtı hazırlayamadı: {host}', { host })))
                                 return
                             }
                             setTimeout(() => {
@@ -66,7 +67,7 @@ export default class Http {
                 })
             })
 
-            req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error('Sunucu yanıt vermedi: ' + host)))
+            req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(t('Sunucu yanıt vermedi: {host}', { host }))))
             req.on('error', (error) => {
                 reject(error)
             })
@@ -115,7 +116,7 @@ export default class Http {
                 })
             })
 
-            req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error('Sunucu yanıt vermedi: ' + host)))
+            req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(t('Sunucu yanıt vermedi: {host}', { host }))))
             req.on('error', (error) => {
                 reject(error)
             })

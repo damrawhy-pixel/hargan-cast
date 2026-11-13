@@ -4,17 +4,18 @@ import { SignIn } from '../components/SignIn'
 import type { HubItem } from '../lib/items'
 import { loadPlayStation, useStore } from '../lib/store'
 import { useSettings } from '../lib/useSettings'
+import { t } from '../../../shared/i18n'
 
 const TOKEN_PAGE = 'https://ca.account.sony.com/api/v1/ssocookie'
 
 // The catalog cannot say whether the account is subscribed, so that comes from the user.
 const buildFilters = (premium: boolean): LibraryFilter[] => [
-  { id: 'owned', label: 'Sahip olduklarım', test: (i) => Boolean(i.ps?.isOwned) || (premium && i.action === 'play') },
-  { id: 'catalog', label: 'Akış kataloğu', test: (i) => i.action === 'play' },
-  { id: 'free', label: 'Ücretsiz', test: (i) => Boolean(i.ps?.freeToPlay) },
+  { id: 'owned', label: t('Sahip olduklarım'), test: (i) => Boolean(i.ps?.isOwned) || (premium && i.action === 'play') },
+  { id: 'catalog', label: t('Akış kataloğu'), test: (i) => i.action === 'play' },
+  { id: 'free', label: t('Ücretsiz'), test: (i) => Boolean(i.ps?.freeToPlay) },
   { id: 'plus', label: 'PS Plus', test: (i) => Boolean(i.ps?.plusCatalog) },
   { id: 'ps5', label: 'PS5', test: (i) => i.ps?.platform === 'ps5' },
-  { id: 'all', label: 'Tümü', test: () => true },
+  { id: 'all', label: t('Tümü'), test: () => true },
 ]
 
 const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
@@ -40,15 +41,15 @@ export function PlayStationSpace({ onOpen }: Props) {
         service="PlayStation"
         state={status.state}
         error={status.error}
-        lines={['Giriş Sony’nin kendi penceresinde yapılır, şifren bu uygulamaya hiç uğramaz.']}
+        lines={[t('Giriş Sony’nin kendi penceresinde yapılır, şifren bu uygulamaya hiç uğramaz.')]}
         onSignIn={() => void window.hc.ps.signIn()}
       >
         <details className="fallback">
-          <summary>Pencere çalışmıyor mu? Tarayıcıyla bağlan</summary>
+          <summary>{t('Pencere çalışmıyor mu? Tarayıcıyla bağlan')}</summary>
           <ol>
-            <li>Normal tarayıcında Sony hesabına giriş yap.</li>
-            <li><button className="link" onClick={() => window.hc.platform.openExternal(TOKEN_PAGE)}>Token sayfasını aç</button> ve çıkan metni kopyala.</li>
-            <li>Aşağıya yapıştır. Bu değer şifre gibidir, kimseyle paylaşma.</li>
+            <li>{t('Normal tarayıcında Sony hesabına giriş yap.')}</li>
+            <li><button className="link" onClick={() => window.hc.platform.openExternal(TOKEN_PAGE)}>{t('Token sayfasını aç')}</button> {t('ve çıkan metni kopyala.')}</li>
+            <li>{t('Aşağıya yapıştır. Bu değer şifre gibidir, kimseyle paylaşma.')}</li>
           </ol>
           <form
             onSubmit={(e) => {
@@ -57,7 +58,7 @@ export function PlayStationSpace({ onOpen }: Props) {
             }}
           >
             <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="NPSSO" />
-            <button className="ghost" disabled={!token}>Bağlan</button>
+            <button className="ghost" disabled={!token}>{t('Bağlan')}</button>
           </form>
           {tokenError && <p className="error" role="alert">{tokenError}</p>}
         </details>
@@ -72,11 +73,11 @@ export function PlayStationSpace({ onOpen }: Props) {
         <SkeletonGrid />
       ) : (
         <Library
-          title="PlayStation kitaplığı"
+          title={t('PlayStation kitaplığı')}
           items={items}
           filters={filters}
           onOpen={onOpen}
-          toolbar={<button className="ghost" data-nav disabled={loading} onClick={() => loadPlayStation(true)}>Yenile</button>}
+          toolbar={<button className="ghost" data-nav disabled={loading} onClick={() => loadPlayStation(true)}>{t('Yenile')}</button>}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 // The parts of the PlayStation service that are the same on the desktop and on
 // phones: what Sony is asked, how its answers are read, and how errors are worded.
 // Nothing here may import Electron or Node, so the phone apps can bundle it.
+import { t } from '../../shared/i18n'
 import type { AppSettings } from '../../shared/settings'
 import type { GameInfo, PsDatacenter, PsGame, PsStreamOptions } from '../../shared/types'
 
@@ -25,8 +26,8 @@ const NPSSO_PATTERN = /[A-Za-z0-9]{40,128}/
 // kb/s per resolution when bit rate is left on automatic. Sony asks for about 38 Mb/s at 4K.
 const AUTO_BITRATE: Record<number, number> = { 720: 10000, 1080: 20000, 1440: 30000, 2160: 40000 }
 
-export const SESSION_EXPIRED = 'PlayStation oturumunun süresi doldu. Tekrar giriş yap.'
-export const CATALOG_WARNING = 'Oturumun süresi doldu. Sahip olduğun oyunları görmek için tekrar giriş yap.'
+export const sessionExpired = () => t('PlayStation oturumunun süresi doldu. Tekrar giriş yap.')
+export const catalogWarning = () => t('Oturumun süresi doldu. Sahip olduğun oyunları görmek için tekrar giriş yap.')
 
 export function signInUrl(cid: string) {
   const url = new URL(SIGN_IN_URL)
@@ -38,7 +39,7 @@ export function signInUrl(cid: string) {
 /** Pulls the NPSSO out of a pasted value or the token page's JSON. */
 export function extractNpsso(input: string) {
   const match = input.match(NPSSO_PATTERN)
-  if (!match) throw new Error('Bu bir NPSSO değerine benzemiyor')
+  if (!match) throw new Error(t('Bu bir NPSSO değerine benzemiyor'))
   return match[0]
 }
 
@@ -150,15 +151,15 @@ export function parseStorePage(html: string): GameInfo {
 }
 
 export function friendlyError(message: string) {
-  if (message === 'AUTHORIZATION_FAILED') return SESSION_EXPIRED
-  if (message === 'PS_PLUS_SUBSCRIPTION_REQUIRED') return 'Bu oyun için PS Plus Premium aboneliği gerekiyor.'
-  if (message === 'PING_TIMEOUT') return 'Veri merkezlerine ulaşılamadı. Bağlantını kontrol edip tekrar dene.'
-  if (message === 'ACCOUNT_PRIVACY_SETTINGS') return 'Hesabının gizlilik ayarları bu oyuna izin vermiyor.'
-  if (message.startsWith('Selected datacenter')) return 'Seçtiğin veri merkezi şu an kullanılamıyor. Ayarlardan başka birini seç.'
-  if (message.startsWith('Timed out waiting')) return 'Akış sunucusu beklenirken süre doldu. Tekrar dene.'
-  if (message.startsWith("Couldn't reach") || message.startsWith('Network error')) return 'PlayStation sunucularına ulaşılamadı. Bağlantını kontrol edip tekrar dene.'
-  if (message.startsWith('Failed to fetch')) return 'PlayStation kataloğu alınamadı. Tekrar dene.'
+  if (message === 'AUTHORIZATION_FAILED') return sessionExpired()
+  if (message === 'PS_PLUS_SUBSCRIPTION_REQUIRED') return t('Bu oyun için PS Plus Premium aboneliği gerekiyor.')
+  if (message === 'PING_TIMEOUT') return t('Veri merkezlerine ulaşılamadı. Bağlantını kontrol edip tekrar dene.')
+  if (message === 'ACCOUNT_PRIVACY_SETTINGS') return t('Hesabının gizlilik ayarları bu oyuna izin vermiyor.')
+  if (message.startsWith('Selected datacenter')) return t('Seçtiğin veri merkezi şu an kullanılamıyor. Ayarlardan başka birini seç.')
+  if (message.startsWith('Timed out waiting')) return t('Akış sunucusu beklenirken süre doldu. Tekrar dene.')
+  if (message.startsWith("Couldn't reach") || message.startsWith('Network error')) return t('PlayStation sunucularına ulaşılamadı. Bağlantını kontrol edip tekrar dene.')
+  if (message.startsWith('Failed to fetch')) return t('PlayStation kataloğu alınamadı. Tekrar dene.')
   // What Sony sends back is a raw response body, not a sentence.
-  if (message.startsWith('{')) return 'PlayStation isteği reddetti. Biraz sonra tekrar dene.'
+  if (message.startsWith('{')) return t('PlayStation isteği reddetti. Biraz sonra tekrar dene.')
   return message
 }

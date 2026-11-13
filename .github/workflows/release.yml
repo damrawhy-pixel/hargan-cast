@@ -29,10 +29,23 @@ jobs:
         name: Version from the tag, or from package.json
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="${GITHUB_REF_NAME#v}"; else name="$(node -p "require('./package.json').version")"; fi
+          # Store build numbers must only grow: MMM mm pp rr, where rr is a
+          # pre-release's number (1-98) and 99 for the final release, so
+          # 0.3.0-beta.2 (30002) sorts before 0.3.0 (30099).
           IFS=. read -r major minor patch <<< "${name%%-*}"
+          pre=99
+          if [[ "$name" == *-* ]]; then
+            pre="$(grep -oE '[0-9]+$' <<< "$name" || echo 1)"
+            (( pre > 98 )) && pre=0
+          fi
+          if (( minor > 99 || patch > 99 || pre < 1 || major > 2000 )); then
+            echo "::error::$name does not fit the build number scheme (minor and patch up to 99, pre-release number 1-98)"
+            exit 1
+          fi
+          code=$((major * 1000000 + minor * 10000 + patch * 100 + pre))
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "code=$((major * 10000 + minor * 100 + patch))" >> "$GITHUB_OUTPUT"
-          echo "Hargan Cast $name (build $((major * 10000 + minor * 100 + patch)))"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Hargan Cast $name (build $code)"
 
   windows:
     needs: version
@@ -59,10 +72,45 @@ jobs:
         run: npm run native
       - name: DualSense format tests
         run: npm run test:native
+      # Signed through Azure Trusted Signing once its secrets exist (docs/RELEASING.md);
+      # until then the installer is built unsigned, as before.
       - name: Installer
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.name }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          SIGN_ENDPOINT: ${{ secrets.AZURE_SIGN_ENDPOINT }}
+          SIGN_ACCOUNT: ${{ secrets.AZURE_SIGN_ACCOUNT }}
+          SIGN_PROFILE: ${{ secrets.AZURE_SIGN_PROFILE }}
+          SIGN_PUBLISHER: ${{ secrets.AZURE_SIGN_PUBLISHER }}
         run: |
           npx electron-vite build
-          npx electron-builder --win nsis --publish never "-c.extraMetadata.version=${{ needs.version.outputs.name }}"
+          args=(--win nsis --publish never "-c.extraMetadata.version=$VERSION")
+          if [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$SIGN_ENDPOINT" ]; then
+            echo "Signing with Azure Trusted Signing as $SIGN_PUBLISHER"
+            args+=(
+              "-c.win.signAndEditExecutable=true"
+              "-c.win.azureSignOptions.endpoint=$SIGN_ENDPOINT"
+              "-c.win.azureSignOptions.codeSigningAccountName=$SIGN_ACCOUNT"
+              "-c.win.azureSignOptions.certificateProfileName=$SIGN_PROFILE"
+              "-c.win.azureSignOptions.publisherName=$SIGN_PUBLISHER"
+            )
+          else
+            echo "::warning::Azure Trusted Signing secrets are missing; the installer is unsigned"
+          fi
+          npx electron-builder "${args[@]}"
+      - name: Check the signature
+        if: env.SIGNED != ''
+        shell: pwsh
+        env:
+          SIGNED: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          $exe = Get-ChildItem dist\*.exe | Select-Object -First 1
+          $sig = Get-AuthenticodeSignature $exe.FullName
+          "$($exe.Name): $($sig.Status) $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw 'The installer is not validly signed' }
       - uses: actions/upload-artifact@v5
         with:
           name: release-windows

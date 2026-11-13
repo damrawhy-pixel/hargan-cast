@@ -2,10 +2,11 @@
 // native plugin (mobile/plugins/ps-core) in place of the sidecar process, and a web
 // view of the plugin's own in place of Electron's sign-in window.
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+import { t, tryT } from '../shared/i18n'
 import {
-  CATALOG_WARNING,
+  catalogWarning,
   DEFAULT_CONTEXT,
-  SESSION_EXPIRED,
+  sessionExpired,
   SESSION_URL,
   SIGN_IN_REDIRECT,
   catalogContext,
@@ -44,7 +45,8 @@ interface Pending {
   reject(error: Error): void
 }
 
-const reason = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback)
+// The native plugins answer in Turkish; tryT gives the interface language's wording.
+const reason = (e: unknown, fallback: string) => (e instanceof Error && e.message ? tryT(e.message) : fallback)
 
 export default class MobilePlayStation {
   private vault = new SecureStore('playstation')
@@ -88,7 +90,7 @@ export default class MobilePlayStation {
       .then(({ npsso }) => this.acceptToken(npsso))
       .catch((e: { code?: string }) => {
         // Closing the sheet is a choice, not an error.
-        this.setStatus({ state: 'signedOut', error: e?.code === 'CANCELLED' ? undefined : 'Sony giriş sayfası açılamadı. Ağ bağlantını kontrol et.' })
+        this.setStatus({ state: 'signedOut', error: e?.code === 'CANCELLED' ? undefined : t('Sony giriş sayfası açılamadı. Ağ bağlantını kontrol et.') })
       })
   }
 
@@ -110,7 +112,7 @@ export default class MobilePlayStation {
 
   private expire() {
     this.vault.delete('npsso')
-    this.setStatus({ state: 'signedOut', error: SESSION_EXPIRED })
+    this.setStatus({ state: 'signedOut', error: sessionExpired() })
   }
 
   // --- core ----------------------------------------------------------------
@@ -122,7 +124,7 @@ export default class MobilePlayStation {
       this.media = await PsCore.start()
     })().catch((e) => {
       this.ready = undefined
-      throw new Error(reason(e, 'PlayStation çekirdeği başlatılamadı.'))
+      throw new Error(reason(e, t('PlayStation çekirdeği başlatılamadı.')))
     })
     return this.ready
   }
@@ -150,7 +152,7 @@ export default class MobilePlayStation {
       this.pending.set(id, { resolve, reject })
       PsCore.command({ line: JSON.stringify({ id, cmd, ...args }) }).catch((e) => {
         this.pending.delete(id)
-        reject(new Error(reason(e, 'PlayStation çekirdeğine ulaşılamadı.')))
+        reject(new Error(reason(e, t('PlayStation çekirdeğine ulaşılamadı.'))))
       })
     })
   }
@@ -169,7 +171,7 @@ export default class MobilePlayStation {
     })
     if (catalog.settledLocale) this.vault.set('locale', catalog.settledLocale)
     this.context = catalogContext(catalog)
-    return { games: catalog.games ?? [], warning: catalog.warning ? CATALOG_WARNING : '', nativeMode: catalog.nativeMode }
+    return { games: catalog.games ?? [], warning: catalog.warning ? catalogWarning() : '', nativeMode: catalog.nativeMode }
   }
 
   async stream(game: PsGame, opts: PsStreamOptions): Promise<PsStreamStarted> {

@@ -4,6 +4,7 @@ import { gameInfo, imageAt, knownInfo, ratingText } from '../lib/gameInfo'
 import { canStart, serviceLabel, type HubItem } from '../lib/items'
 import { clearXboxRunning, setSpotlight, useStore } from '../lib/store'
 import { useSettings } from '../lib/useSettings'
+import { locale, t } from '../../../shared/i18n'
 import { GameTile } from './GameTile'
 import { ShotViewer } from './ShotViewer'
 import type { Space } from './TopBar'
@@ -28,7 +29,7 @@ function Shelf({ title, onAll, children }: { title: string; onAll?(): void; chil
     <section className="shelf">
       <header className="shelf-head">
         <h2>{title}</h2>
-        {onAll && <button className="shelf-all" onClick={onAll}>Tümü</button>}
+        {onAll && <button className="shelf-all" onClick={onAll}>{t('Tümü')}</button>}
       </header>
       <div className="rail">{children}</div>
     </section>
@@ -67,7 +68,7 @@ function LibraryTile({ space, label, count, onGo }: { space: Space; label: strin
       </span>
       <span className="launch-name">
         {label}
-        {count !== undefined && <small>{count.toLocaleString('tr')} oyun</small>}
+        {count !== undefined && <small>{t('{n} oyun', { n: count.toLocaleString(locale()) })}</small>}
       </span>
     </button>
   )
@@ -151,13 +152,13 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
   return (
     <div className="home">
       <section className="launch">
-        <div className="launcher" role="listbox" aria-label="Oyunlar">
+        <div className="launcher" role="listbox" aria-label={t('Oyunlar')}>
           {rows.launcher.map((item) => (
             <LaunchTile key={item.key} item={item} selected={item.key === selected?.key} onSelect={() => setSelectedKey(item.key)} onActivate={(art) => activate(item, art)} />
           ))}
-          {ps.state === 'signedIn' && <LibraryTile space="playstation" label="PlayStation kitaplığı" count={psItems.length} onGo={onGo} />}
-          {xbox.state === 'signedIn' && <LibraryTile space="xbox" label="Xbox kitaplığı" count={xboxItems.length} onGo={onGo} />}
-          {ps.state !== 'signedIn' && xbox.state !== 'signedIn' && <LibraryTile space="settings" label="Hesap bağla" onGo={onGo} />}
+          {ps.state === 'signedIn' && <LibraryTile space="playstation" label={t('PlayStation kitaplığı')} count={psItems.length} onGo={onGo} />}
+          {xbox.state === 'signedIn' && <LibraryTile space="xbox" label={t('Xbox kitaplığı')} count={xboxItems.length} onGo={onGo} />}
+          {ps.state !== 'signedIn' && xbox.state !== 'signedIn' && <LibraryTile space="settings" label={t('Hesap bağla')} onGo={onGo} />}
         </div>
 
         {selected ? (
@@ -171,26 +172,26 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
             </div>
             <div className="launch-actions">
               {selected.action === 'store' ? (
-                <button className="launch-play" data-nav onClick={() => onPlay(selected, null)}>Mağazada aç</button>
+                <button className="launch-play" data-nav onClick={() => onPlay(selected, null)}>{t('Mağazada aç')}</button>
               ) : startable ? (
-                <button className="launch-play" data-nav onClick={() => onPlay(selected, null)}>Oyna</button>
+                <button className="launch-play" data-nav onClick={() => onPlay(selected, null)}>{t('Oyna')}</button>
               ) : (
                 <button className="launch-play launch-play--muted" data-nav onClick={() => onOpen(selected, null)}>
-                  {selected.action === 'none' ? 'Bulutta yok' : 'PS Plus Premium gerekiyor'}
+                  {selected.action === 'none' ? t('Bulutta yok') : t('PS Plus Premium gerekiyor')}
                 </button>
               )}
-              <button className="round-button round-button--big" data-nav aria-label="Oyun bilgisi" title="Oyun bilgisi" onClick={() => onOpen(selected, null)}>
+              <button className="round-button round-button--big" data-nav aria-label={t('Oyun bilgisi')} title={t('Oyun bilgisi')} onClick={() => onOpen(selected, null)}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
               </button>
             </div>
           </div>
         ) : (
           <div className="launch-info">
-            <h1>Hoş geldin</h1>
-            <p>PlayStation ve Xbox oyunların tek yerde. Başlamak için hesaplarını bağla.</p>
+            <h1>{t('Hoş geldin')}</h1>
+            <p>{t('PlayStation ve Xbox oyunların tek yerde. Başlamak için hesaplarını bağla.')}</p>
             <div className="launch-actions">
-              <button className="launch-play" data-nav onClick={() => onGo('playstation')}>PlayStation'a bağlan</button>
-              <button className="launch-play launch-play--muted" data-nav onClick={() => onGo('xbox')}>Xbox'a bağlan</button>
+              <button className="launch-play" data-nav onClick={() => onGo('playstation')}>{t("PlayStation'a bağlan")}</button>
+              <button className="launch-play launch-play--muted" data-nav onClick={() => onGo('xbox')}>{t("Xbox'a bağlan")}</button>
             </div>
           </div>
         )}
@@ -199,12 +200,12 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
           {shown && selected && (
             <div className="hub-row" key={selected.key}>
               <button className="hub-card hub-about" data-nav onClick={() => onOpen(selected, null)}>
-                <strong>Oyun hakkında</strong>
+                <strong>{t('Oyun hakkında')}</strong>
                 {shown.community && <span className="hub-rating">{ratingText(shown.community)}</span>}
                 <p>{shown.description || selected.subtitle}</p>
               </button>
               {shown.screenshots.slice(0, HUB_SHOTS).map((url, i) => (
-                <button key={url} className="hub-card hub-shot" data-nav aria-label={`Ekran görüntüsü ${i + 1}`} onClick={(e) => openViewer(shown.screenshots, i, e.currentTarget)}>
+                <button key={url} className="hub-card hub-shot" data-nav aria-label={t('Ekran görüntüsü {n}', { n: i + 1 })} onClick={(e) => openViewer(shown.screenshots, i, e.currentTarget)}>
                   <img src={imageAt(url, SHOT_WIDTH)} alt="" loading="lazy" decoding="async" draggable={false} />
                 </button>
               ))}
@@ -217,17 +218,17 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
 
       {running && (
         <div className="resume" role="status">
-          <span>Devam eden Xbox oturumun var{runningItem ? <>: <strong>{runningItem.name}</strong></> : ''}</span>
-          {runningItem && <button className="launch-play" data-nav onClick={() => { clearXboxRunning(); onResume(runningItem, running.id) }}>Devam et</button>}
-          <button className="ghost" data-nav onClick={() => { clearXboxRunning(); void window.hc.xbox.endSession(running.id, running.titleId) }}>Kapat</button>
+          <span>{t('Devam eden Xbox oturumun var')}{runningItem ? <>: <strong>{runningItem.name}</strong></> : ''}</span>
+          {runningItem && <button className="launch-play" data-nav onClick={() => { clearXboxRunning(); onResume(runningItem, running.id) }}>{t('Devam et')}</button>}
+          <button className="ghost" data-nav onClick={() => { clearXboxRunning(); void window.hc.xbox.endSession(running.id, running.titleId) }}>{t('Kapat')}</button>
         </div>
       )}
 
       <div className="shelves">
-        {rows.recent.length > 0 && <Shelf title="Son oynadıkların">{rows.recent.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} showService />)}</Shelf>}
-        {rows.xboxPlay.length > 0 && <Shelf title="Xbox · Oynayabileceklerin" onAll={() => onGo('xbox')}>{rows.xboxPlay.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
-        {rows.psPlay.length > 0 && <Shelf title="PlayStation akış kataloğu" onAll={() => onGo('playstation')}>{rows.psPlay.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
-        {rows.psFree.length > 0 && <Shelf title="Ücretsiz PlayStation oyunları" onAll={() => onGo('playstation')}>{rows.psFree.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
+        {rows.recent.length > 0 && <Shelf title={t('Son oynadıkların')}>{rows.recent.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} showService />)}</Shelf>}
+        {rows.xboxPlay.length > 0 && <Shelf title={t('Xbox · Oynayabileceklerin')} onAll={() => onGo('xbox')}>{rows.xboxPlay.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
+        {rows.psPlay.length > 0 && <Shelf title={t('PlayStation akış kataloğu')} onAll={() => onGo('playstation')}>{rows.psPlay.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
+        {rows.psFree.length > 0 && <Shelf title={t('Ücretsiz PlayStation oyunları')} onAll={() => onGo('playstation')}>{rows.psFree.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ import { Address6 } from "ip-address";
 import axios from 'axios';
 import { defaultSettings } from '../settings';
 import { saveStreamToken } from "./streamTokenStore";
+import { t } from "../../../shared/i18n";
 
 const REQUEST_TIMEOUT_MS = 20_000;
 // Answers the server is still preparing (204, or an empty SDP/ICE reply) are asked
@@ -189,7 +190,7 @@ export default class xCloudApi {
 
               if (response.statusCode === 204) {
                 if (attempt + 1 >= MAX_NOT_READY_RETRIES) {
-                  reject(new Error("Xbox sunucusu yanıtı hazırlayamadı. Tekrar dene."));
+                  reject(new Error(t("Xbox sunucusu yanıtı hazırlayamadı. Tekrar dene.")));
                   return;
                 }
                 setTimeout(() => {
@@ -220,7 +221,7 @@ export default class xCloudApi {
         }
       );
 
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("Xbox sunucusu yanıt vermedi: " + url)));
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(t("Xbox sunucusu yanıt vermedi: {url}", { url }))));
       req.on("error", (error) => {
         reject(error);
       });
@@ -285,7 +286,7 @@ export default class xCloudApi {
         }
       );
 
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("Xbox sunucusu yanıt vermedi: " + url)));
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(t("Xbox sunucusu yanıt vermedi: {url}", { url }))));
       req.on("error", (error) => {
         reject(error);
       });
@@ -443,8 +444,8 @@ export default class xCloudApi {
                 // One request at a time: a slow answer must not stack up behind the next poll.
                 let polls = 0;
                 const poll = () => {
-                  if (this.isStoped) return reject(new Error("Oturum durduruldu"));
-                  if (++polls > MAX_EXCHANGE_POLLS) return reject(new Error("Xbox sunucusu bağlantı yanıtı göndermedi. Tekrar dene."));
+                  if (this.isStoped) return reject(new Error(t("Oturum durduruldu")));
+                  if (++polls > MAX_EXCHANGE_POLLS) return reject(new Error(t("Xbox sunucusu bağlantı yanıtı göndermedi. Tekrar dene.")));
                   this.get("/v5/sessions/" + this._type + "/" + sessionId + "/sdp")
                     .then((sdpResult2: any) => {
                       if (sdpResult2 && sdpResult2.exchangeResponse) {
@@ -507,8 +508,8 @@ export default class xCloudApi {
       this.get("/v5/sessions/" + this._type + "/" + sessionId + "/ice").then(
         (iceResult: exchangeResult | string) => {
           if (iceResult === "") {
-            if (this.isStoped) return reject(new Error("Oturum durduruldu"));
-            if (polls + 1 >= MAX_EXCHANGE_POLLS) return reject(new Error("Xbox sunucusu bağlantı adaylarını göndermedi. Tekrar dene."));
+            if (this.isStoped) return reject(new Error(t("Oturum durduruldu")));
+            if (polls + 1 >= MAX_EXCHANGE_POLLS) return reject(new Error(t("Xbox sunucusu bağlantı adaylarını göndermedi. Tekrar dene.")));
             setTimeout(() => {
               this.checkIce(sessionId, polls + 1)
                 .then((res) => {

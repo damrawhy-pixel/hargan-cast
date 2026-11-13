@@ -1,7 +1,11 @@
+import type { LanguageSetting, Message } from './i18n'
+
 export type VideoFormat = '' | 'Stretch' | 'Zoom' | '16:10' | '18:9' | '21:9' | '4:3'
 
 export interface AppSettings {
   // General
+  /** Interface language; '' follows the system. */
+  language: LanguageSetting
   startFullscreen: boolean
   fullscreenOnStream: boolean
   doubleClickFullscreen: boolean
@@ -91,6 +95,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  language: '',
   startFullscreen: false,
   fullscreenOnStream: true,
   doubleClickFullscreen: true,
@@ -172,7 +177,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 // Addresses Microsoft associates with each region.
-export const XBOX_REGIONS: [string, string][] = [
+export const XBOX_REGIONS: [string, Message][] = [
   ['', 'Varsayılan'],
   ['194.25.0.68', 'Avrupa'],
   ['4.2.2.2', 'Amerika Birleşik Devletleri'],
@@ -188,6 +193,7 @@ export const XBOX_REGIONS: [string, string][] = [
 
 // Fields whose value must be one of a fixed set.
 const CHOICES: { [K in keyof AppSettings]?: readonly AppSettings[K][] } = {
+  language: ['', 'tr', 'en'],
   motion: ['on', 'system', 'off'],
   touchControls: ['auto', 'on', 'off'],
   videoFormat: ['', 'Stretch', 'Zoom', '16:10', '18:9', '21:9', '4:3'],

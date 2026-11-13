@@ -6,12 +6,13 @@ import path from 'node:path'
 import readline from 'node:readline'
 import type { AppSettings } from '../../shared/settings'
 import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
+import { t } from '../../shared/i18n'
 import { log, safeUrl } from '../log'
 import SecureStore from '../secureStore'
 import {
-  CATALOG_WARNING,
+  catalogWarning,
   DEFAULT_CONTEXT,
-  SESSION_EXPIRED,
+  sessionExpired,
   SESSION_URL,
   SIGN_IN_PAGE_HOST,
   catalogContext,
@@ -87,7 +88,7 @@ export default class PlayStationService {
     const win = new BrowserWindow({
       width: 520,
       height: 720,
-      title: 'PlayStation hesabı',
+      title: t('PlayStation hesabı'),
       autoHideMenuBar: true,
       backgroundColor: '#ffffff',
       webPreferences: { partition: PARTITION, sandbox: true },
@@ -133,7 +134,7 @@ export default class PlayStationService {
     })
 
     win.loadURL(signInUrl(crypto.randomUUID())).catch(() => {
-      this.setStatus({ state: 'signedOut', error: 'Sony giriş sayfasına ulaşılamadı. Ağ bağlantını kontrol et.' })
+      this.setStatus({ state: 'signedOut', error: t('Sony giriş sayfasına ulaşılamadı. Ağ bağlantını kontrol et.') })
       win.destroy()
     })
   }
@@ -178,7 +179,7 @@ export default class PlayStationService {
       core.on('error', (e) => {
         clearTimeout(helloTimer)
         if (this.core === core) this.ready = undefined
-        reject(new Error(`PlayStation çekirdeği başlatılamadı: ${e.message}`))
+        reject(new Error(t('PlayStation çekirdeği başlatılamadı: {reason}', { reason: e.message })))
       })
       // A core that dies while a line is being written must not take the app with it.
       core.stdin.on('error', (e) => log(`ps core stdin: ${e.message}`))
@@ -187,14 +188,14 @@ export default class PlayStationService {
         log(`ps core exited (code ${code ?? '-'}, signal ${signal ?? '-'})`)
         for (const line of this.coreLog.slice(-CORE_LOG_ON_EXIT)) log(`ps core: ${line}`)
         // Rejecting is a no-op once hello has resolved it; before that it ends the wait.
-        reject(new Error('PlayStation çekirdeği beklenmedik şekilde kapandı'))
+        reject(new Error(t('PlayStation çekirdeği beklenmedik şekilde kapandı')))
         if (this.core !== core) return
         this.core = undefined
         this.media = undefined
         this.ready = undefined
         const orphaned = [...this.pending.values()]
         this.pending.clear()
-        orphaned.forEach((p) => p.reject(new Error('PlayStation çekirdeği beklenmedik şekilde kapandı')))
+        orphaned.forEach((p) => p.reject(new Error(t('PlayStation çekirdeği beklenmedik şekilde kapandı'))))
       })
 
       readline.createInterface({ input: core.stderr }).on('line', (line) => {
@@ -236,7 +237,7 @@ export default class PlayStationService {
 
   private expire() {
     this.vault.delete('npsso')
-    this.setStatus({ state: 'signedOut', error: SESSION_EXPIRED })
+    this.setStatus({ state: 'signedOut', error: sessionExpired() })
   }
 
   private write(core: ChildProcessWithoutNullStreams, message: Record<string, unknown>) {
@@ -246,7 +247,7 @@ export default class PlayStationService {
   /** Sends a command and waits for its reply; `timeoutMs` 0 waits as long as the core lives. */
   private call(cmd: string, args: Record<string, unknown>, timeoutMs = 0) {
     const core = this.core
-    if (!core) return Promise.reject(new Error('PlayStation çekirdeği çalışmıyor. Tekrar dene.'))
+    if (!core) return Promise.reject(new Error(t('PlayStation çekirdeği çalışmıyor. Tekrar dene.')))
     const id = this.nextId++
     return new Promise<any>((resolve, reject) => {
       const timer =
@@ -254,7 +255,7 @@ export default class PlayStationService {
           ? setTimeout(() => {
               if (!this.pending.delete(id)) return
               log(`ps core: ${cmd} timed out`)
-              reject(new Error('PlayStation çekirdeği yanıt vermedi. Tekrar dene.'))
+              reject(new Error(t('PlayStation çekirdeği yanıt vermedi. Tekrar dene.')))
             }, timeoutMs)
           : undefined
       this.pending.set(id, {
@@ -290,7 +291,7 @@ export default class PlayStationService {
     // The lib settles region and language; streaming must reuse them verbatim.
     if (catalog.settledLocale) this.vault.set('locale', catalog.settledLocale)
     this.context = catalogContext(catalog)
-    const warning = catalog.warning ? CATALOG_WARNING : ''
+    const warning = catalog.warning ? catalogWarning() : ''
     return { games: catalog.games ?? [], warning, nativeMode: catalog.nativeMode }
   }
 
@@ -309,7 +310,7 @@ export default class PlayStationService {
     this.vault.set('attrPassed', true)
     if (reply.datacenters) this.vault.set(key, reply.datacenters)
     const media = this.media
-    if (!media) throw new Error('PlayStation çekirdeği beklenmedik şekilde kapandı')
+    if (!media) throw new Error(t('PlayStation çekirdeği beklenmedik şekilde kapandı'))
     return {
       url: `ws://127.0.0.1:${media.port}/${media.token}`,
       codec: reply.codec,
