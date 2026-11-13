@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net, powerSaveBlocker, protocol, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, net, powerSaveBlocker, protocol, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { exportDiagnostics } from './diagnostics'
@@ -13,8 +13,28 @@ import XboxService from './xbox/service'
 // file:// has an opaque origin, which blocks module workers and audio worklets.
 // The renderer gets a real secure origin of its own instead.
 const APP_SCHEME = 'hargan'
-const CONTENT_SECURITY_POLICY =
-  "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:* https:"
+// The page itself talks only to the app and to the PlayStation core on loopback;
+// every service request goes through this process. Pictures come from the stores'
+// image hosts only.
+const IMAGE_HOSTS = ['https://*.s-microsoft.com', 'https://*.xboxlive.com', 'https://*.playstation.com', 'https://*.playstation.net']
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "worker-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: ${IMAGE_HOSTS.join(' ')}`,
+  "media-src 'self' blob:",
+  "connect-src 'self' ws://127.0.0.1:*",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-src 'none'",
+].join('; ')
+
+// What the interface may ask the browser for: the microphone for Xbox party chat,
+// pointer and keyboard lock for mouse-and-keyboard games, full screen and the
+// audio output picker. Sign-in windows get nothing.
+const RENDERER_PERMISSIONS = new Set(['media', 'pointerLock', 'keyboardLock', 'fullscreen', 'speaker-selection'])
 
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
@@ -144,9 +164,30 @@ function serveRenderer() {
   })
 }
 
+// Only the app's own page may call into this process; a frame from anywhere else
+// (a sign-in page, an injected iframe) is refused and logged.
+function trusted(e: IpcMainEvent | IpcMainInvokeEvent) {
+  const url = e.senderFrame?.url ?? ''
+  const dev = process.env.ELECTRON_RENDERER_URL
+  const ok = e.sender === win?.webContents && (url.startsWith(`${APP_SCHEME}://app/`) || (dev !== undefined && url.startsWith(dev)))
+  if (!ok) log(`ipc refused from ${url.split('?')[0] || 'unknown frame'}`)
+  return ok
+}
+
+const listen = (channel: string, handler: (...args: any[]) => void) =>
+  ipcMain.on(channel, (e, ...args) => {
+    if (trusted(e)) handler(...args)
+  })
+
+const handle = (channel: string, handler: (...args: any[]) => unknown) =>
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!trusted(e)) throw new Error('Not allowed')
+    return handler(...args)
+  })
+
 function registerIpc() {
-  ipcMain.on('app:fullscreen', (_e, on: boolean) => win?.setFullScreen(on))
-  ipcMain.on('app:streaming', (_e, on: boolean) => {
+  listen('app:fullscreen', (on: boolean) => win?.setFullScreen(on === true))
+  listen('app:streaming', (on: boolean) => {
     streaming = on
     applyWindowSettings()
     if (on && sleepBlocker === undefined) sleepBlocker = powerSaveBlocker.start('prevent-display-sleep')
@@ -155,16 +196,16 @@ function registerIpc() {
       sleepBlocker = undefined
     }
   })
-  ipcMain.on('app:toggleFullscreen', () => win?.setFullScreen(!win.isFullScreen()))
-  ipcMain.on('app:licenses', () => {
+  listen('app:toggleFullscreen', () => win?.setFullScreen(!win.isFullScreen()))
+  listen('app:licenses', () => {
     const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
     void shell.openPath(path.join(base, 'NOTICE.md'))
   })
-  ipcMain.on('app:external', (_e, url: unknown) => {
+  listen('app:external', (url: unknown) => {
     if (typeof url === 'string' && url.startsWith('https://')) void shell.openExternal(url)
   })
-  ipcMain.on('app:error', (_e, text: unknown) => log(`renderer: ${String(text).slice(0, 4000)}`))
-  ipcMain.handle('app:diagnostics', () => exportDiagnostics(win, settings.get()))
+  listen('app:error', (text: unknown) => log(`renderer: ${String(text).slice(0, 4000)}`))
+  handle('app:diagnostics', () => exportDiagnostics(win, settings.get()))
 
   const routes: Record<string, (...args: any[]) => unknown> = {
     'xbox:status': () => xbox.status(),
@@ -208,7 +249,28 @@ function registerIpc() {
     'ps:info': (game) => ps.info(game),
     'ps:routeSpeaker': () => ps.routeSpeaker(),
   }
-  for (const [channel, handler] of Object.entries(routes)) ipcMain.handle(channel, (_e, ...args) => handler(...args))
+  for (const [channel, handler] of Object.entries(routes)) handle(channel, handler)
+}
+
+// Every web page the app opens, the interface and the sign-in windows alike: no
+// pop-ups (an https link goes to the user's browser), no <webview>, no navigation
+// off https, and no browser permissions beyond what the interface needs.
+app.on('web-contents-created', (_e, contents) => {
+  contents.on('will-attach-webview', (e) => e.preventDefault())
+  contents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  contents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('https://')) e.preventDefault()
+  })
+})
+
+function restrictPermissions() {
+  const allow = (contents: Electron.WebContents | null, permission: string) => contents === win?.webContents && RENDERER_PERMISSIONS.has(permission)
+  for (const ses of [session.defaultSession, session.fromPartition('persist:xbox'), session.fromPartition('persist:playstation')]) {
+    ses.setPermissionRequestHandler((contents, permission, callback) => callback(allow(contents, permission)))
+  }
 }
 
 app.setAppUserModelId('app.hargan.cast')
@@ -222,6 +284,7 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   serveRenderer()
+  restrictPermissions()
 
   settings = new SettingsStore()
   applyLanguage(settings.get())
