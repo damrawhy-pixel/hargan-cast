@@ -7,7 +7,6 @@ const STORE_KEY = 'user.streamToken';
 export const saveStreamToken = (token: any) => {
   try {
     store.set(STORE_KEY, token);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (e) {
     store.set(STORE_KEY, {});
   }

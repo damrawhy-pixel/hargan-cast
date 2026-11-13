@@ -1,0 +1,61 @@
+name: CI
+
+# Every push and pull request: types, lint, unit tests and the bundles build;
+# on Windows the PlayStation core builds and its DualSense format tests run.
+# Release builds (release.yml) and phone builds (mobile.yml) stay separate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Types, lint and unit tests
+    runs-on: ubuntu-latest
+    env:
+      # Nothing here launches the desktop shell.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Desktop and phone bundles build
+        run: |
+          npx electron-vite build
+          npm run build:mobile
+
+  native:
+    name: PlayStation core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Toolchain
+        shell: pwsh
+        run: |
+          $v = '20260616'
+          Invoke-WebRequest "https://github.com/mstorsjo/llvm-mingw/releases/download/$v/llvm-mingw-$v-ucrt-x86_64.zip" -OutFile "$env:RUNNER_TEMP\llvm-mingw.zip"
+          Expand-Archive "$env:RUNNER_TEMP\llvm-mingw.zip" -DestinationPath C:\llvm-mingw
+          "C:\llvm-mingw\llvm-mingw-$v-ucrt-x86_64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          choco install ninja --no-progress -y
+      - name: Build the core
+        run: node scripts/build-native.mjs
+      - name: DualSense format tests
+        run: node scripts/build-native.mjs --test

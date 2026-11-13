@@ -1,0 +1,31 @@
+# Weekly update pull requests. Each waits two weeks after a release before
+# proposing it, so a broken or hijacked version has time to be caught upstream.
+# CI (ci.yml) runs on every one; Electron majors still need a manual try of a
+# real stream before merging.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    groups:
+      capacitor:
+        patterns: ['@capacitor/*']
+      lint-and-test:
+        patterns: ['eslint', '@eslint/*', 'typescript-eslint', 'eslint-plugin-*', 'globals', 'vitest']
+      build-tools:
+        patterns: ['vite', '@vitejs/*', 'electron-vite', 'electron-builder', 'typescript', '@types/*']
+    ignore:
+      # The Xbox player is pinned to the build the stream code was written against.
+      - dependency-name: xstreaming-player
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
