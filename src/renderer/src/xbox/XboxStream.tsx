@@ -12,6 +12,9 @@ const KEEPALIVE_MS = 30_000
 const STATS_MS = 1000
 const RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 1500
+// Getting a server can take a while, and a queue as long as Microsoft says; but
+// a session that is neither queued nor started after this long is not coming.
+const PROVISION_TIMEOUT_MS = 3 * 60_000
 const H264_PROFILES = { high: '4d', main: '42e', baseline: '420' }
 
 // Paints each new video frame, post-processed, onto a canvas laid over the video.
@@ -200,9 +203,20 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     }
 
     const watch = () => {
+      let since = Date.now()
+      let busy = false
       poll = setInterval(async () => {
-        const session = await xbox.session(sessionId)
+        if (busy) return
+        busy = true
+        const session = await xbox.session(sessionId).catch(() => undefined).finally(() => (busy = false))
+        if (disposed) return
+        if (session === undefined) return
         if (!session) return leave('Oturum sunucuda sonlandı')
+        if (session.state === 'WaitingForResources') since = Date.now()
+        else if (session.playerState !== 'started' && Date.now() - since > PROVISION_TIMEOUT_MS) {
+          clearInterval(poll)
+          return leave('Sunucu zamanında hazır olmadı. Tekrar dene.')
+        }
         if (session.playerState === 'failed') {
           clearInterval(poll)
           leave(session.error ?? 'Oturum başlatılamadı')

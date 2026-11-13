@@ -10,7 +10,7 @@ export default class TokenStore {
     _userToken:UserToken | undefined
     _sisuToken:SisuToken | undefined
     _jwtKeys:any
-    _tokenUpdateTime: number
+    _tokenUpdateTime!: number
 
     // Sub-Tokens
     load(filepath:string, silent = false) {

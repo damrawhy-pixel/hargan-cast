@@ -12,6 +12,9 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error?: Er
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('Hargan Cast interface error', error, info.componentStack)
+    window.hc?.platform.reportError?.(`interface: ${error.name}: ${error.message}
+${error.stack ?? ''}
+${info.componentStack ?? ''}`)
   }
 
   render() {

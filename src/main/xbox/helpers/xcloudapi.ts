@@ -36,7 +36,7 @@ export default class xCloudApi {
   _token: string;
   _type: "home" | "cloud";
 
-  _sessionPath: string;
+  _sessionPath!: string;
 
   _exchangeCounter = 0;
   _exchangeUrl = "";
@@ -524,7 +524,7 @@ export default class xCloudApi {
           } else {
             const _iceResult = iceResult as exchangeResult;
             const exchangeIce = JSON.parse(_iceResult.exchangeResponse);
-            const computedCandidates = [];
+            const computedCandidates: any[] = [];
 
             // Find Teredo Address and extract remote ip
             for (const candidate in exchangeIce) {
@@ -571,14 +571,15 @@ export default class xCloudApi {
               /^(?:a=)?candidate:(?<foundation>\d+) (?<component>\d+) (?<protocol>\w+) (?<priority>\d+) (?<ip>[^\s]+) (?<port>\d+) (?<the_rest>.*)/
             );
 
-            const lst = [];
+            const lst: any[] = [];
             for (const item of computedCandidates) {
               if (item.candidate === "a=end-of-candidates") {
                 continue;
               }
 
-              const groups = pattern.exec(item.candidate).groups;
-              lst.push(groups);
+              // A line in a shape this parser does not know is passed over.
+              const groups = pattern.exec(item.candidate)?.groups;
+              if (groups) lst.push(groups);
             }
 
             // PerferIPV6
@@ -593,7 +594,7 @@ export default class xCloudApi {
               });
             }
 
-            const newCandidates = [];
+            const newCandidates: any[] = [];
             let foundation = 1;
 
             const newCandidate = (candidate) => {

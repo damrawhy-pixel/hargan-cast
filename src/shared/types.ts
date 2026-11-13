@@ -116,7 +116,7 @@ export type PsEvent =
   | { ev: 'dualsense'; transport?: 'usb' | 'bluetooth' }
 
 export interface HarganApi {
-  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void }
+  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined> }
   settings: {
     get(): Promise<AppSettings>
     set(patch: Partial<AppSettings>): Promise<AppSettings>

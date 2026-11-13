@@ -26,7 +26,7 @@ export default class TitleManager {
     _http:HTTP
 
     _xCloudTitles = {}
-    _productIdQueue = []
+    _productIdQueue: any[] = []
 
     _xCloudRecentTitles = {}
     _xCloudRecentTitlesLastUpdate = 0
@@ -38,7 +38,7 @@ export default class TitleManager {
     }
     getGamePassProducts(titles) {
         return new Promise((resolve) => {
-            const productIdQueue = [];
+            const productIdQueue: any[] = [];
             const v2TitleMap = {};
             if (!Array.isArray(titles)) {
                 resolve([]);
@@ -59,7 +59,7 @@ export default class TitleManager {
         })
     }
 
-    getCatalogGames(products = [], v2TitleMap = {}) {
+    getCatalogGames(products: any[] = [], v2TitleMap: Record<string, any> = {}) {
         const settings: any = this._application._store.get(
                 "settings",
                 defaultSettings
@@ -86,7 +86,7 @@ export default class TitleManager {
                     console.log('POST catalog.gamepass.com/v3/products success')
                     if (res.data && res.data.Products) {
                     const products = res.data.Products;
-                    let mergedTitles = [];
+                    let mergedTitles: any[] = [];
                     for (const key in products) {
                         if (v2TitleMap[key]) {
                         mergedTitles.push({

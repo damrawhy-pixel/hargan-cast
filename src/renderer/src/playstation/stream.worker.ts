@@ -38,6 +38,10 @@ const REQUEST_KEY_FRAME = new Uint8Array([2])
 const CODECS = { h264: 'avc1.640033', h265: 'hev1.1.6.L153.B0' }
 // Decoder failures in a row before giving up on the hardware path, then on the stream.
 const DECODER_RETRIES = 3
+// Frames waiting in the decoder before the stream is cut back to the next key
+// frame: a slow decoder must cost a skip, not a growing delay.
+const MAX_DECODE_QUEUE = 6
+const KEY_FRAME_REQUEST_MS = 1000
 
 let ws: WebSocket | undefined
 let decoder: VideoDecoder | undefined
@@ -55,6 +59,7 @@ let firstFrame = true
 let decoderFailures = 0
 let closing = false
 let finished = false
+let lastKeyRequest = 0
 
 let frames = 0
 let bytes = 0
@@ -113,7 +118,7 @@ function createDecoder() {
       }
       waitingForKey = true
       createDecoder()
-      if (ws?.readyState === WebSocket.OPEN) ws.send(REQUEST_KEY_FRAME)
+      requestKeyFrame()
     },
   })
   decoder.configure({ codec: codecString, hardwareAcceleration: hardware, optimizeForLatency: true })
@@ -128,7 +133,19 @@ function onVideo(view: DataView, data: Uint8Array) {
   }
   timestamp += 16667
   if (decoder?.state !== 'configured') return
+  if (!key && decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
+    waitingForKey = true
+    requestKeyFrame()
+    return
+  }
   decoder.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp, data: data.subarray(6) }))
+}
+
+function requestKeyFrame() {
+  const now = performance.now()
+  if (now - lastKeyRequest < KEY_FRAME_REQUEST_MS || ws?.readyState !== WebSocket.OPEN) return
+  lastKeyRequest = now
+  ws.send(REQUEST_KEY_FRAME)
 }
 
 function onMessage(e: MessageEvent<ArrayBuffer>) {

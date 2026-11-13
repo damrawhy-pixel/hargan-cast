@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, net, powerSaveBlocker, protocol, shell } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { exportDiagnostics } from './diagnostics'
+import { log } from './log'
 import PlayStationService from './playstation/service'
 import SettingsStore, { readBootSettings } from './settings'
 import { startUpdates } from './updates'
@@ -19,9 +21,15 @@ protocol.registerSchemesAsPrivileged([
 // The ported Xbox layer logs freely; nothing it says may land in a user's log capture.
 if (app.isPackaged) console.log = console.warn = console.error = () => {}
 
+// A stray throw in a callback must leave a trace, not a silent half-working app.
+process.on('uncaughtException', (e) => log(`main uncaught: ${e.stack ?? e}`))
+process.on('unhandledRejection', (reason) => log(`main unhandled rejection: ${(reason as Error)?.stack ?? reason}`))
+
+const boot = readBootSettings()
+
 // Dual-GPU laptops and desktops must decode on the discrete card.
 app.commandLine.appendSwitch('force_high_performance_gpu')
-app.commandLine.appendSwitch('ignore-gpu-blocklist')
+if (boot.ignoreGpuBlocklist) app.commandLine.appendSwitch('ignore-gpu-blocklist')
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
@@ -29,7 +37,7 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding')
 // launcher and rails glide regardless, and the app's own setting governs the rest.
 app.commandLine.appendSwitch('enable-smooth-scrolling')
 const features = ['PlatformHEVCDecoderSupport', 'D3D11VideoDecoder']
-if (readBootSettings().useVulkan) {
+if (boot.useVulkan) {
   app.commandLine.appendSwitch('use-vulkan')
   features.push('Vulkan', 'VulkanFromANGLE', 'DefaultANGLEVulkan')
 }
@@ -43,6 +51,11 @@ let xbox: XboxService
 let ps: PlayStationService
 let settings: SettingsStore
 let sleepBlocker: number | undefined
+let rendererRestarts: number[] = []
+let gpuCrashes = 0
+const RENDERER_RESTART_WINDOW_MS = 5 * 60_000
+const MAX_RENDERER_RESTARTS = 3
+const GPU_CRASHES_BEFORE_SAFE_MODE = 3
 let streaming = false
 
 const send = (channel: string, payload: unknown) => win?.webContents.send(channel, payload)
@@ -81,6 +94,25 @@ function createWindow() {
   win.once('ready-to-show', () => win?.show())
   win.webContents.on('did-finish-load', applyWindowSettings)
   win.on('closed', () => (win = undefined))
+  win.on('unresponsive', () => log('window unresponsive'))
+  win.on('responsive', () => log('window responsive again'))
+  // The interface process can die (driver fault, out of memory). Bring it back a
+  // few times; after that, leave the crash visible rather than looping.
+  win.webContents.on('render-process-gone', (_e, details) => {
+    log(`renderer gone: ${details.reason} (exit ${details.exitCode})`)
+    if (details.reason === 'clean-exit' || !win) return
+    const now = Date.now()
+    rendererRestarts = rendererRestarts.filter((t) => now - t < RENDERER_RESTART_WINDOW_MS)
+    if (rendererRestarts.length >= MAX_RENDERER_RESTARTS) return log('renderer keeps crashing; not reloading again')
+    rendererRestarts.push(now)
+    // The page that owned a stream is gone; nothing will stop it otherwise.
+    void ps.stop()
+    void xbox.stopActive()
+    streaming = false
+    if (sleepBlocker !== undefined) powerSaveBlocker.stop(sleepBlocker)
+    sleepBlocker = undefined
+    win.webContents.reload()
+  })
 
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -98,7 +130,7 @@ function serveRenderer() {
   const root = path.join(__dirname, '../renderer')
   protocol.handle(APP_SCHEME, async (request) => {
     const file = path.normalize(path.join(root, decodeURIComponent(new URL(request.url).pathname)))
-    if (!file.startsWith(root)) return new Response(null, { status: 403 })
+    if (!file.startsWith(root + path.sep)) return new Response(null, { status: 403 })
     const response = await net.fetch(pathToFileURL(file).toString())
     const headers = new Headers(response.headers)
     headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY)
@@ -122,9 +154,11 @@ function registerIpc() {
     const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
     void shell.openPath(path.join(base, 'NOTICE.md'))
   })
-  ipcMain.on('app:external', (_e, url: string) => {
-    if (url.startsWith('https://')) shell.openExternal(url)
+  ipcMain.on('app:external', (_e, url: unknown) => {
+    if (typeof url === 'string' && url.startsWith('https://')) void shell.openExternal(url)
   })
+  ipcMain.on('app:error', (_e, text: unknown) => log(`renderer: ${String(text).slice(0, 4000)}`))
+  ipcMain.handle('app:diagnostics', () => exportDiagnostics(win, settings.get()))
 
   const routes: Record<string, (...args: any[]) => unknown> = {
     'xbox:status': () => xbox.status(),
@@ -193,6 +227,17 @@ app.whenReady().then(() => {
   registerIpc()
   createWindow()
   startUpdates()
+})
+
+// A GPU process that keeps dying usually means a driver that dislikes the
+// switches the user opted into; the next start goes without them.
+app.on('child-process-gone', (_e, details) => {
+  log(`${details.type} process gone: ${details.reason} (exit ${details.exitCode})`)
+  if (details.type !== 'GPU' || details.reason === 'clean-exit') return
+  const current = settings?.get()
+  if (++gpuCrashes < GPU_CRASHES_BEFORE_SAFE_MODE || !current || (!current.useVulkan && !current.ignoreGpuBlocklist)) return
+  settings.update({ useVulkan: false, ignoreGpuBlocklist: false })
+  log('graphics keeps crashing: Vulkan and the GPU blocklist override are off from the next start')
 })
 
 app.on('window-all-closed', () => app.quit())

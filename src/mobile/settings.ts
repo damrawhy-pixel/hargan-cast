@@ -1,5 +1,5 @@
 import { Preferences } from '@capacitor/preferences'
-import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings'
+import { DEFAULT_SETTINGS, sanitizeSettings, type AppSettings } from '../shared/settings'
 
 const KEY = 'settings'
 const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
@@ -15,10 +15,11 @@ async function stored(): Promise<Partial<AppSettings>> {
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  return { ...DEFAULT_SETTINGS, ...(await stored()) }
+  return { ...DEFAULT_SETTINGS, ...sanitizeSettings(await stored()) }
 }
 
-export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+export async function setSettings(input: Partial<AppSettings>): Promise<AppSettings> {
+  const patch = sanitizeSettings(input)
   if (patch.xboxRegionIp !== undefined) {
     patch.xboxRegionIp = patch.xboxRegionIp.trim()
     // Goes straight into an HTTP header, so only a bare address may pass.

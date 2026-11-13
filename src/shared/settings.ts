@@ -9,6 +9,8 @@ export interface AppSettings {
   showGameImage: boolean
   backgroundKeepalive: boolean
   useVulkan: boolean
+  /** Forces GPU features on drivers Chromium distrusts; off by default since it can crash them. */
+  ignoreGpuBlocklist: boolean
   fontSize: number
   uiSounds: boolean
   /** 'system' follows Windows' "Animation effects" switch. */
@@ -96,6 +98,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showGameImage: true,
   backgroundKeepalive: false,
   useVulkan: false,
+  ignoreGpuBlocklist: false,
   fontSize: 15,
   uiSounds: true,
   motion: 'on',
@@ -180,3 +183,67 @@ export const XBOX_REGIONS: [string, string][] = [
   ['104.211.224.146', 'Güney Hindistan'],
   ['104.211.96.159', 'Orta Hindistan'],
 ]
+
+// --- validation --------------------------------------------------------------
+
+// Fields whose value must be one of a fixed set.
+const CHOICES: { [K in keyof AppSettings]?: readonly AppSettings[K][] } = {
+  motion: ['on', 'system', 'off'],
+  touchControls: ['auto', 'on', 'off'],
+  videoFormat: ['', 'Stretch', 'Zoom', '16:10', '18:9', '21:9', '4:3'],
+  videoDecoder: ['prefer-hardware', 'prefer-software', 'no-preference'],
+  psCodec: ['auto', 'h264', 'h265'],
+  xboxCodec: ['', 'high', 'main', 'baseline'],
+  xboxTriggerRumble: ['', 'all', 'left', 'right'],
+}
+
+// Numeric fields and the range the settings page offers. Anything else numeric
+// (resolutions, bit rates, indexes) only has to be a finite number in a sane span.
+const RANGES: { [K in keyof AppSettings]?: [number, number] } = {
+  fontSize: [12, 20],
+  touchOpacity: [15, 100],
+  touchSize: [70, 140],
+  brightness: [50, 150],
+  contrast: [50, 150],
+  saturation: [0, 200],
+  audioVolume: [0, 100],
+  psAudioBufferMs: [10, 100],
+  psFsrSharpness: [0, 10],
+  psPacketLossMax: [1, 30],
+  psDeadZone: [0, 30],
+  psHapticStrength: [0, 100],
+  xboxFsrSharpness: [0, 10],
+  xboxDeadZone: [0, 90],
+  xboxGamepadIndex: [-1, 3],
+  xboxAudioRumbleThreshold: [0.01, 0.5],
+  xboxMouseSensitivity: [0.1, 5],
+}
+const NUMBER_SPAN = 1_000_000
+const MAX_TEXT = 512
+
+/**
+ * Keeps only known fields holding a value of the right kind; numbers are pulled
+ * into their range. Used on every change and on what is read back from disk, so
+ * a stray value from the page or an older version can never reach a service.
+ */
+export function sanitizeSettings(input: unknown): Partial<AppSettings> {
+  const out: Record<string, unknown> = {}
+  if (!input || typeof input !== 'object') return out
+  for (const [key, value] of Object.entries(input)) {
+    if (!(key in DEFAULT_SETTINGS)) continue
+    const field = key as keyof AppSettings
+    const fallback = DEFAULT_SETTINGS[field]
+    if (typeof value !== typeof fallback) continue
+    const choices = CHOICES[field] as readonly unknown[] | undefined
+    if (choices && !choices.includes(value)) continue
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) continue
+      const [min, max] = RANGES[field] ?? [-NUMBER_SPAN, NUMBER_SPAN]
+      out[key] = Math.min(max, Math.max(min, value))
+    } else if (typeof value === 'string') {
+      if (value.length > MAX_TEXT) continue
+      out[key] = value
+    } else out[key] = value
+  }
+  return out as Partial<AppSettings>
+}

@@ -197,6 +197,20 @@ function XboxRegion() {
   )
 }
 
+// Versions, graphics status, settings and the recent log in one file for a bug report.
+function Diagnostics() {
+  const [saved, setSaved] = useState<string>()
+  const save = async () => {
+    const file = await window.hc.platform.exportDiagnostics?.().catch(() => undefined)
+    if (file) setSaved(file)
+  }
+  return (
+    <Row label="Tanılama dosyası" hint={saved ? `Kaydedildi: ${saved}` : 'Bir sorun bildirirken ekle. Hesap bilgisi ve şifre içermez.'}>
+      <button className="ghost" data-nav onClick={() => void save()}>Kaydet</button>
+    </Row>
+  )
+}
+
 function Accounts({ onAbout }: { onAbout(): void }) {
   const [xbox, setXbox] = useState<XboxStatus>()
   const [ps, setPs] = useState<PsStatus>()
@@ -220,6 +234,7 @@ function Accounts({ onAbout }: { onAbout(): void }) {
       </Row>
       <Row label="Hakkında" hint="Sürüm, lisanslar ve yasal bildirimler"><button className="ghost" data-nav onClick={onAbout}>Aç</button></Row>
       <Row label="Varsayılanlara dön" hint="Hesaplarına dokunmaz."><button className="ghost" data-nav onClick={() => void resetSettings()}>Sıfırla</button></Row>
+      {window.hc.platform.exportDiagnostics && <Diagnostics />}
     </>
   )
 }
@@ -276,6 +291,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
               <>
                 <Toggle field="backgroundKeepalive" label="Arka planda canlı tut" hint="Pencere arkadayken de akış yavaşlatılmaz." />
                 <Toggle field="useVulkan" label="Vulkan" hint="Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur." />
+                <Toggle field="ignoreGpuBlocklist" label="Ekran kartı kara listesini yok say" hint="Chromium'un sorunlu saydığı sürücülerde de donanım hızlandırmayı zorlar. Çökme yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur." />
               </>
             )}
             <h3>İstatistikler</h3>

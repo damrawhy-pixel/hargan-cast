@@ -331,21 +331,22 @@ export default class Authentication {
         ],
       },
       (details, callback) => {
+        const location = details.responseHeaders?.Location?.[0];
         if (
-          details.responseHeaders.Location !== undefined &&
-          details.responseHeaders.Location[0].includes(
+          location !== undefined &&
+          location.includes(
             this._xal._app.RedirectUri
           )
         ) {
           this._application.log(
             "authenticationV2",
             "[startWebviewHooks()] Got redirect URI from OAUTH:",
-            details.responseHeaders.Location[0]
+            location
           );
           this._authWindow.close();
 
           if (this._authCallback !== undefined) {
-            this._authCallback(details.responseHeaders.Location[0]);
+            this._authCallback(location);
           } else {
             this._application.log(
               "authenticationV2",
@@ -431,8 +432,8 @@ export default class Authentication {
             settings.force_region_ip
           );
         } catch (error) {
-          this._application.cloudTokenFailed(error);
-          this._xal._xcloudToken = null;
+          this._application.cloudTokenFailed(error as Error);
+          this._xal._xcloudToken = undefined;
         }
       }
     }

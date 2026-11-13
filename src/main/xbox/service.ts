@@ -98,7 +98,7 @@ export default class XboxService {
   cloudTokenFailed(error: Error) {
     const details = error?.message?.match(/Details:(\{[\s\S]*\})/)?.[1]
     try {
-      const { statuscode, body } = JSON.parse(details)
+      const { statuscode, body } = JSON.parse(details ?? '')
       this._cloudError = `HTTP ${statuscode}: ${String(body).slice(0, 300)}`
     } catch {
       this._cloudError = String(error?.message ?? error).slice(0, 300)
