@@ -169,7 +169,8 @@ export default class PlayStationService {
   private ensureCore() {
     if (this.ready) return this.ready
     this.ready = new Promise<void>((resolve, reject) => {
-      const core = spawn(this.corePath(), [], { windowsHide: true })
+      // A crash leaves a small minidump next to the app's own (see crash_dump.c).
+      const core = spawn(this.corePath(), [], { windowsHide: true, env: { ...process.env, HC_DUMP_DIR: app.getPath('crashDumps') } })
       this.core = core
       const helloTimer = setTimeout(() => {
         log('ps core: no hello in time')

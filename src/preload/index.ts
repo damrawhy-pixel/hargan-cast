@@ -18,6 +18,7 @@ const api: HarganApi = {
     streaming: (on) => ipcRenderer.send('app:streaming', on),
     openExternal: (url) => ipcRenderer.send('app:external', url),
     openLicenses: () => ipcRenderer.send('app:licenses'),
+    log: (text) => ipcRenderer.send('app:log', String(text).slice(0, 1000)),
     reportError: (text) => ipcRenderer.send('app:error', String(text).slice(0, 4000)),
     exportDiagnostics: () => ipcRenderer.invoke('app:diagnostics'),
   },

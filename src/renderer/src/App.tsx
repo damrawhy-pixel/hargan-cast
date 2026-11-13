@@ -112,7 +112,10 @@ export function App() {
 
   const finish = (error?: string) => {
     transition(() => setStream(undefined))
-    if (error) showToast(error)
+    if (error) {
+      window.hc.platform.log?.(`stream ended: ${error}`)
+      showToast(error)
+    }
   }
 
   return (

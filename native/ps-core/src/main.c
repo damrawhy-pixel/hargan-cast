@@ -7,6 +7,7 @@
 // Media:   loopback WebSocket, see media_server.h.
 
 #include "controller_io.h"
+#include "crash_dump.h"
 #include "curl_http.h"
 #include "dualsense.h"
 #include "haptics.h"
@@ -925,6 +926,7 @@ static void handle_command(const char *line)
 
 int main(void)
 {
+	crash_dump_install();
 	_setmode(_fileno(stdin), _O_BINARY);
 	_setmode(_fileno(stdout), _O_BINARY);
 	InitializeCriticalSection(&out_lock);

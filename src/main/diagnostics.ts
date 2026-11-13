@@ -10,6 +10,31 @@ import { t } from '../shared/i18n'
 
 const PRIVATE_SETTINGS: (keyof AppSettings)[] = ['xboxTurnUsername', 'xboxTurnCredential']
 
+// Names, sizes and times only: a dump holds process memory, so it is never copied
+// into the report. The user can attach one from the folder if asked.
+function listDumps() {
+  const root = app.getPath('crashDumps')
+  const found: string[] = []
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[] = []
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const file = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(file)
+      else if (entry.name.endsWith('.dmp')) {
+        const stat = fs.statSync(file)
+        found.push(`${stat.mtime.toISOString()}  ${Math.round(stat.size / 1024)} KB  ${path.relative(root, file)}`)
+      }
+    }
+  }
+  walk(root)
+  return [root, ...(found.length ? found.sort().reverse().slice(0, 20) : ['-'])].join('\n')
+}
+
 function readLog(file: string) {
   try {
     return fs.readFileSync(file, 'utf8')
@@ -39,6 +64,7 @@ export async function exportDiagnostics(win: BrowserWindow | undefined, settings
     `Dil ${app.getLocale()}, kurulu: ${app.isPackaged}`,
     `\n== Grafik ==\n${JSON.stringify(gpu, null, 1)}`,
     `\n== Ayarlar ==\n${JSON.stringify(shown, null, 1)}`,
+    `\n== Çökme dökümleri ==\n${listDumps()}`,
     `\n== Önceki log ==\n${readLog(`${logFile()}.1`)}`,
     `\n== Log ==\n${readLog(logFile())}`,
   ]

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net, powerSaveBlocker, protocol, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, crashReporter, ipcMain, net, powerSaveBlocker, protocol, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { exportDiagnostics } from './diagnostics'
@@ -42,6 +42,10 @@ protocol.registerSchemesAsPrivileged([
 
 // The ported Xbox layer logs freely; nothing it says may land in a user's log capture.
 if (app.isPackaged) console.log = console.warn = console.error = () => {}
+
+// Crashes of any of the app's processes leave a minidump in the crashDumps folder.
+// Nothing is uploaded; the diagnostics file lists them so a user can choose to send one.
+crashReporter.start({ uploadToServer: false, compress: true })
 
 // A stray throw in a callback must leave a trace, not a silent half-working app.
 process.on('uncaughtException', (e) => log(`main uncaught: ${e.stack ?? e}`))
@@ -204,6 +208,7 @@ function registerIpc() {
   listen('app:external', (url: unknown) => {
     if (typeof url === 'string' && url.startsWith('https://')) void shell.openExternal(url)
   })
+  listen('app:log', (text: unknown) => log(String(text).slice(0, 1000)))
   listen('app:error', (text: unknown) => log(`renderer: ${String(text).slice(0, 4000)}`))
   handle('app:diagnostics', () => exportDiagnostics(win, settings.get()))
 

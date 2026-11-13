@@ -86,7 +86,52 @@ function useTouchControls() {
   return MOBILE && (mode === 'on' || (mode === 'auto' && !padInUse))
 }
 
+// One line per stream in the log (time to picture, frame rate, bit rate, loss,
+// latency), so "it stuttered yesterday" can be looked up afterwards.
+function useSessionReport(platform: string, title: string, live: boolean, stats?: StreamStats) {
+  const started = useRef(Date.now())
+  const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, decode: 0, decodeSamples: 0, lost: 0, size: '', liveAt: 0 })
+
+  useEffect(() => {
+    if (live && !totals.current.liveAt) totals.current.liveAt = Date.now()
+  }, [live])
+
+  useEffect(() => {
+    if (!stats || !live) return
+    const t = totals.current
+    t.samples++
+    t.fps += stats.fps
+    t.minFps = Math.min(t.minFps, stats.fps)
+    t.mbps += stats.mbps
+    if (stats.rttMs !== undefined) {
+      t.rtt += stats.rttMs
+      t.rttSamples++
+    }
+    if (stats.decodeMs !== undefined) {
+      t.decode += stats.decodeMs
+      t.decodeSamples++
+    }
+    t.lost = Math.max(t.lost, stats.lost)
+    if (stats.size) t.size = stats.size
+  }, [stats, live])
+
+  useEffect(
+    () => () => {
+      const t = totals.current
+      const avg = (sum: number, n: number) => (n ? (sum / n).toFixed(1) : '-')
+      const seconds = Math.round((Date.now() - started.current) / 1000)
+      const toPicture = t.liveAt ? `${((t.liveAt - started.current) / 1000).toFixed(1)} s` : 'never'
+      window.hc.platform.log?.(
+        `stream ${platform} "${title}": ${seconds} s, picture after ${toPicture}, fps avg ${avg(t.fps, t.samples)} min ${t.samples ? t.minFps : '-'}, ` +
+          `${avg(t.mbps, t.samples)} Mb/s, lost ${t.lost}, rtt ${avg(t.rtt, t.rttSamples)} ms, decode ${avg(t.decode, t.decodeSamples)} ms, ${t.size || '-'}`,
+      )
+    },
+    [platform, title],
+  )
+}
+
 export function StreamShell({ platform, title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
+  useSessionReport(platform, title, live, stats)
   const touch = useTouchControls()
   const settings = getSettings()
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
