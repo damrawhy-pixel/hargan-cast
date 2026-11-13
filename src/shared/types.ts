@@ -47,6 +47,19 @@ export interface XboxSession {
 }
 
 /** What a game's page shows, gathered from the stores. */
+export interface NetworkProbe {
+  name: string
+  host: string
+  rttMs?: number
+  jitterMs?: number
+  failed?: boolean
+}
+
+export interface NetworkReport {
+  adapter?: { name: string; kind: 'wired' | 'wifi' | 'other'; linkSpeed?: string }
+  probes: NetworkProbe[]
+}
+
 export interface GameInfo {
   description?: string
   developer?: string
@@ -116,7 +129,7 @@ export type PsEvent =
   | { ev: 'dualsense'; transport?: 'usb' | 'bluetooth' }
 
 export interface HarganApi {
-  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined> }
+  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined>; networkTest?(): Promise<NetworkReport> }
   settings: {
     get(): Promise<AppSettings>
     set(patch: Partial<AppSettings>): Promise<AppSettings>

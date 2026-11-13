@@ -2,8 +2,9 @@ import { app, BrowserWindow, crashReporter, ipcMain, net, powerSaveBlocker, prot
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { exportDiagnostics } from './diagnostics'
+import { networkTest } from './network'
 import { log } from './log'
-import { resolveLanguage, setLanguage } from '../shared/i18n'
+import { resolveLanguage, setLanguage, t } from '../shared/i18n'
 import type { AppSettings } from '../shared/settings'
 import PlayStationService from './playstation/service'
 import SettingsStore, { readBootSettings } from './settings'
@@ -211,6 +212,17 @@ function registerIpc() {
   listen('app:log', (text: unknown) => log(String(text).slice(0, 1000)))
   listen('app:error', (text: unknown) => log(`renderer: ${String(text).slice(0, 4000)}`))
   handle('app:diagnostics', () => exportDiagnostics(win, settings.get()))
+  handle('app:networkTest', async () => {
+    // Sony's stream servers are only known once a stream has measured them; until
+    // then its account server stands in for the route to Sony.
+    const targets: [string, string][] = [[t('PlayStation hesap sunucusu'), 'https://ca.account.sony.com/']]
+    const region = xbox.regionUrl()
+    if (region) targets.unshift([t('Xbox bulut bölgesi'), region])
+    const report = await networkTest(targets)
+    const measured = [...ps.datacenters('pscloud'), ...ps.datacenters('psnow')].filter((d) => d.rttMs !== undefined).slice(0, 3)
+    for (const d of measured) report.probes.push({ name: t('PlayStation veri merkezi (son akış)'), host: d.name, rttMs: d.rttMs })
+    return report
+  })
 
   const routes: Record<string, (...args: any[]) => unknown> = {
     'xbox:status': () => xbox.status(),

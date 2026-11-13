@@ -252,6 +252,12 @@ export default class XboxService {
       }))
   }
 
+  /** The cloud region this account streams through, when it has one. */
+  regionUrl(): string | undefined {
+    const token = this.streamingTokens?.xCloudToken
+    return token ? `${token.getDefaultRegion().baseUri}/` : undefined
+  }
+
   private cloudApi() {
     const token = this.streamingTokens?.xCloudToken
     if (!token) throw new Error(t('Bu hesapta Cloud Gaming erişimi yok'))

@@ -98,7 +98,7 @@ export function PsStream({ game, onExit }: Props) {
       worker.onmessage = (e: MessageEvent<WorkerEvent>) => {
         const msg = e.data
         if (msg.type === 'firstFrame') setLive(true)
-        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, size: msg.filters && picture ? `${msg.size} · ${pictureLabel(picture)}` : msg.size })
+        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, decodeMs: msg.decodeMs, jitterMs: msg.jitterMs, skipped: msg.skipped, size: msg.filters && picture ? `${msg.size} · ${pictureLabel(picture)}` : msg.size })
         // On phones the app rumbles the paired controller itself, straight from the session.
         else if (msg.type === 'rumble') psVibration && !MOBILE && rumble(msg.left, msg.right, nativeDualSense)
         else if (msg.type === 'ended') leave()

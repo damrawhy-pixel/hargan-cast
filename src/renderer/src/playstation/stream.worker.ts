@@ -24,7 +24,7 @@ export type WorkerCommand = WorkerInit | { type: 'view'; view: View } | { type: 
 
 export type WorkerEvent =
   /** `filters` is non-empty when post-processing runs; the page words it. */
-  | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string }
+  | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string; decodeMs?: number; jitterMs: number; skipped: number }
   | { type: 'firstFrame' }
   | { type: 'rumble'; left: number; right: number }
   | { type: 'ended' }
@@ -57,7 +57,17 @@ let audioPort: MessagePort
 let codecString = ''
 let hardware: HardwareAcceleration = 'prefer-hardware'
 let waitingForKey = true
+// Chunks carry their arrival time in microseconds, so the decoder sees the real
+// cadence and each frame's time from arrival to picture can be measured.
 let timestamp = 0
+let lastArrival = 0
+let lastGap = 0
+/** Smoothed change between successive arrival gaps (RFC 3550 style), in ms. */
+let jitter = 0
+let decodeSum = 0
+let decodeCount = 0
+/** Frames thrown away while waiting for a key frame. */
+let skipped = 0
 let firstFrame = true
 let decoderFailures = 0
 let closing = false
@@ -101,6 +111,8 @@ function createDecoder() {
   decoder?.state !== 'closed' && decoder?.close()
   decoder = new VideoDecoder({
     output(frame) {
+      decodeSum += performance.now() - frame.timestamp / 1000
+      decodeCount++
       paint(frame)
       frame.close()
       frames++
@@ -130,13 +142,24 @@ function createDecoder() {
 function onVideo(view: DataView, data: Uint8Array) {
   const key = (view.getUint8(1) & 1) === 1
   lost += view.getUint32(2, true)
+  const now = performance.now()
+  if (lastArrival) {
+    const gap = now - lastArrival
+    if (lastGap) jitter += (Math.abs(gap - lastGap) - jitter) / 16
+    lastGap = gap
+  }
+  lastArrival = now
   if (waitingForKey) {
-    if (!key) return
+    if (!key) {
+      skipped++
+      return
+    }
     waitingForKey = false
   }
-  timestamp += 16667
+  timestamp = Math.max(timestamp + 1, Math.round(now * 1000))
   if (decoder?.state !== 'configured') return
   if (!key && decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
+    skipped++
     waitingForKey = true
     requestKeyFrame()
     return
@@ -200,8 +223,18 @@ function start(init: WorkerInit) {
   ws.onclose = () => finish({ type: 'error', message: 'PlayStation bağlantısı beklenmedik şekilde kesildi' })
 
   setInterval(() => {
-    post({ type: 'stats', fps: frames, mbps: (bytes * 8) / 1e6, lost, size: `${frameSize.width}×${frameSize.height}`, filters: picture ? pictureLabel(picture.options) : '' })
-    frames = bytes = 0
+    post({
+      type: 'stats',
+      fps: frames,
+      mbps: (bytes * 8) / 1e6,
+      lost,
+      size: `${frameSize.width}×${frameSize.height}`,
+      filters: picture ? pictureLabel(picture.options) : '',
+      decodeMs: decodeCount ? decodeSum / decodeCount : undefined,
+      jitterMs: jitter,
+      skipped,
+    })
+    frames = bytes = decodeSum = decodeCount = 0
   }, 1000)
 }
 

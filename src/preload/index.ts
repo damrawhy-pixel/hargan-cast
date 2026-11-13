@@ -21,6 +21,7 @@ const api: HarganApi = {
     log: (text) => ipcRenderer.send('app:log', String(text).slice(0, 1000)),
     reportError: (text) => ipcRenderer.send('app:error', String(text).slice(0, 4000)),
     exportDiagnostics: () => ipcRenderer.invoke('app:diagnostics'),
+    networkTest: () => ipcRenderer.invoke('app:networkTest'),
   },
   settings: {
     get: invoke('settings:get'),

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { XBOX_REGIONS, type AppSettings } from '../../../shared/settings'
-import type { PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
+import type { NetworkProbe, NetworkReport, PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
 import { MOBILE } from '../lib/platform'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
@@ -26,16 +26,61 @@ const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.2
 
 const SECTIONS = [
   ['general', 'Genel'], ['picture', 'Görüntü'], ['sound', 'Ses'], ['touch', 'Dokunmatik'], ['playstation', 'PlayStation'],
-  ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['accounts', 'Hesaplar'],
+  ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['network', 'Ağ'], ['accounts', 'Hesaplar'],
 ] as const satisfies readonly (readonly [string, Message])[]
 type Section = (typeof SECTIONS)[number][0]
 
 // Phones and tablets hand the controller, the window and the audio device to the OS,
 // so the desktop-only settings would do nothing there and are left out; the
 // on-screen controls exist only there.
-const VISIBLE_SECTIONS = SECTIONS.filter(([id]) => (MOBILE ? id !== 'dualsense' : id !== 'touch'))
+const VISIBLE_SECTIONS = SECTIONS.filter(([id]) => (MOBILE ? id !== 'dualsense' && (id !== 'network' || Boolean(window.hc.platform.networkTest)) : id !== 'touch'))
 
 const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+
+// Cloud play wants a round trip under about 40 ms and a steady one; jitter
+// shows up as stutter long before raw latency does.
+function verdict(probe: NetworkProbe) {
+  if (probe.failed || probe.rttMs === undefined) return t('Ulaşılamadı')
+  const steady = (probe.jitterMs ?? 0) <= 8
+  if (probe.rttMs <= 40 && steady) return t('İyi')
+  if (probe.rttMs <= 80 && steady) return t('Orta')
+  return steady ? t('Yüksek gecikme') : t('Dalgalı')
+}
+
+function NetworkTest() {
+  const [report, setReport] = useState<NetworkReport>()
+  const [running, setRunning] = useState(false)
+  const run = async () => {
+    setRunning(true)
+    setReport(await window.hc.platform.networkTest?.().catch(() => undefined))
+    setRunning(false)
+  }
+  const adapter = report?.adapter
+  return (
+    <>
+      <Row label={t('Bağlantı testi')} hint={t('Hizmetlerin ne kadar hızlı ve ne kadar düzenli yanıt verdiğini ölçer. Birkaç saniye sürer.')}>
+        <button className="ghost" data-nav disabled={running} onClick={() => void run()}>{running ? t('Ölçülüyor') : t('Testi başlat')}</button>
+      </Row>
+      {adapter && (
+        <Row
+          label={adapter.kind === 'wired' ? t('Kablolu bağlantı') : adapter.kind === 'wifi' ? t('Wi-Fi bağlantısı') : t('Ağ bağlantısı')}
+          hint={adapter.kind === 'wifi' ? t('Kablosuz bağlantıda takılma çok daha olasıdır. Mümkünse kablo kullan; olmazsa 5 GHz ağa bağlan.') : adapter.name}
+        >
+          {adapter.linkSpeed && <output>{adapter.linkSpeed}</output>}
+        </Row>
+      )}
+      {report?.probes.map((probe) => (
+        <Row
+          key={probe.host}
+          label={probe.name}
+          hint={probe.failed ? probe.host : t('{rtt} ms gecikme, {jitter} ms dalgalanma · {host}', { rtt: probe.rttMs ?? '-', jitter: probe.jitterMs ?? '-', host: probe.host })}
+        >
+          <output>{verdict(probe)}</output>
+        </Row>
+      ))}
+    </>
+  )
+}
 
 function Row({ label, hint, children }: { label: string; hint?: string; children?: ReactNode }) {
   return (
@@ -419,6 +464,13 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <h3>{t('Fare ve klavye')}</h3>
             <Toggle field="xboxMouseKeyboard" label={t('Yerel fare ve klavye')} hint={t('Yalnızca destekleyen oyunlarda çalışır.')} />
             <Slider field="xboxMouseSensitivity" label={t('Fare hassasiyeti')} min={0.1} max={5} step={0.1} unit="" />
+          </section>
+        )}
+
+        {section === 'network' && (
+          <section>
+            <h2>{t('Ağ')}</h2>
+            <NetworkTest />
           </section>
         )}
 

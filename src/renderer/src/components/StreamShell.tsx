@@ -13,6 +13,10 @@ export interface StreamStats {
   size?: string
   rttMs?: number
   decodeMs?: number
+  /** Variation in frame arrival, ms. */
+  jitterMs?: number
+  /** Frames dropped to catch up, since the start. */
+  skipped?: number
 }
 
 export interface StreamQueue {
@@ -90,7 +94,7 @@ function useTouchControls() {
 // latency), so "it stuttered yesterday" can be looked up afterwards.
 function useSessionReport(platform: string, title: string, live: boolean, stats?: StreamStats) {
   const started = useRef(Date.now())
-  const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, decode: 0, decodeSamples: 0, lost: 0, size: '', liveAt: 0 })
+  const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, decode: 0, decodeSamples: 0, jitter: 0, jitterSamples: 0, skipped: 0, lost: 0, size: '', liveAt: 0 })
 
   useEffect(() => {
     if (live && !totals.current.liveAt) totals.current.liveAt = Date.now()
@@ -111,6 +115,11 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
       t.decode += stats.decodeMs
       t.decodeSamples++
     }
+    if (stats.jitterMs !== undefined) {
+      t.jitter += stats.jitterMs
+      t.jitterSamples++
+    }
+    t.skipped = Math.max(t.skipped, stats.skipped ?? 0)
     t.lost = Math.max(t.lost, stats.lost)
     if (stats.size) t.size = stats.size
   }, [stats, live])
@@ -123,7 +132,7 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
       const toPicture = t.liveAt ? `${((t.liveAt - started.current) / 1000).toFixed(1)} s` : 'never'
       window.hc.platform.log?.(
         `stream ${platform} "${title}": ${seconds} s, picture after ${toPicture}, fps avg ${avg(t.fps, t.samples)} min ${t.samples ? t.minFps : '-'}, ` +
-          `${avg(t.mbps, t.samples)} Mb/s, lost ${t.lost}, rtt ${avg(t.rtt, t.rttSamples)} ms, decode ${avg(t.decode, t.decodeSamples)} ms, ${t.size || '-'}`,
+          `${avg(t.mbps, t.samples)} Mb/s, lost ${t.lost}, rtt ${avg(t.rtt, t.rttSamples)} ms, decode ${avg(t.decode, t.decodeSamples)} ms, jitter ${avg(t.jitter, t.jitterSamples)} ms, skipped ${t.skipped}, ${t.size || '-'}`,
       )
     },
     [platform, title],
@@ -249,6 +258,8 @@ export function StreamShell({ platform, title, stage, live, stats, queue, contro
           <b>{stats.fps}</b> {t('kare/sn')} · <b>{stats.mbps.toFixed(1)}</b> Mb/{t('sn')} · {t('kayıp')} <b>{stats.lost}</b>
           {stats.rttMs !== undefined && <> · {t('gecikme')} <b>{stats.rttMs}</b> ms</>}
           {stats.decodeMs !== undefined && <> · {t('çözme')} <b>{stats.decodeMs.toFixed(1)}</b> ms</>}
+          {stats.jitterMs !== undefined && <> · {t('dalgalanma')} <b>{stats.jitterMs.toFixed(1)}</b> ms</>}
+          {stats.skipped ? <> · {t('atlanan')} <b>{stats.skipped}</b></> : null}
           {stats.size && <> · {stats.size}</>}
           {controller && <> · {controller}</>}
         </div>
