@@ -80,6 +80,7 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
   const ps = useStore((s) => s.ps)
   const xbox = useStore((s) => s.xbox)
   const recentKeys = useStore((s) => s.recents)
+  const favoriteKeys = useStore((s) => s.favorites)
   const running = useStore((s) => s.xboxRunning)
   const { psPremium } = useSettings()
   const runningItem = running && xboxItems.find((i) => i.xbox?.titleId === running.titleId)
@@ -88,6 +89,7 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
     const byKey = new Map([...psItems, ...xboxItems].map((i) => [i.key, i]))
     const lastPlayed = (i: HubItem) => i.xbox?.lastPlayed ?? ''
     const recent = recentKeys.map((k) => byKey.get(k)).filter((i): i is HubItem => Boolean(i))
+    const favorites = favoriteKeys.map((k) => byKey.get(k)).filter((i): i is HubItem => Boolean(i))
     const xboxPlay = xboxItems.filter((i) => i.action === 'play').sort((a, b) => lastPlayed(b).localeCompare(lastPlayed(a)))
     const psPlay = psItems.filter((i) => i.action === 'play' && (psPremium || i.ps?.isOwned)).sort((a, b) => shuffleKey(a.key) - shuffleKey(b.key))
     // The launcher is the console's row of recent games: what was played, then what can be.
@@ -98,11 +100,12 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
     return {
       launcher,
       recent,
+      favorites,
       xboxPlay: xboxPlay.slice(0, ROW_SIZE),
       psPlay: psItems.filter((i) => i.action === 'play').sort((a, b) => shuffleKey(a.key) - shuffleKey(b.key)).slice(0, ROW_SIZE),
       psFree: psItems.filter((i) => i.ps?.freeToPlay).slice(0, ROW_SIZE),
     }
-  }, [psItems, xboxItems, recentKeys, psPremium])
+  }, [psItems, xboxItems, recentKeys, favoriteKeys, psPremium])
 
   const [selectedKey, setSelectedKey] = useState<string>()
   const selected = rows.launcher.find((i) => i.key === selectedKey) ?? rows.launcher[0]
@@ -225,6 +228,7 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
       )}
 
       <div className="shelves">
+        {rows.favorites.length > 0 && <Shelf title={t('Favoriler')}>{rows.favorites.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} showService />)}</Shelf>}
         {rows.recent.length > 0 && <Shelf title={t('Son oynadıkların')}>{rows.recent.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} showService />)}</Shelf>}
         {rows.xboxPlay.length > 0 && <Shelf title={t('Xbox · Oynayabileceklerin')} onAll={() => onGo('xbox')}>{rows.xboxPlay.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}
         {rows.psPlay.length > 0 && <Shelf title={t('PlayStation akış kataloğu')} onAll={() => onGo('playstation')}>{rows.psPlay.map((i) => <GameTile key={i.key} item={i} onOpen={onOpen} />)}</Shelf>}

@@ -339,6 +339,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
               <>
                 <Toggle field="backgroundKeepalive" label={t('Arka planda canlı tut')} hint={t('Pencere arkadayken de akış yavaşlatılmaz.')} />
                 <Toggle field="useVulkan" label={t('Vulkan')} hint={t('Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.')} />
+                <Toggle field="launchAtLogin" label={t('Windows açılışında başlat')} hint={t("Tam ekran başlatma ile birlikte, bilgisayarı kolla açıp doğrudan oyunlara geçebilirsin.")} />
                 <Toggle field="betaUpdates" label={t('Beta sürümleri al')} hint={t('Yeni sürümleri herkesten önce alırsın; arada hata çıkabilir. Kapatınca bir sonraki kararlı sürüme kadar beta sürümde kalırsın.')} />
                 <Toggle field="ignoreGpuBlocklist" label={t('Ekran kartı kara listesini yok say')} hint={t("Chromium'un sorunlu saydığı sürücülerde de donanım hızlandırmayı zorlar. Çökme yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.")} />
               </>
@@ -441,7 +442,8 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Toggle field="xboxDeband" label={t('Bant giderme')} hint={`${debandHint()} ${t('FSR gibi görüntüyü ayrı bir katmandan geçirir; tepkiye bir kare kadar gecikme ekleyebilir.')}`} />
             <Choice field="xboxGameLanguage" label={t('Oyun dili')} options={[['', t('Varsayılan')], ...LANGUAGES]} />
             <h3>{t('Bağlantı')}</h3>
-            <XboxRegion />
+            {/* Not offered on phones; see src/mobile/settings.ts. */}
+            {!MOBILE && <XboxRegion />}
             <Choice field="xboxSignalServer" label={t('Sinyal sunucusu')} hint={servers.length ? t('Bağlanamıyorsan farklı bir sunucu dene.') : t('Microsoft listeyi bulut erişimi verince gönderir, şu an boş.')} options={[['', t('Otomatik')], ...servers.map((s): [string, string] => [s, s])]} />
             <Toggle field="xboxIpv6" label={t("IPv6'yı tercih et")} />
             <h3>{t('TURN sunucusu')}</h3>

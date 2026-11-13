@@ -4,9 +4,11 @@ import type { HubItem } from '../lib/items'
 import { loadXbox, useStore } from '../lib/store'
 import { t } from '../../../shared/i18n'
 
-const filters = (): LibraryFilter[] => [
+const filters = (favorites: Set<string>): LibraryFilter[] => [
   // Everything this account can start right now, however it got access.
   { id: 'owned', label: t('Sahip olduklarım'), test: (i) => i.action === 'play' },
+  // Second, so the library still opens on what can be played.
+  { id: 'favorites', label: t('Favoriler'), test: (i) => favorites.has(i.key) },
   { id: 'gamepass', label: 'Game Pass', test: (i) => i.action === 'play' && !i.xbox?.owned },
   { id: 'recent', label: t('Son oynananlar'), test: (i) => Boolean(i.xbox?.recent || i.xbox?.lastPlayed) },
   { id: 'all', label: t('Tümü'), test: () => true },
@@ -22,6 +24,7 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
   const items = useStore((s) => s.xboxItems)
   const loading = useStore((s) => s.xboxLoading)
   const error = useStore((s) => s.xboxError)
+  const favoriteKeys = useStore((s) => s.favorites)
 
   if (status.state !== 'signedIn') {
     return (
@@ -54,7 +57,7 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
         <Library
           title={t('Xbox kitaplığı')}
           items={items}
-          filters={filters()}
+          filters={filters(new Set(favoriteKeys))}
           onOpen={onOpen}
           toolbar={<button className="ghost" data-nav disabled={loading} onClick={loadXbox}>{t('Yenile')}</button>}
         />

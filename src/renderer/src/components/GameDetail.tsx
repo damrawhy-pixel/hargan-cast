@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { GameInfo } from '../../../shared/types'
 import { gameInfo, imageAt, knownInfo, ratingText } from '../lib/gameInfo'
 import { canStart, psFacts, serviceLabel, type HubItem } from '../lib/items'
-import { setSpotlight } from '../lib/store'
+import { setSpotlight, toggleFavorite, useStore } from '../lib/store'
 import { useSettings } from '../lib/useSettings'
 
 const YEAR = (date?: string) => (date ? new Date(date).getFullYear() || undefined : undefined)
@@ -19,6 +19,7 @@ interface Props {
 
 export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
   const { psPremium } = useSettings()
+  const favorite = useStore((s) => s.favorites.includes(item.key))
   const [info, setInfo] = useState<GameInfo | undefined>(() => knownInfo(item))
   const [shot, setShot] = useState<string>()
   const art = useRef<HTMLImageElement>(null)
@@ -84,6 +85,9 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
               ) : (
                 <button ref={action} className="primary big" data-nav onClick={onOpenSettings}>{t('PS Plus Premium gerekiyor')}</button>
               )}
+              <button className="ghost big" data-nav aria-pressed={favorite} onClick={() => toggleFavorite(item.key)}>
+                {favorite ? `★ ${t('Favorilerden çıkar')}` : `☆ ${t('Favorilere ekle')}`}
+              </button>
               <button className="ghost big detail-back" data-nav onClick={onClose}>{t('Geri')}</button>
             </div>
           </div>

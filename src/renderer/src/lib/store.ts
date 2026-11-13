@@ -14,6 +14,7 @@ interface State {
   xboxLoading: boolean
   xboxError?: string
   recents: string[]
+  favorites: string[]
   spotlight?: HubItem
   xboxRunning?: XboxActiveSession
 }
@@ -30,6 +31,7 @@ let state: State = {
   xboxItems: readSetting<XboxTitle[]>('xboxTitles', []).map(xboxItem),
   xboxLoading: false,
   recents: readSetting<string[]>('recents', []),
+  favorites: readSetting<string[]>('favorites', []),
 }
 const listeners = new Set<() => void>()
 
@@ -123,6 +125,13 @@ export function setSpotlight(item: HubItem) {
 }
 
 export const clearXboxRunning = () => patch({ xboxRunning: undefined })
+
+/** Favorites live on this device, like recents; newest first. */
+export function toggleFavorite(key: string) {
+  const favorites = state.favorites.includes(key) ? state.favorites.filter((k) => k !== key) : [key, ...state.favorites]
+  writeSetting('favorites', favorites)
+  patch({ favorites })
+}
 
 export function rememberPlayed(item: HubItem) {
   const recents = [item.key, ...state.recents.filter((k) => k !== item.key)].slice(0, MAX_RECENTS)

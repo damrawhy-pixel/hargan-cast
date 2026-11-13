@@ -17,6 +17,8 @@ export interface AppSettings {
   ignoreGpuBlocklist: boolean
   /** Desktop: also install pre-releases. */
   betaUpdates: boolean
+  /** Desktop: start with Windows. */
+  launchAtLogin: boolean
   fontSize: number
   uiSounds: boolean
   /** 'system' follows Windows' "Animation effects" switch. */
@@ -107,6 +109,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   useVulkan: false,
   ignoreGpuBlocklist: false,
   betaUpdates: false,
+  launchAtLogin: false,
   fontSize: 15,
   uiSounds: true,
   motion: 'on',

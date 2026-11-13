@@ -9,8 +9,10 @@ import { t } from '../../../shared/i18n'
 const TOKEN_PAGE = 'https://ca.account.sony.com/api/v1/ssocookie'
 
 // The catalog cannot say whether the account is subscribed, so that comes from the user.
-const buildFilters = (premium: boolean): LibraryFilter[] => [
+const buildFilters = (premium: boolean, favorites: Set<string>): LibraryFilter[] => [
   { id: 'owned', label: t('Sahip olduklarım'), test: (i) => Boolean(i.ps?.isOwned) || (premium && i.action === 'play') },
+  // Second, so the library still opens on what can be played.
+  { id: 'favorites', label: t('Favoriler'), test: (i) => favorites.has(i.key) },
   { id: 'catalog', label: t('Akış kataloğu'), test: (i) => i.action === 'play' },
   { id: 'free', label: t('Ücretsiz'), test: (i) => Boolean(i.ps?.freeToPlay) },
   { id: 'plus', label: 'PS Plus', test: (i) => Boolean(i.ps?.plusCatalog) },
@@ -31,7 +33,8 @@ export function PlayStationSpace({ onOpen }: Props) {
   const loading = useStore((s) => s.psLoading)
   const error = useStore((s) => s.psError)
   const { psPremium } = useSettings()
-  const filters = useMemo(() => buildFilters(psPremium), [psPremium])
+  const favoriteKeys = useStore((s) => s.favorites)
+  const filters = useMemo(() => buildFilters(psPremium, new Set(favoriteKeys)), [psPremium, favoriteKeys])
   const [token, setToken] = useState('')
   const [tokenError, setTokenError] = useState<string>()
 

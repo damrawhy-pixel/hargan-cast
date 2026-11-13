@@ -99,6 +99,13 @@ const BASE_FONT_PX = 15
 // Errors and notices from this process are worded in the interface language too.
 const applyLanguage = (current: AppSettings) => setLanguage(resolveLanguage(current.language, app.getLocale()))
 
+// Only an installed copy registers itself; a dev or folder build would leave a
+// stale entry pointing at a path that moves.
+function applyLoginItem(on: boolean) {
+  if (!app.isPackaged) return
+  if (app.getLoginItemSettings().openAtLogin !== on) app.setLoginItemSettings({ openAtLogin: on })
+}
+
 function applyWindowSettings() {
   const current = settings.get()
   applyLanguage(current)
@@ -257,12 +264,15 @@ function registerIpc() {
       const next = settings.update(patch)
       xbox.applySettings(next)
       applyUpdateChannel(next.betaUpdates)
+      applyLoginItem(next.launchAtLogin)
       applyWindowSettings()
       return next
     },
     'settings:reset': () => {
       const next = settings.reset()
       xbox.applySettings(next)
+      applyUpdateChannel(next.betaUpdates)
+      applyLoginItem(next.launchAtLogin)
       applyWindowSettings()
       return next
     },
@@ -322,6 +332,7 @@ app.whenReady().then(() => {
   registerIpc()
   createWindow()
   startUpdates(settings.get().betaUpdates)
+  applyLoginItem(settings.get().launchAtLogin)
 })
 
 // A GPU process that keeps dying usually means a driver that dislikes the
