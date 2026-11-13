@@ -9,6 +9,7 @@ import type { AppSettings } from '../shared/settings'
 import type { HarganApi, PsEvent, PsStatus, XboxStatus } from '../shared/types'
 import MobilePlayStation, { PsCore } from './playstation'
 import { getSettings, resetSettings, setSettings } from './settings'
+import { loadVaults } from './shims/secureStore'
 
 const SOURCE_URL = 'https://github.com/damrawhy-pixel/hargan-cast'
 
@@ -69,6 +70,9 @@ export async function installBridge() {
   installXboxRumble()
   void StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
   void App.addListener('backButton', handleBack)
+
+  // Account sessions come out of the platform key store before any service reads them.
+  await loadVaults()
 
   // The same Xbox service the desktop runs, on the browser stand-ins in ./shims.
   let current = await getSettings()

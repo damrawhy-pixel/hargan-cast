@@ -1,7 +1,8 @@
 // window.hc.ps on phones and tablets: the desktop's PlayStation service, with the
 // native plugin (mobile/plugins/ps-core) in place of the sidecar process, and a web
 // view of the plugin's own in place of Electron's sign-in window.
-import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+import type { PluginListenerHandle } from '@capacitor/core'
+import { PsCore } from './native'
 import { t, tryT } from '../shared/i18n'
 import {
   catalogWarning,
@@ -25,20 +26,7 @@ import type { AppSettings } from '../shared/settings'
 import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../shared/types'
 import SecureStore from './shims/secureStore'
 
-interface PsCorePlugin {
-  start(): Promise<{ port: number; token: string }>
-  command(options: { line: string }): Promise<void>
-  signIn(options: { url: string; redirect: string; session: string }): Promise<{ npsso: string }>
-  signOut(): Promise<void>
-  streaming(options: { on: boolean }): Promise<void>
-  /** Rumble on the paired controller; strengths 0-1. */
-  rumble(options: { left: number; right: number; durationMs: number }): Promise<void>
-  /** The paired controller's motion sensors, fed to the PlayStation stream. */
-  controllerMotion(options: { on: boolean }): Promise<void>
-  addListener(event: 'line', listener: (e: { line: string }) => void): Promise<PluginListenerHandle>
-}
-
-export const PsCore = registerPlugin<PsCorePlugin>('PsCore')
+export { PsCore }
 
 interface Pending {
   resolve(value: any): void

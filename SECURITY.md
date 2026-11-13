@@ -12,7 +12,7 @@ Uygulama iki hesabın oturumunu taşır: Sony NPSSO çerezi ve Xbox/Microsoft to
 
 | Tehdit | Önlem |
 | --- | --- |
-| Diskteki token'ların okunması | Masaüstünde her hesap Windows DPAPI ile şifreli ayrı bir kasada (`vault/*.bin`); çerezler Chromium çerez şifrelemesiyle (Electron fuse). Telefonda token'lar yedeklere ve cihazdan cihaza aktarıma girmez. |
+| Diskteki token'ların okunması | Masaüstünde her hesap Windows DPAPI ile şifreli ayrı bir kasada (`vault/*.bin`); çerezler Chromium çerez şifrelemesiyle (Electron fuse). Telefonda kasa Android Keystore anahtarıyla AES-GCM ile şifrelenir ya da iOS Keychain'de bu cihaza bağlı tutulur; yedeklere ve cihazdan cihaza aktarıma girmez. |
 | Kurulu exe'nin Node olarak çalıştırılıp kasanın okunması | Electron fuse'ları: `RunAsNode`, `NODE_OPTIONS` ve `--inspect` kapalı; uygulama yalnızca bütünlüğü denetlenen `app.asar`'dan yüklenir. |
 | Arayüze kod enjekte edilmesi (XSS) | Renderer sandbox'ta, `contextIsolation` açık, Node yok. Sıkı CSP: yalnızca kendi betikleri, ağ bağlantısı yalnızca loopback PS çekirdeğine, görseller yalnızca Sony ve Microsoft görsel sunucularından; `object`, `frame`, `form` ve `base` kapalı. |
 | Yabancı bir sayfanın ana sürece komut göndermesi | IPC yalnızca uygulamanın kendi sayfasından (`hargan://app/`) kabul edilir; diğerleri reddedilir ve loglanır. Giriş pencereleri yeni pencere açamaz, `webview` ekleyemez, https dışına gidemez, tarayıcı izni alamaz. |

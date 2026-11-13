@@ -422,4 +422,6 @@ export const en = {
   "Favorilere ekle": "Add to favorites",
   "Windows açılışında başlat": "Start with Windows",
   "Tam ekran başlatma ile birlikte, bilgisayarı kolla açıp doğrudan oyunlara geçebilirsin.": "Together with Start in full screen, you can turn on the PC and go straight to your games with a controller.",
+  "Kasa verisi eksik": "Vault data missing",
+  "Hesap kasası kaydedilemedi": "The account vault couldn't be saved",
 } as const satisfies Record<string, string>

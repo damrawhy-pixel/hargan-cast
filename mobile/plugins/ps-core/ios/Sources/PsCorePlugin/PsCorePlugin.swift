@@ -17,7 +17,9 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "signOut", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "streaming", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "rumble", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "controllerMotion", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "controllerMotion", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "vaultLoad", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "vaultSave", returnType: CAPPluginReturnPromise)
     ]
 
     private let queue = DispatchQueue(label: "app.hargan.ps")
@@ -30,6 +32,27 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
     fileprivate func deliver(_ line: String) {
         DispatchQueue.main.async { [weak self] in
             self?.notifyListeners("line", data: ["line": line])
+        }
+    }
+
+    /// The account vault's JSON; no data when there is none yet.
+    @objc func vaultLoad(_ call: CAPPluginCall) {
+        if let data = SecureVault.load() {
+            call.resolve(["data": data])
+        } else {
+            call.resolve([:])
+        }
+    }
+
+    @objc func vaultSave(_ call: CAPPluginCall) {
+        guard let data = call.getString("data") else {
+            call.reject("Kasa verisi eksik")
+            return
+        }
+        if SecureVault.save(data) {
+            call.resolve()
+        } else {
+            call.reject("Hesap kasası kaydedilemedi")
         }
     }
 

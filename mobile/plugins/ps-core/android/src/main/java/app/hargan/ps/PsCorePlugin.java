@@ -28,6 +28,9 @@ import java.util.concurrent.Executors;
 public class PsCorePlugin extends Plugin {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    // Its own thread: a Keystore operation must not wait behind the core.
+    private final ExecutorService vaultWorker = Executors.newSingleThreadExecutor();
+    private SecureVault vault;
     private WifiManager.WifiLock wifiLock;
     private PsSignIn activeSignIn;
     private GamepadFeedback gamepad;
@@ -39,9 +42,38 @@ public class PsCorePlugin extends Plugin {
             data.put("line", line);
             notifyListeners("line", data);
         };
+        vault = new SecureVault(getContext());
         gamepad = new GamepadFeedback(getContext());
         gamepad.watchDevices();
         PsCore.feedback = gamepad;
+    }
+
+    /** The account vault's JSON; no data when there is none yet. */
+    @PluginMethod
+    public void vaultLoad(PluginCall call) {
+        vaultWorker.execute(() -> {
+            JSObject result = new JSObject();
+            String data = vault.load();
+            if (data != null) result.put("data", data);
+            call.resolve(result);
+        });
+    }
+
+    @PluginMethod
+    public void vaultSave(PluginCall call) {
+        String data = call.getString("data");
+        if (data == null) {
+            call.reject("Kasa verisi eksik");
+            return;
+        }
+        vaultWorker.execute(() -> {
+            try {
+                vault.save(data);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Hesap kasası kaydedilemedi");
+            }
+        });
     }
 
     /** Rumble asked for by an Xbox stream; values 0-1, as the player reports them. */
