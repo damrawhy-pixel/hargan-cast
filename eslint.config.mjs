@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'dist/**', 'dist-mobile/**', 'node_modules/**', 'native/**', 'mobile/**', 'tests/e2e/**', '**/*.d.ts'],
+    ignores: ['out/**', 'dist/**', 'test-results/**', 'dist-mobile/**', 'node_modules/**', 'native/**', 'mobile/**', 'tests/e2e/**', '**/*.d.ts'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

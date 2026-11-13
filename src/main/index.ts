@@ -52,6 +52,10 @@ crashReporter.start({ uploadToServer: false, compress: true })
 process.on('uncaughtException', (e) => log(`main uncaught: ${e.stack ?? e}`))
 process.on('unhandledRejection', (reason) => log(`main unhandled rejection: ${(reason as Error)?.stack ?? reason}`))
 
+// Tests run the unpackaged app against a throwaway profile, never the user's
+// accounts. A packaged build ignores this.
+if (!app.isPackaged && process.env.HC_USER_DATA) app.setPath('userData', process.env.HC_USER_DATA)
+
 const boot = readBootSettings()
 
 // Dual-GPU laptops and desktops must decode on the discrete card.
@@ -72,6 +76,9 @@ app.commandLine.appendSwitch('enable-features', features.join(','))
 
 // Sign-in pages get a plain Chromium identity.
 app.userAgentFallback = app.userAgentFallback.replace(/\s*(Electron|hargan-cast|Hargan ?Cast)\/\S+/gi, '')
+
+// electron-vite's dev server, in development only; an empty value counts as unset.
+const DEV_RENDERER_URL = (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) || undefined
 
 let win: BrowserWindow | undefined
 let xbox: XboxService
@@ -154,7 +161,7 @@ function createWindow() {
     }
   })
 
-  win.loadURL(process.env.ELECTRON_RENDERER_URL ?? `${APP_SCHEME}://app/index.html`)
+  win.loadURL(DEV_RENDERER_URL ?? `${APP_SCHEME}://app/index.html`)
 }
 
 function serveRenderer() {
@@ -173,7 +180,7 @@ function serveRenderer() {
 // (a sign-in page, an injected iframe) is refused and logged.
 function trusted(e: IpcMainEvent | IpcMainInvokeEvent) {
   const url = e.senderFrame?.url ?? ''
-  const dev = process.env.ELECTRON_RENDERER_URL
+  const dev = DEV_RENDERER_URL
   const ok = e.sender === win?.webContents && (url.startsWith(`${APP_SCHEME}://app/`) || (dev !== undefined && url.startsWith(dev)))
   if (!ok) log(`ipc refused from ${url.split('?')[0] || 'unknown frame'}`)
   return ok

@@ -59,3 +59,45 @@ jobs:
         run: node scripts/build-native.mjs
       - name: DualSense format tests
         run: node scripts/build-native.mjs --test
+
+  ui:
+    name: Interface tests (Electron)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx electron-vite build
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ui-test-results
+          path: test-results/
+          retention-days: 14
+
+  fuzz:
+    name: Fuzz the core's input parsers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build with libFuzzer, ASan and UBSan
+        working-directory: native/ps-core
+        run: |
+          clang -std=c11 -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all \
+            -Isrc -I../third_party/chiaki/include \
+            fuzz/fuzz_reports.c src/controller_io.c src/dualsense_report.c ../third_party/chiaki/src/controller.c \
+            -o fuzz_reports -lm
+      - name: Fuzz for two minutes
+        working-directory: native/ps-core
+        run: |
+          mkdir -p corpus
+          ./fuzz_reports corpus -max_total_time=120 -max_len=512
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: fuzz-crash
+          path: native/ps-core/crash-*

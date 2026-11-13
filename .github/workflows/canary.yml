@@ -1,0 +1,23 @@
+name: Service canary
+
+# Every morning: do the public Microsoft and Sony endpoints the app relies on
+# still answer as expected? A failing run (GitHub emails the repository owner)
+# usually means an upstream change that needs a fix before users hit it.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node tests/canary/services.mjs
