@@ -7,8 +7,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        excludeWebStorageFromBackup()
         return true
+    }
+
+    // Account sessions (Sony NPSSO, Xbox tokens) live in the web view's storage.
+    // They must not travel in iCloud or computer backups: a restored phone signs in again.
+    private func excludeWebStorageFromBackup() {
+        guard let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first else { return }
+        var folder = library.appendingPathComponent("WebKit", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: folder.path) {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? folder.setResourceValues(values)
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

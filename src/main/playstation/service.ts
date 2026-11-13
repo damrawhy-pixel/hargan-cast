@@ -31,6 +31,10 @@ import { HttpBridge } from './httpBridge'
 const PARTITION = 'persist:playstation'
 const SIGN_IN_POLL_MS = 1500
 const CORE_LOG_LINES = 300
+const CORE_LOG_ON_EXIT = 20
+const CORE_HELLO_MS = 15_000
+const CATALOG_TIMEOUT_MS = 180_000
+const QUICK_TIMEOUT_MS = 20_000
 
 interface Pending {
   resolve(value: any): void
@@ -166,12 +170,25 @@ export default class PlayStationService {
     this.ready = new Promise<void>((resolve, reject) => {
       const core = spawn(this.corePath(), [], { windowsHide: true })
       this.core = core
+      const helloTimer = setTimeout(() => {
+        log('ps core: no hello in time')
+        core.kill()
+      }, CORE_HELLO_MS)
 
       core.on('error', (e) => {
-        this.ready = undefined
+        clearTimeout(helloTimer)
+        if (this.core === core) this.ready = undefined
         reject(new Error(`PlayStation çekirdeği başlatılamadı: ${e.message}`))
       })
-      core.on('exit', () => {
+      // A core that dies while a line is being written must not take the app with it.
+      core.stdin.on('error', (e) => log(`ps core stdin: ${e.message}`))
+      core.on('exit', (code, signal) => {
+        clearTimeout(helloTimer)
+        log(`ps core exited (code ${code ?? '-'}, signal ${signal ?? '-'})`)
+        for (const line of this.coreLog.slice(-CORE_LOG_ON_EXIT)) log(`ps core: ${line}`)
+        // Rejecting is a no-op once hello has resolved it; before that it ends the wait.
+        reject(new Error('PlayStation çekirdeği beklenmedik şekilde kapandı'))
+        if (this.core !== core) return
         this.core = undefined
         this.media = undefined
         this.ready = undefined
@@ -185,12 +202,23 @@ export default class PlayStationService {
         if (this.coreLog.length > CORE_LOG_LINES) this.coreLog.shift()
       })
       readline.createInterface({ input: core.stdout, crlfDelay: Infinity }).on('line', (line) => {
-        const msg = JSON.parse(line)
+        let msg: any
+        try {
+          msg = JSON.parse(line)
+        } catch {
+          // Something in the core printed to stdout; keep it with the core's own log.
+          this.coreLog.push(`[stdout] ${line.slice(0, 200)}`)
+          return
+        }
         if (msg.ev === 'hello') {
+          clearTimeout(helloTimer)
           this.media = { port: msg.port, token: msg.token }
           resolve()
         } else if (msg.ev === 'http') {
-          this.http.perform(msg).then((reply) => core.stdin.write(`${JSON.stringify({ cmd: 'httpReply', ...reply })}\n`))
+          this.http
+            .perform(msg)
+            .catch((e: Error) => ({ rid: msg.rid, status: 0, error: e.message }))
+            .then((reply) => this.write(core, { cmd: 'httpReply', ...reply }))
         } else if (msg.ev) this.push(msg)
         else {
           const waiter = this.pending.get(msg.id)
@@ -211,11 +239,35 @@ export default class PlayStationService {
     this.setStatus({ state: 'signedOut', error: SESSION_EXPIRED })
   }
 
-  private call(cmd: string, args: Record<string, unknown>) {
+  private write(core: ChildProcessWithoutNullStreams, message: Record<string, unknown>) {
+    if (core.stdin.writable) core.stdin.write(`${JSON.stringify(message)}\n`)
+  }
+
+  /** Sends a command and waits for its reply; `timeoutMs` 0 waits as long as the core lives. */
+  private call(cmd: string, args: Record<string, unknown>, timeoutMs = 0) {
+    const core = this.core
+    if (!core) return Promise.reject(new Error('PlayStation çekirdeği çalışmıyor. Tekrar dene.'))
     const id = this.nextId++
     return new Promise<any>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      this.core!.stdin.write(`${JSON.stringify({ id, cmd, ...args })}\n`)
+      const timer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              if (!this.pending.delete(id)) return
+              log(`ps core: ${cmd} timed out`)
+              reject(new Error('PlayStation çekirdeği yanıt vermedi. Tekrar dene.'))
+            }, timeoutMs)
+          : undefined
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer)
+          resolve(value)
+        },
+        reject: (error) => {
+          clearTimeout(timer)
+          reject(error)
+        },
+      })
+      this.write(core, { id, cmd, ...args })
     })
   }
 
@@ -233,7 +285,7 @@ export default class PlayStationService {
       locale: this.vault.get('locale', app.getLocale().includes('-') ? app.getLocale() : 'en-US'),
       cacheDir: this.cacheDir(),
       force,
-    })
+    }, CATALOG_TIMEOUT_MS)
 
     // The lib settles region and language; streaming must reuse them verbatim.
     if (catalog.settledLocale) this.vault.set('locale', catalog.settledLocale)
@@ -256,8 +308,10 @@ export default class PlayStationService {
     )
     this.vault.set('attrPassed', true)
     if (reply.datacenters) this.vault.set(key, reply.datacenters)
+    const media = this.media
+    if (!media) throw new Error('PlayStation çekirdeği beklenmedik şekilde kapandı')
     return {
-      url: `ws://127.0.0.1:${this.media!.port}/${this.media!.token}`,
+      url: `ws://127.0.0.1:${media.port}/${media.token}`,
       codec: reply.codec,
       width: reply.width,
       height: reply.height,
@@ -287,18 +341,18 @@ export default class PlayStationService {
 
   async testHaptics(): Promise<boolean> {
     await this.ensureCore()
-    const { played } = await this.call('hapticTest', { strength: this.settings().psHapticStrength })
+    const { played } = await this.call('hapticTest', { strength: this.settings().psHapticStrength }, QUICK_TIMEOUT_MS)
     return played
   }
 
   async routeSpeaker(): Promise<boolean> {
     await this.ensureCore()
-    const { routed } = await this.call('speakerRoute', {})
+    const { routed } = await this.call('speakerRoute', {}, QUICK_TIMEOUT_MS)
     return routed
   }
 
   async stop() {
-    this.core?.stdin.write(`${JSON.stringify({ cmd: 'stop' })}\n`)
+    if (this.core) this.write(this.core, { cmd: 'stop' })
   }
 
   shutdown() {

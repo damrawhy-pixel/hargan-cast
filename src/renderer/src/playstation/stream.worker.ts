@@ -36,6 +36,8 @@ const MEDIA_RESET = 6
 const REQUEST_KEY_FRAME = new Uint8Array([2])
 
 const CODECS = { h264: 'avc1.640033', h265: 'hev1.1.6.L153.B0' }
+// Decoder failures in a row before giving up on the hardware path, then on the stream.
+const DECODER_RETRIES = 3
 
 let ws: WebSocket | undefined
 let decoder: VideoDecoder | undefined
@@ -50,12 +52,22 @@ let hardware: HardwareAcceleration = 'prefer-hardware'
 let waitingForKey = true
 let timestamp = 0
 let firstFrame = true
+let decoderFailures = 0
+let closing = false
+let finished = false
 
 let frames = 0
 let bytes = 0
 let lost = 0
 
 const post = (e: WorkerEvent) => (self as unknown as Worker).postMessage(e)
+
+// Exactly one 'ended' or 'error' reaches the page, however the stream stops.
+function finish(e: Extract<WorkerEvent, { type: 'ended' | 'error' }>) {
+  if (finished || closing) return
+  finished = true
+  post(e)
+}
 
 function resize(size: Size) {
   if (canvas.width !== size.width || canvas.height !== size.height) {
@@ -84,16 +96,24 @@ function createDecoder() {
       paint(frame)
       frame.close()
       frames++
+      decoderFailures = 0
       if (firstFrame) {
         firstFrame = false
         post({ type: 'firstFrame' })
       }
     },
     error() {
-      // Hardware decoders die on corrupt input. Rebuild and resync on a key frame.
+      if (closing) return
+      // Hardware decoders die on corrupt input. Rebuild and resync on a key frame;
+      // one that keeps failing without a single picture is swapped for software.
+      if (++decoderFailures >= DECODER_RETRIES) {
+        if (hardware === 'prefer-software') return finish({ type: 'error', message: 'Görüntü çözülemedi. Ayarlardan farklı bir codec dene.' })
+        hardware = 'prefer-software'
+        decoderFailures = 0
+      }
       waitingForKey = true
       createDecoder()
-      ws?.send(REQUEST_KEY_FRAME)
+      if (ws?.readyState === WebSocket.OPEN) ws.send(REQUEST_KEY_FRAME)
     },
   })
   decoder.configure({ codec: codecString, hardwareAcceleration: hardware, optimizeForLatency: true })
@@ -107,7 +127,8 @@ function onVideo(view: DataView, data: Uint8Array) {
     waitingForKey = false
   }
   timestamp += 16667
-  decoder!.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp, data: data.subarray(6) }))
+  if (decoder?.state !== 'configured') return
+  decoder.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp, data: data.subarray(6) }))
 }
 
 function onMessage(e: MessageEvent<ArrayBuffer>) {
@@ -132,7 +153,7 @@ function onMessage(e: MessageEvent<ArrayBuffer>) {
       post({ type: 'rumble', left: data[1], right: data[2] })
       break
     case MEDIA_RESET:
-      post({ type: 'ended' })
+      finish({ type: 'ended' })
       break
   }
 }
@@ -147,14 +168,16 @@ function start(init: WorkerInit) {
   if (init.picture) picture = Picture.create(canvas, init.picture)
   if (!picture) {
     ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) ?? undefined
-    if (!ctx) return post({ type: 'error', message: 'Görüntü yüzeyi oluşturulamadı' })
+    if (!ctx) return finish({ type: 'error', message: 'Görüntü yüzeyi oluşturulamadı' })
   }
   createDecoder()
 
   ws = new WebSocket(init.url)
   ws.binaryType = 'arraybuffer'
   ws.onmessage = onMessage
-  ws.onerror = () => post({ type: 'error', message: 'Yerel medya bağlantısı kurulamadı' })
+  ws.onerror = () => finish({ type: 'error', message: 'Yerel medya bağlantısı kurulamadı' })
+  // The core went away without saying the session ended: the picture would just freeze.
+  ws.onclose = () => finish({ type: 'error', message: 'PlayStation bağlantısı beklenmedik şekilde kesildi' })
 
   setInterval(() => {
     post({ type: 'stats', fps: frames, mbps: (bytes * 8) / 1e6, lost, size: `${frameSize.width}×${frameSize.height}`, filters: picture ? pictureLabel(picture.options) : '' })
@@ -169,6 +192,7 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
   else if (msg.type === 'input') {
     if (ws?.readyState === WebSocket.OPEN) ws.send(msg.report)
   } else {
+    closing = true
     ws?.close()
     if (decoder && decoder.state !== 'closed') decoder.close()
     picture?.dispose()

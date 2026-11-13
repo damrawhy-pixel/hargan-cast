@@ -179,6 +179,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         stopPicture = (options.fsr || options.deband) && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
         filters = stopPicture ? pictureLabel(options) : ''
         applyAudio()
+        // 'connected' can come more than once per link; one keepalive is enough.
+        clearInterval(keepalive)
         keepalive = setInterval(() => void xbox.keepalive(sessionId), KEEPALIVE_MS)
         clearInterval(meter)
         meter = setInterval(() => void measure(video), STATS_MS)

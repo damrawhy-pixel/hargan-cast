@@ -1,6 +1,9 @@
 import https from 'https'
 import Application from '../service'
 
+const REQUEST_TIMEOUT_MS = 20_000
+const MAX_NOT_READY_RETRIES = 40
+
 export default class Http {
 
     _application:Application
@@ -9,7 +12,8 @@ export default class Http {
         this._application = application
     }
 
-    get(host:string, url: string, method = 'GET') {
+    // 204 means "not ready yet"; ask again, but never forever.
+    get(host:string, url: string, method = 'GET', attempt = 0) {
         return new Promise((resolve, reject) => {
             let responseData = ''
 
@@ -36,9 +40,12 @@ export default class Http {
                         }
 
                         if(response.statusCode === 204){
-                            // We have to retry..
+                            if(attempt + 1 >= MAX_NOT_READY_RETRIES){
+                                reject(new Error('Sunucu yanıtı hazırlayamadı: ' + host))
+                                return
+                            }
                             setTimeout(() => {
-                                this.get(url, method).then((result) => {
+                                this.get(host, url, method, attempt + 1).then((result) => {
                                     resolve(result)
 
                                 }).catch((error) => {
@@ -59,6 +66,7 @@ export default class Http {
                 })
             })
 
+            req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error('Sunucu yanıt vermedi: ' + host)))
             req.on('error', (error) => {
                 reject(error)
             })
@@ -107,6 +115,7 @@ export default class Http {
                 })
             })
 
+            req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error('Sunucu yanıt vermedi: ' + host)))
             req.on('error', (error) => {
                 reject(error)
             })

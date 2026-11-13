@@ -36,7 +36,7 @@ if (readBootSettings().useVulkan) {
 app.commandLine.appendSwitch('enable-features', features.join(','))
 
 // Sign-in pages get a plain Chromium identity.
-app.userAgentFallback = app.userAgentFallback.replace(/\s*(Electron|hargan-cast|Hargan Cast)\/\S+/g, '')
+app.userAgentFallback = app.userAgentFallback.replace(/\s*(Electron|hargan-cast|Hargan ?Cast)\/\S+/gi, '')
 
 let win: BrowserWindow | undefined
 let xbox: XboxService

@@ -5,6 +5,14 @@ import axios from 'axios';
 import { defaultSettings } from '../settings';
 import { saveStreamToken } from "./streamTokenStore";
 
+const REQUEST_TIMEOUT_MS = 20_000;
+// Answers the server is still preparing (204, or an empty SDP/ICE reply) are asked
+// for again about once a second; after two minutes the session is not coming.
+const NOT_READY_RETRY_MS = 750;
+const MAX_NOT_READY_RETRIES = 160;
+const EXCHANGE_POLL_MS = 1000;
+const MAX_EXCHANGE_POLLS = 120;
+
 export interface playResult {
   sessionPath: string;
   sessionId?: string;
@@ -139,7 +147,8 @@ export default class xCloudApi {
     });
   }
 
-  get(url: string, method = "GET") {
+  // 204 means "not ready yet"; the caller keeps asking, but never forever.
+  get(url: string, method = "GET", attempt = 0) {
     return this.requestWithAuthRetry(() => new Promise((resolve, reject) => {
       let responseData = "";
 
@@ -180,16 +189,19 @@ export default class xCloudApi {
               }
 
               if (response.statusCode === 204) {
-                // We have to retry..
+                if (attempt + 1 >= MAX_NOT_READY_RETRIES) {
+                  reject(new Error("Xbox sunucusu yanıtı hazırlayamadı. Tekrar dene."));
+                  return;
+                }
                 setTimeout(() => {
-                  this.get(url, method)
+                  this.get(url, method, attempt + 1)
                     .then((result) => {
                       resolve(result);
                     })
                     .catch((error) => {
                       reject(error);
                     });
-                }, 750);
+                }, NOT_READY_RETRY_MS);
               } else {
                 resolve(returnData);
               }
@@ -209,6 +221,7 @@ export default class xCloudApi {
         }
       );
 
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("Xbox sunucusu yanıt vermedi: " + url)));
       req.on("error", (error) => {
         reject(error);
       });
@@ -274,6 +287,7 @@ export default class xCloudApi {
         }
       );
 
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("Xbox sunucusu yanıt vermedi: " + url)));
       req.on("error", (error) => {
         reject(error);
       });
@@ -428,23 +442,21 @@ export default class xCloudApi {
                 const exchangeSdp = JSON.parse(sdpResult.exchangeResponse);
                 resolve(exchangeSdp);
               } else {
-                const checkInterval = setInterval(() => {
-                  if (this.isStoped) {
-                    clearInterval(checkInterval);
-                    return;
-                  }
+                // One request at a time: a slow answer must not stack up behind the next poll.
+                let polls = 0;
+                const poll = () => {
+                  if (this.isStoped) return reject(new Error("Oturum durduruldu"));
+                  if (++polls > MAX_EXCHANGE_POLLS) return reject(new Error("Xbox sunucusu bağlantı yanıtı göndermedi. Tekrar dene."));
                   this.get("/v5/sessions/" + this._type + "/" + sessionId + "/sdp")
                     .then((sdpResult2: any) => {
                       if (sdpResult2 && sdpResult2.exchangeResponse) {
-                        const exchangeSdp = JSON.parse(sdpResult2.exchangeResponse);
-                        clearInterval(checkInterval);
-                        resolve(exchangeSdp);
+                        resolve(JSON.parse(sdpResult2.exchangeResponse));
+                      } else {
+                        setTimeout(poll, EXCHANGE_POLL_MS);
                       }
-                    }).catch(e => {
-                      clearInterval(checkInterval);
-                      reject(e);
-                    })
-                }, 1000);
+                    }).catch(reject);
+                };
+                setTimeout(poll, EXCHANGE_POLL_MS);
               }
               
             })
@@ -489,7 +501,7 @@ export default class xCloudApi {
     });
   }
 
-  checkIce(sessionId: string) {
+  checkIce(sessionId: string, polls = 0) {
     const settings: any = this._application._store.get(
       "settings",
       defaultSettings
@@ -498,8 +510,10 @@ export default class xCloudApi {
       this.get("/v5/sessions/" + this._type + "/" + sessionId + "/ice").then(
         (iceResult: exchangeResult | string) => {
           if (iceResult === "") {
+            if (this.isStoped) return reject(new Error("Oturum durduruldu"));
+            if (polls + 1 >= MAX_EXCHANGE_POLLS) return reject(new Error("Xbox sunucusu bağlantı adaylarını göndermedi. Tekrar dene."));
             setTimeout(() => {
-              this.checkIce(sessionId)
+              this.checkIce(sessionId, polls + 1)
                 .then((res) => {
                   resolve(res);
                 })
@@ -520,8 +534,13 @@ export default class xCloudApi {
                 candidateAddress.length > 4 &&
                 candidateAddress[4].substr(0, 4) === "2001"
               ) {
-                const address = new Address6(candidateAddress[4]);
-                const teredo = address.inspectTeredo();
+                // A candidate the server got wrong is skipped, not allowed to stall the session.
+                let teredo;
+                try {
+                  teredo = new Address6(candidateAddress[4]).inspectTeredo();
+                } catch {
+                  continue;
+                }
 
                 computedCandidates.push({
                   candidate:
@@ -704,7 +723,7 @@ export default class xCloudApi {
           },
           timeout: 15 * 1000
         })
-        .then(res => {
+        .then(res => {
           if (res.data && res.data.results) {
             resolve(res.data.results);
           } else {
