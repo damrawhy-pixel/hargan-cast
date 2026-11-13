@@ -28,8 +28,8 @@ interface ISisuAuthenticationResponse {
 
 export default class Xal {
 
-    keys
-    jwtKeys
+    keys: any
+    jwtKeys: any
 
     deviceTokenRetryCount
     tokenStore
@@ -52,7 +52,7 @@ export default class Xal {
         this.deviceTokenRetryCount = 0
     }
 
-    setKeys(orgJwtKey){
+    setKeys(orgJwtKey: JsonWebKey){
         return new Promise((resolve, reject) => {
             subtle.importKey('jwk', orgJwtKey, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']).then(jwtKey => {
                 const privateKey = KeyObject.from(jwtKey);
@@ -106,7 +106,7 @@ export default class Xal {
         })
     }
 
-    codeChallange
+    codeChallange: any
 
     getCodeChallange() {
         return new Promise<ICodeChallange>((resolve, reject) => {
@@ -146,8 +146,6 @@ export default class Xal {
                         this.deviceTokenRetryCount += 1
                         return this.getDeviceTokenHack().then(resolve).catch(reject)
                     } else {
-                        // Clear data
-                        this.tokenStore.clear && this.tokenStore.clear();
                         reject(error)
                     }
                     
@@ -201,7 +199,7 @@ export default class Xal {
         })
     }
 
-    doSisuAuthentication(deviceToken:DeviceToken, codeChallange:ICodeChallange, state){
+    doSisuAuthentication(deviceToken:DeviceToken, codeChallange:ICodeChallange, state: string){
         return new Promise<ISisuAuthenticationResponse>((resolve, reject) => {
             this.getKeys().then((jwtKeys:any) => {
 
@@ -403,7 +401,7 @@ export default class Xal {
             }
             
             const body = JSON.stringify(payload)
-            const headers = {
+            const headers: Record<string, string | number> = {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'no-store, must-revalidate, no-cache',
                 'x-gssv-client': 'XboxComBrowser',
@@ -425,7 +423,7 @@ export default class Xal {
     }
 
     // Credits to https://github.com/PrismarineJS/prismarine-auth for the signing part
-    sign(url, authorizationToken, payload, jwtKeys) {
+    sign(url: string, authorizationToken: string, payload: any, jwtKeys: any) {
         const windowsTimestamp = (BigInt((Date.now() / 1000) | 0) + BigInt(11644473600)) * BigInt(10000000)
         const pathAndQuery = new URL(url).pathname
     

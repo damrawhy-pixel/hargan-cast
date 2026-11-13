@@ -10,8 +10,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
-    // The ported Xbox layer is still loosely typed; everything else is held to strict.
-    "noImplicitAny": false,
     "useDefineForClassFields": false,
     "types": ["node"]
   },

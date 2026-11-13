@@ -48,7 +48,7 @@ npm run native
 npm run dev
 ```
 
-Dağıtım klasörü: `npm run dist`. Tip denetimi: `npm run typecheck`. Kol biçimi testleri, kol gerekmeden: `hargan-ds-test` CMake hedefi.
+Dağıtım klasörü: `npm run dist`. Tüm denetimler: `npm run check`. Arayüz testleri: `npm run test:ui`. Kol biçimi testleri, kol gerekmeden: `npm run test:native`. Ayrıntılar ve kurallar [CONTRIBUTING.md](CONTRIBUTING.md), güvenlik modeli [SECURITY.md](SECURITY.md) dosyasında.
 
 ## Kısayollar
 

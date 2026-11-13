@@ -4,7 +4,7 @@ export interface ISisuToken {
     DeviceToken: string
     TitleToken: ISisuTitleToken
     UserToken: ISisuUserToken
-    AuthorizationToken
+    AuthorizationToken: any
     WebPage: string
     Sandbox: string
     UseModernGamertag: boolean
@@ -18,7 +18,7 @@ interface ISisuUserToken {
     DisplayClaims: {
         xui: {
             uhs: string
-        }
+        }[]
     }
 }
 

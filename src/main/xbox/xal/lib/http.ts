@@ -16,7 +16,7 @@ export default class Http {
         return this._headers
     }
 
-    getRequest(host, path, headers) {
+    getRequest(host: string, path: string, headers: any) {
         return new Promise<HttpResponse>((resolve, reject) => {
 
             const hostHeaders = {
@@ -68,7 +68,7 @@ export default class Http {
         })
     }
 
-    postRequest(host, path, headers, data) {
+    postRequest(host: string, path: string, headers: any, data: any) {
         return new Promise<HttpResponse>((resolve, reject) => {
 
             const hostHeaders = {

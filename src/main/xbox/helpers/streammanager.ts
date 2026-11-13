@@ -11,8 +11,8 @@ interface streamSession {
     waitingTimes?: any;
     playerState: string|'pending'|'started'|'queued'|'failed';
     errorDetails?: {
-        code;
-        message;
+        code: any;
+        message: any;
     };
 }
 
@@ -20,13 +20,13 @@ export default class StreamManager {
 
     _application:Application
 
-    _sessions = {}
+    _sessions: Record<string, any> = {}
     
-    constructor(application){
+    constructor(application: any){
         this._application = application
     }
 
-    getApi(type): xCloudApi{
+    getApi(type: string): xCloudApi{
         const streamingTokens = this._application.streamingTokens;
 
         if(type === 'home') {
@@ -50,7 +50,7 @@ export default class StreamManager {
         return this._sessions[sessionId]
     }
 
-    startStream(type:string|'home'|'cloud', target){
+    startStream(type:string|'home'|'cloud', target: string){
         return new Promise((resolve, reject) => {
             this.getApi(type).startStream(target).then((playResult:playResult) => {
             // this._application._xCloudApi.startStream(type, target).then((playResult) => {
@@ -68,13 +68,13 @@ export default class StreamManager {
                 this.monitorSession(sessionId)
 
                 resolve(sessionId)
-            }).catch((error) => {
+            }).catch((error: any) => {
                 reject(error)
             })
         })
     }
 
-    stopStream(sessionId){
+    stopStream(sessionId: string){
         return new Promise((resolve, reject) => {
             const session = this.getSession(sessionId)
             if(session === undefined){
@@ -82,13 +82,13 @@ export default class StreamManager {
                 return
             }
 
-            this.getApi(session.type).stopStream(sessionId).then((result) => {
+            this.getApi(session.type).stopStream(sessionId).then((result: any) => {
                 console.log('Current sessions:', this._sessions)
                 delete this._sessions[sessionId]
                 console.log('new sessions:', this._sessions)
 
                 resolve(result)
-            }).catch((error) => {
+            }).catch((error: any) => {
                 reject(error)
             })
         })
@@ -153,15 +153,15 @@ export default class StreamManager {
                 return
             }
 
-            this.getApi(session.type).sendKeepalive(sessionId).then((result) => {
+            this.getApi(session.type).sendKeepalive(sessionId).then((result: any) => {
                 resolve(result)
-            }).catch((error) => {
+            }).catch((error: any) => {
                 reject(error)
             })
         })
     }
 
-    monitorSession(sessionId){
+    monitorSession(sessionId: string){
         setTimeout(() => {
             this._application.log('StreamManager', 'monitorSession('+sessionId+') checking state')
 
@@ -190,15 +190,15 @@ export default class StreamManager {
                         defaultSettings
                     );
                     if(settings.use_msal) {
-                        this._application._msalAuthentication._msal.getMsalToken().then((msalToken) => {
+                        this._application._msalAuthentication._msal.getMsalToken().then((msalToken: any) => {
                             this.getApi(this.getSession(sessionId).type).sendMSALAuth(sessionId, msalToken.data.lpt).then(() => {
                                 this.monitorSession(sessionId)
 
-                            }).catch((error) => {
+                            }).catch((error: any) => {
                                 console.log('MSAL AUTH Error:', error)
                                 this.getSession(sessionId) && (this.getSession(sessionId).playerState = 'failed')
                             })
-                        }).catch((error) => {
+                        }).catch((error: any) => {
                             console.log('MSAL AUTH Error:', error)
                             this.getSession(sessionId) && (this.getSession(sessionId).playerState = 'failed')
                         })
@@ -207,7 +207,7 @@ export default class StreamManager {
                             this.getApi(this.getSession(sessionId).type).sendMSALAuth(sessionId, msalToken.data.lpt).then(() => {
                                 this.monitorSession(sessionId)
 
-                            }).catch((error) => {
+                            }).catch((error: any) => {
                                 console.log('MSAL AUTH Error:', error)
                                 this.getSession(sessionId) && (this.getSession(sessionId).playerState = 'failed')
                             })
@@ -221,7 +221,7 @@ export default class StreamManager {
                 } else if(result.state === 'WaitingForResources'){
                     // Do Queue logic
                     if(this.getSession(sessionId).waitingTimes === undefined){
-                        this.getApi(this.getSession(sessionId).type).getWaitingTimes(this.getSession(sessionId).target).then((waitingTimes) => {
+                        this.getApi(this.getSession(sessionId).type).getWaitingTimes(this.getSession(sessionId).target).then((waitingTimes: any) => {
                             this.getSession(sessionId).waitingTimes = waitingTimes
                             this.getSession(sessionId).playerState = 'queued'
 
@@ -246,7 +246,7 @@ export default class StreamManager {
                     console.log('Unknown state:', result)
                 }
 
-            }).catch((error) => {
+            }).catch((error: any) => {
                 console.log('Streammanager - error checking state:', sessionId, error)
 
                 if(error.status === 404){
@@ -261,11 +261,11 @@ export default class StreamManager {
 
     getActiveSessions(){
         return new Promise((resolve, reject) => {
-            this.getApi('cloud').getActiveSessions().then((result) => {
+            this.getApi('cloud').getActiveSessions().then((result: any) => {
 
                 console.log('Active sessions:', result)
                 resolve(result)
-            }).catch((error) => {
+            }).catch((error: any) => {
                 reject(error)
             })
         })
@@ -273,11 +273,11 @@ export default class StreamManager {
 
     inputConfigs(xboxTitleId: string) {
         return new Promise((resolve, reject) => {
-            this.getApi('home').inputConfigs(xboxTitleId).then((res) => {
+            this.getApi('home').inputConfigs(xboxTitleId).then((res: any) => {
                 console.log('inputConfigs res:', res)
 
                 resolve('')
-            }).catch((error) => {
+            }).catch((error: any) => {
                 reject(error)
             })
         })
@@ -285,7 +285,7 @@ export default class StreamManager {
 
     getConsoles() {
         return new Promise((resolve) => {
-            this.getApi('home').getConsoles().then((result) => {
+            this.getApi('home').getConsoles().then((result: any) => {
                 resolve(result)
             }).catch(() => {
                 resolve([])

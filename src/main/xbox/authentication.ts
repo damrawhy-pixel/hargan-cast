@@ -28,8 +28,8 @@ export default class Authentication {
   _tokenStore: AuthTokenStore;
   _xal: Xal;
 
-  _authWindow;
-  _authCallback;
+  _authWindow: any;
+  _authCallback: any;
 
   _isAuthenticating: boolean = false;
   _isAuthenticated: boolean = false;
@@ -281,7 +281,7 @@ export default class Authentication {
       .then((redirect) => {
         this.openAuthWindow(redirect.sisuAuth.MsaOauthRedirect);
 
-        this._authCallback = (redirectUri) => {
+        this._authCallback = (redirectUri: string) => {
           this._isAuthenticating = true;
           this._application.log(
             "authenticationV2",
@@ -366,7 +366,7 @@ export default class Authentication {
     );
   }
 
-  openAuthWindow(url) {
+  openAuthWindow(url: string) {
     const authWindow = new BrowserWindow({
       width: 520,
       height: 680,

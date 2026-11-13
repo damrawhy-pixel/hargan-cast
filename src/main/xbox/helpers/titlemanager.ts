@@ -32,18 +32,18 @@ export default class TitleManager {
     _xCloudRecentTitlesLastUpdate = 0
 
     
-    constructor(application){
+    constructor(application: any){
         this._application = application
         this._http = new HTTP(this._application)
     }
-    getGamePassProducts(titles) {
+    getGamePassProducts(titles: any) {
         return new Promise((resolve) => {
             const productIdQueue: any[] = [];
-            const v2TitleMap = {};
+            const v2TitleMap: Record<string, any> = {};
             if (!Array.isArray(titles)) {
                 resolve([]);
             }
-            titles.forEach(title => {
+            titles.forEach((title: any) => {
                 if (title.details && title.details.productId) {
                     productIdQueue.push(title.details.productId);
                     v2TitleMap[title.details.productId] = title;
@@ -53,8 +53,8 @@ export default class TitleManager {
             this.getCatalogGames(productIdQueue, v2TitleMap).then((titles: any) => {
                 const seen = new Set()
                 resolve(titles
-                    .sort((x, y) => x.ProductTitle.localeCompare(y.ProductTitle))
-                    .filter((item) => !seen.has(item.ProductTitle) && seen.add(item.ProductTitle)))
+                    .sort((x: any, y: any) => x.ProductTitle.localeCompare(y.ProductTitle))
+                    .filter((item: any) => !seen.has(item.ProductTitle) && seen.add(item.ProductTitle)))
             })
         })
     }
@@ -148,7 +148,7 @@ export class Title {
     productId
     xboxTitleId
     supportedInputTypes
-    catalogDetails
+    catalogDetails: any
 
     constructor(title:TitleDetails){
         this.titleId = title.titleId
@@ -165,7 +165,7 @@ export class Title {
         return JSON.stringify(this)
     }
 
-    restoreFromCache(cachedObj){
+    restoreFromCache(cachedObj: any){
         this.catalogDetails = cachedObj.catalogDetails
     }
 }

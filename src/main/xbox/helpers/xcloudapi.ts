@@ -67,7 +67,7 @@ export default class xCloudApi {
       : streamingTokens.xCloudToken;
   }
 
-  applyStreamingToken(streamingToken) {
+  applyStreamingToken(streamingToken: any) {
     if (!streamingToken?.data?.gsToken) {
       throw new Error("Streaming token is missing gsToken");
     }
@@ -87,7 +87,7 @@ export default class xCloudApi {
     }
   }
 
-  isAuthError(error) {
+  isAuthError(error: any) {
     return error?.status === 401 || error?.status === 403;
   }
 
@@ -130,10 +130,10 @@ export default class xCloudApi {
     });
   }
 
-  requestWithAuthRetry(request) {
+  requestWithAuthRetry(request: any) {
     this.syncTokenFromApplication();
 
-    return request().catch(async (error) => {
+    return request().catch(async (error: any) => {
       if (!this.isAuthError(error)) {
         throw error;
       }
@@ -195,10 +195,10 @@ export default class xCloudApi {
                 }
                 setTimeout(() => {
                   this.get(url, method, attempt + 1)
-                    .then((result) => {
+                    .then((result: any) => {
                       resolve(result);
                     })
-                    .catch((error) => {
+                    .catch((error: any) => {
                       reject(error);
                     });
                 }, NOT_READY_RETRY_MS);
@@ -297,7 +297,7 @@ export default class xCloudApi {
     }));
   }
 
-  getWaitingTimes(titleId) {
+  getWaitingTimes(titleId: string) {
     return this.get("/v1/waittime/" + titleId);
   }
 
@@ -309,7 +309,7 @@ export default class xCloudApi {
     return this.get("/v2/titles/mru?mr=25");
   }
 
-  stopStream(sessionId) {
+  stopStream(sessionId: string) {
     this.isStoped = true;
     return this.get("/v5/sessions/" + this._type + "/" + sessionId, "DELETE");
   }
@@ -458,11 +458,11 @@ export default class xCloudApi {
                 setTimeout(poll, EXCHANGE_POLL_MS);
               }
             })
-            .catch((error) => {
+            .catch((error: any) => {
               reject(error);
             });
         })
-        .catch((error) => {
+        .catch((error: any) => {
           reject(error);
         });
     });
@@ -489,11 +489,11 @@ export default class xCloudApi {
 
               resolve(exchangeSdp);
             })
-            .catch((error) => {
+            .catch((error: any) => {
               reject(error);
             });
         })
-        .catch((error) => {
+        .catch((error: any) => {
           reject(error);
         });
     });
@@ -595,7 +595,7 @@ export default class xCloudApi {
             const newCandidates: any[] = [];
             let foundation = 1;
 
-            const newCandidate = (candidate) => {
+            const newCandidate = (candidate: any) => {
               return {
                 candidate: candidate,
                 messageType: "iceCandidate",
@@ -645,7 +645,7 @@ export default class xCloudApi {
                 reject(error);
                 });
         })
-        .catch((error) => {
+        .catch((error: any) => {
           reject(error);
         });
     });
