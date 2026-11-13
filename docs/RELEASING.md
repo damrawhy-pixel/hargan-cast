@@ -85,3 +85,11 @@ Bunlar eklenince her sürümde kurulum dosyası imzalanır ve imzası iş içind
 5. `.aab` dosyasını Play Console'a yükle. iOS derlemesi TestFlight'ta kendiliğinden belirir; oradan incelemeye gönder.
 
 Sürüm numarası paketlere kendiliğinden işlenir: `0.3.0` için Android ve iOS derleme numarası `30099`, ön sürüm `0.3.0-beta.2` için `30002` olur; böylece ön sürümler asıl sürümden önce sıralanır. Ara ve yama numarası en fazla 99, ön sürüm numarası 1-98 olabilir; uymayan bir etiket derlemeyi durdurur.
+
+## Doğrulama
+
+Her sürümdeki dosyalar GitHub'ın imzalı derleme kaydını (build provenance) taşır ve sürüme bir yazılım malzeme listesi (`*-sbom.cdx.json`) eklenir. İndirilen bir dosyanın bu depoda, etiketlenen commit'ten derlendiğini şöyle denetleyebilirsin:
+
+```bash
+gh attestation verify HarganCast-Setup-0.3.0.exe --repo damrawhy-pixel/hargan-cast
+```
