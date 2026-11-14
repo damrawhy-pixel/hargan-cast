@@ -70,6 +70,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The media test replays a clip through the diagnostic build of the PS core.
+      - name: Toolchain for the PlayStation core
+        shell: pwsh
+        run: |
+          $v = '20260616'
+          Invoke-WebRequest "https://github.com/mstorsjo/llvm-mingw/releases/download/$v/llvm-mingw-$v-ucrt-x86_64.zip" -OutFile "$env:RUNNER_TEMP/llvm-mingw.zip"
+          Expand-Archive "$env:RUNNER_TEMP/llvm-mingw.zip" -DestinationPath C:/llvm-mingw
+          "C:/llvm-mingw/llvm-mingw-$v-ucrt-x86_64/bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          choco install ninja --no-progress -y
+      - name: Diagnostic PlayStation core
+        run: |
+          node scripts/build-native.mjs
+          cmake --build native/build --target hargan-ps-core-diag
       - run: npx electron-vite build
       - run: npx playwright test
       - uses: actions/upload-artifact@v5

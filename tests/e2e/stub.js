@@ -60,11 +60,18 @@
   }
 
   window.hc = {
-    platform: { fullscreen() {}, toggleFullscreen() {}, streaming() {}, openExternal() {}, openLicenses() {} },
-    settings: { get: () => new Promise(() => {}), set: async () => ({}), reset: async () => ({}) },
+    platform: { fullscreen() {}, toggleFullscreen() {}, streaming() {}, openExternal() {}, openLicenses() {}, log: (t) => (window.__hcLog ??= []).push(t), reportError: (t) => (window.__hcErrors ??= []).push(t) },
+    // A test may hand over full settings in window.__hcSettings (see tests/ui/media.spec.ts);
+    // without them the page keeps its built-in defaults.
+    settings: {
+      get: () => (window.__hcSettings ? Promise.resolve(window.__hcSettings) : new Promise(() => {})),
+      set: async (patch) => (window.__hcSettings = { ...window.__hcSettings, ...patch }),
+      reset: async () => window.__hcSettings ?? {},
+    },
     xbox: {
       status: async () => ({ state: 'signedIn', hasCloud: true, gamertag: 'TestGamer' }),
       titles: async () => games.slice(0, 400).map((g, i) => ({ titleId: 'T' + i, productId: g.productId, name: g.name, poster: g.imageUrl, categories: [], recent: i < 12 })),
+      library: async () => [], info: async () => ({ screenshots: [] }), activeSessions: async () => [], signIn: async () => {},
       onStatus: () => () => {}, signOut: async () => {},
     },
     ps: {
@@ -72,7 +79,8 @@
       catalog: async () => ({ games, warning: '', nativeMode: true }),
       onStatus: () => () => {},
       onEvent: (cb) => { listeners.add(cb); return () => listeners.delete(cb) },
-      stop: async () => {}, signOut: async () => {}, datacenters: async () => [],
+      stop: async () => {}, signOut: async () => {}, datacenters: async () => [], signIn: async () => {}, signInWithToken: async () => {},
+      info: async () => ({ screenshots: [] }), testHaptics: async () => false, routeSpeaker: async () => false,
       stream: async () => {
         fire({ ev: 'progress', stage: 'Test kaydı hazırlanıyor' })
         const capture = await makeCapture()
