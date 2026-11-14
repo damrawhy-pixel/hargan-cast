@@ -28,7 +28,7 @@
         "axios": "^1.7.7",
         "electron-updater": "^6.8.12",
         "ip-address": "^10.7.6",
-        "jose": "^5.1.0"
+        "jose": "^6.2.14"
     },
     "devDependencies": {
         "@capacitor/android": "^8.6.0",
