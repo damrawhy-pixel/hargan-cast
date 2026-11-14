@@ -269,7 +269,7 @@ jobs:
       #   gh attestation verify <file> --repo damrawhy-pixel/hargan-cast
       # The update feeds (*.yml) are left out: rollout.yml edits them later.
       - name: Build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             out/*.exe
