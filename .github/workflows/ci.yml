@@ -85,7 +85,7 @@ jobs:
           cmake --build native/build --target hargan-ps-core-diag
       - run: npx electron-vite build
       - run: npx playwright test
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ui-test-results
@@ -109,7 +109,7 @@ jobs:
         run: |
           mkdir -p corpus
           ./fuzz_reports corpus -max_total_time=120 -max_len=512
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: fuzz-crash
