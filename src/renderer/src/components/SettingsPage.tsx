@@ -14,14 +14,16 @@ const LANGUAGES: [string, string][] = [
   ['el-GR', 'Ελληνικά'], ['he-IL', 'עברית'], ['ar-SA', 'العربية'], ['ja-JP', '日本語'], ['ko-KR', '한국어'],
   ['zh-CN', '简体中文'], ['zh-TW', '繁體中文'],
 ]
-const RESOLUTIONS: [number, string][] = [[720, '720p'], [1080, '1080p'], [1440, '1440p'], [2160, '4K']]
+export const xboxResolutions = (): [number, string][] => [[720, '720p'], [1080, t('Yüksek')], [1081, t('En yüksek')]]
+export const videoFormats = (): [AppSettings['videoFormat'], string][] => [['', t('En boy oranını koru')], ['Stretch', t('Esnet')], ['Zoom', t('Yakınlaştır')], ['16:10', '16:10'], ['18:9', '18:9'], ['21:9', '21:9'], ['4:3', '4:3']]
+export const RESOLUTIONS: [number, string][] = [[720, '720p'], [1080, '1080p'], [1440, '1440p'], [2160, '4K']]
 // Built per render: the words follow the interface language.
-const psBitrates = (): [number, string][] => [[0, t('Otomatik')], ...[5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b): [number, string] => [b, t('{n} Mb/sn', { n: b / 1000 })])]
+export const psBitrates = (): [number, string][] => [[0, t('Otomatik')], ...[5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b): [number, string] => [b, t('{n} Mb/sn', { n: b / 1000 })])]
 const psBitrateHint = () => t('Otomatik, çözünürlüğe göre seçer: 1080p için 20, 4K için 40 Mb/sn.')
 const fsrHint = () => t('Görüntüyü ekran boyutuna AMD FSR ile büyütür ve keskinleştirir. Görüntü ekrandan küçükse en çok fark eder.')
 const debandHint = () => t('Koyu ve düz renk geçişlerinde sıkıştırmanın bıraktığı basamakları yumuşatır.')
 // Microsoft sends at most about 27 Mb/s, so a higher cap would change nothing.
-const xboxBitrates = (): [number, string][] => [[0, t('Sınırsız')], ...[5, 10, 15, 20].map((b): [number, string] => [b, t('En fazla {n} Mb/sn', { n: b })])]
+export const xboxBitrates = (): [number, string][] => [[0, t('Sınırsız')], ...[5, 10, 15, 20].map((b): [number, string] => [b, t('En fazla {n} Mb/sn', { n: b })])]
 const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.25, 27.78, 25, 22.73, 20.83, 19.23, 17.86, 16.67].map((r) => [r, `${r} Hz`])
 
 const SECTIONS = [

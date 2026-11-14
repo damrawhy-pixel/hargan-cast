@@ -5,6 +5,7 @@ import { fitFor, pictureLabel } from '../lib/picture'
 import { MOBILE } from '../lib/platform'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
+import { settingsFor } from '../../../shared/settings'
 import { t } from '../../../shared/i18n'
 import { rumble, startInput } from './input'
 import { psQuit, psStage } from './stages'
@@ -67,7 +68,7 @@ export function PsStream({ game, onExit }: Props) {
     const run = async () => {
       window.hc.platform.streaming(true)
       void routeDualSenseSpeaker().catch(() => {})
-      const settings = getSettings()
+      const settings = settingsFor(getSettings(), `ps:${game.productId}`)
       const { psCodec, psVibration } = settings
       const wantsHevc = psCodec === 'h265' || (psCodec === 'auto' && game.streamServiceType === 'pscloud')
       const hevc = wantsHevc && (await hevcPlayable())
@@ -146,7 +147,7 @@ export function PsStream({ game, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell platform="playstation" title={game.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
+    <StreamShell platform="playstation" profileKey={`ps:${game.productId}`} title={game.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
       <canvas ref={canvasRef} className="stream-surface" />
     </StreamShell>
   )

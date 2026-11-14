@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { MOBILE } from '../lib/platform'
 import { connectedPads } from '../lib/gamepads'
 import { getSettings } from '../lib/useSettings'
+import { settingsFor } from '../../../shared/settings'
 import { physicalPads } from '../lib/virtualPad'
 import { TouchControls, type TouchPlatform } from './TouchControls'
 import { t } from '../../../shared/i18n'
@@ -26,6 +27,8 @@ export interface StreamQueue {
 
 interface Props {
   platform: TouchPlatform
+  /** The game's key, for its own picture settings. */
+  profileKey: string
   title: string
   stage: string
   live: boolean
@@ -139,10 +142,10 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
   )
 }
 
-export function StreamShell({ platform, title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
+export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
   useSessionReport(platform, title, live, stats)
   const touch = useTouchControls()
-  const settings = getSettings()
+  const settings = settingsFor(getSettings(), profileKey)
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
   // Any CSS filter, even a neutral one, keeps video off the GPU's direct path to the screen.
   const adjusted = settings.brightness !== 100 || settings.contrast !== 100 || settings.saturation !== 100

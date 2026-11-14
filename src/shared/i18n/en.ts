@@ -424,4 +424,8 @@ export const en = {
   "Tam ekran başlatma ile birlikte, bilgisayarı kolla açıp doğrudan oyunlara geçebilirsin.": "Together with Start in full screen, you can turn on the PC and go straight to your games with a controller.",
   "Kasa verisi eksik": "Vault data missing",
   "Hesap kasası kaydedilemedi": "The account vault couldn't be saved",
+  "Genel ayar": "General setting",
+  "Bu oyuna özel ayarlar": "Settings for this game",
+  "{n} ayar değiştirildi": "{n} changed",
+  "Genel ayarlara dön": "Back to general settings",
 } as const satisfies Record<string, string>

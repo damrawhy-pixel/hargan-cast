@@ -4,6 +4,7 @@ import type { GameInfo } from '../../../shared/types'
 import { gameInfo, imageAt, knownInfo, ratingText } from '../lib/gameInfo'
 import { canStart, psFacts, serviceLabel, type HubItem } from '../lib/items'
 import { setSpotlight, toggleFavorite, useStore } from '../lib/store'
+import { GameProfile } from './GameProfile'
 import { useSettings } from '../lib/useSettings'
 
 const YEAR = (date?: string) => (date ? new Date(date).getFullYear() || undefined : undefined)
@@ -90,6 +91,7 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
               </button>
               <button className="ghost big detail-back" data-nav onClick={onClose}>{t('Geri')}</button>
             </div>
+            {item.action === 'play' && <GameProfile item={item} />}
           </div>
         </div>
 

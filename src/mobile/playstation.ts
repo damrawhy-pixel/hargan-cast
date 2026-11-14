@@ -22,7 +22,7 @@ import {
   streamArgs,
   type CatalogContext,
 } from '../main/playstation/common'
-import type { AppSettings } from '../shared/settings'
+import { settingsFor, type AppSettings } from '../shared/settings'
 import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../shared/types'
 import SecureStore from './shims/secureStore'
 
@@ -167,7 +167,7 @@ export default class MobilePlayStation {
     const key = datacentersKey(game.streamServiceType)
     const reply = await this.call(
       'stream',
-      streamArgs(game, opts, this.settings(), this.context, {
+      streamArgs(game, opts, settingsFor(this.settings(), `ps:${game.productId}`), this.context, {
         npsso: this.npsso(),
         locale: this.vault.get('locale', 'en-US'),
         attrPassed: this.vault.get('attrPassed', false),

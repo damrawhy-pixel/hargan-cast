@@ -19,6 +19,8 @@ export interface AppSettings {
   betaUpdates: boolean
   /** Desktop: start with Windows. */
   launchAtLogin: boolean
+  /** Per game (HubItem key, e.g. "ps:<productId>"), the picture settings that differ from these. */
+  gameProfiles: Record<string, GameProfile>
   fontSize: number
   uiSounds: boolean
   /** 'system' follows Windows' "Animation effects" switch. */
@@ -110,6 +112,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ignoreGpuBlocklist: false,
   betaUpdates: false,
   launchAtLogin: false,
+  gameProfiles: {},
   fontSize: 15,
   uiSounds: true,
   motion: 'on',
@@ -195,6 +198,42 @@ export const XBOX_REGIONS: [string, Message][] = [
   ['104.211.96.159', 'Orta Hindistan'],
 ]
 
+// --- per-game profiles --------------------------------------------------------
+
+/** What a game may set for itself: how its picture is asked for and shown. */
+export const PROFILE_FIELDS = [
+  'videoFormat',
+  'psCloudResolution',
+  'psCloudBitrate',
+  'psNowResolution',
+  'psNowBitrate',
+  'psFsr',
+  'psDeband',
+  'xboxResolution',
+  'xboxBitrate',
+  'xboxFsr',
+  'xboxDeband',
+] as const satisfies readonly (keyof AppSettings)[]
+
+export type GameProfile = Partial<Pick<AppSettings, (typeof PROFILE_FIELDS)[number]>>
+
+const MAX_PROFILES = 500
+const MAX_PROFILE_KEY = 200
+
+/** The settings a stream of this game runs with: the general ones, then its profile. */
+export const settingsFor = (settings: AppSettings, gameKey: string): AppSettings => ({ ...settings, ...settings.gameProfiles?.[gameKey] })
+
+function sanitizeProfiles(input: object): Record<string, GameProfile> {
+  const out: Record<string, GameProfile> = {}
+  for (const [key, value] of Object.entries(input).slice(0, MAX_PROFILES)) {
+    if (key.length > MAX_PROFILE_KEY) continue
+    const clean = sanitizeSettings(value) as Record<string, unknown>
+    const profile = Object.fromEntries(Object.entries(clean).filter(([field]) => (PROFILE_FIELDS as readonly string[]).includes(field)))
+    if (Object.keys(profile).length) out[key] = profile as GameProfile
+  }
+  return out
+}
+
 // --- validation --------------------------------------------------------------
 
 // Fields whose value must be one of a fixed set.
@@ -246,6 +285,10 @@ export function sanitizeSettings(input: unknown): Partial<AppSettings> {
     const field = key as keyof AppSettings
     const fallback = DEFAULT_SETTINGS[field]
     if (typeof value !== typeof fallback) continue
+    if (field === 'gameProfiles') {
+      if (value && typeof value === 'object' && !Array.isArray(value)) out[key] = sanitizeProfiles(value)
+      continue
+    }
     const choices = CHOICES[field] as readonly unknown[] | undefined
     if (choices && !choices.includes(value)) continue
     if (typeof value === 'number') {

@@ -592,3 +592,14 @@ button { cursor: pointer; }
 /* Set by the app's own animation setting, which may or may not follow Windows */
 [data-motion='reduced'] *, [data-motion='reduced'] *::before, [data-motion='reduced'] *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
 [data-motion='reduced'] .stage-drift, [data-motion='reduced'] .stage-art--sharp .stage-art-image { animation: none; }
+
+/* Per-game picture settings on a game's page. */
+.profile { margin-top: 18px; max-width: 520px; }
+.profile summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; display: flex; gap: 10px; align-items: baseline; list-style: none; }
+.profile summary::-webkit-details-marker { display: none; }
+.profile summary::before { content: '▸'; transition: transform 160ms; }
+.profile[open] summary::before { transform: rotate(90deg); }
+.profile summary small { font-weight: 400; color: var(--ink-faint, var(--ink-soft)); }
+.profile-body { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); }
+.profile-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.profile-body .ghost { justify-self: start; }

@@ -5,6 +5,7 @@ import { Picture, fitFor, outputSize, pictureLabel, type Fit, type PictureOption
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
+import { settingsFor } from '../../../shared/settings'
 import { createStreamMachine } from '../lib/streamMachine'
 import { t } from '../../../shared/i18n'
 
@@ -142,7 +143,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       const { default: StreamPlayer } = await import('xstreaming-player')
       if (disposed) return
 
-      const settings = getSettings()
+      const settings = settingsFor(getSettings(), `xbox:${title.titleId}`)
       const own = new StreamPlayer(HOLDER_ID, {
         input_touch: false,
         ui_touchenabled: false,
@@ -276,7 +277,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell platform="xbox" title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
+    <StreamShell platform="xbox" profileKey={`xbox:${title.titleId}`} title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
       <div id={HOLDER_ID} className="stream-surface" />
     </StreamShell>
   )

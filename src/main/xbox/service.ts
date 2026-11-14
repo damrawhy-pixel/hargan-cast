@@ -12,7 +12,7 @@ import { clearWebToken } from './helpers/webTokenStore'
 import xCloudApi from './helpers/xcloudapi'
 import Store from './secureStore'
 import { defaultSettings } from './settings'
-import type { AppSettings } from '../../shared/settings'
+import { settingsFor, type AppSettings } from '../../shared/settings'
 
 // The application object the Xbox helpers call back into, plus the narrow API
 // the renderer talks to.
@@ -45,13 +45,15 @@ export default class XboxService {
 
   log(_namespace = 'xbox', ..._args: unknown[]) {}
 
-  private storeSettings() {
+  // The Xbox layer reads these when it asks for a session; a game's profile can
+  // change them for the one session it starts.
+  private storeSettings(settings = this.settings) {
     this._store.set('settings', {
       ...defaultSettings,
-      preferred_game_language: this.settings.xboxGameLanguage,
-      resolution: this.settings.xboxResolution,
-      ipv6: this.settings.xboxIpv6,
-      force_region_ip: this.settings.xboxRegionIp,
+      preferred_game_language: settings.xboxGameLanguage,
+      resolution: settings.xboxResolution,
+      ipv6: settings.xboxIpv6,
+      force_region_ip: settings.xboxRegionIp,
     })
   }
 
@@ -285,7 +287,8 @@ export default class XboxService {
   }
 
   async startStream(titleId: string) {
-    const id = (await this._streams.startStream('cloud', titleId)) as string
+    this.storeSettings(settingsFor(this.settings, `xbox:${titleId}`))
+    const id = (await this._streams.startStream('cloud', titleId).finally(() => this.storeSettings())) as string
     this.trackSession({ id, titleId })
     return id
   }
