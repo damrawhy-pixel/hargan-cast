@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { AppSettings } from '../shared/settings'
+import { environmentLabel } from './environment'
 import { logFile, redact } from './log'
 import { t } from '../shared/i18n'
 
@@ -61,7 +62,7 @@ export async function exportDiagnostics(win: BrowserWindow | undefined, settings
     `Hargan Cast ${app.getVersion()} — ${new Date().toISOString()}`,
     `Electron ${process.versions.electron}, Chromium ${process.versions.chrome}, Node ${process.versions.node}`,
     `Windows ${os.release()} ${os.arch()}, ${os.cpus()[0]?.model ?? '?'} ×${os.cpus().length}, RAM ${Math.round(os.totalmem() / 2 ** 30)} GB`,
-    `Dil ${app.getLocale()}, kurulu: ${app.isPackaged}`,
+    `Dil ${app.getLocale()}, kurulu: ${app.isPackaged}, ortam: ${environmentLabel()}`,
     `\n== Grafik ==\n${JSON.stringify(gpu, null, 1)}`,
     `\n== Ayarlar ==\n${JSON.stringify(shown, null, 1)}`,
     `\n== Çökme dökümleri ==\n${listDumps()}`,

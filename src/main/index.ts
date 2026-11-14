@@ -2,6 +2,7 @@ import { app, BrowserWindow, crashReporter, ipcMain, net, powerSaveBlocker, prot
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { exportDiagnostics } from './diagnostics'
+import { environmentLabel, GAME_MODE, UNDER_WINE } from './environment'
 import { networkTest } from './network'
 import { log } from './log'
 import { resolveLanguage, setLanguage, t } from '../shared/i18n'
@@ -57,6 +58,11 @@ process.on('unhandledRejection', (reason) => log(`main unhandled rejection: ${(r
 if (!app.isPackaged && process.env.HC_USER_DATA) app.setPath('userData', process.env.HC_USER_DATA)
 
 const boot = readBootSettings()
+
+// Chromium's OS sandbox needs Windows kernel features Wine does not have; without
+// this switch every page crashes at start under Proton. Page isolation
+// (contextIsolation, no Node in the page, the CSP) still applies.
+if (UNDER_WINE) app.commandLine.appendSwitch('no-sandbox')
 
 // Dual-GPU laptops and desktops must decode on the discrete card.
 app.commandLine.appendSwitch('force_high_performance_gpu')
@@ -115,7 +121,7 @@ function applyWindowSettings() {
 
 function createWindow() {
   win = new BrowserWindow({
-    fullscreen: settings.get().startFullscreen,
+    fullscreen: settings.get().startFullscreen || GAME_MODE,
     width: 1360,
     height: 860,
     minWidth: 1024,
@@ -322,6 +328,7 @@ app.whenReady().then(() => {
   restrictPermissions()
 
   settings = new SettingsStore()
+  if (UNDER_WINE) log(`running on ${environmentLabel()}`)
   applyLanguage(settings.get())
   xbox = new XboxService((s) => send('xbox:statusChanged', s), settings.get())
   ps = new PlayStationService(

@@ -50,6 +50,10 @@ npm run dev
 
 Dağıtım klasörü: `npm run dist`. Tüm denetimler: `npm run check`. Arayüz testleri: `npm run test:ui`. Kol biçimi testleri, kol gerekmeden: `npm run test:native`. Ayrıntılar ve kurallar [CONTRIBUTING.md](CONTRIBUTING.md), güvenlik modeli [SECURITY.md](SECURITY.md) dosyasında.
 
+## Steam Deck
+
+Windows sürümü Proton ile Deck'te çalışır; kurulum ve önerilen ayarlar [docs/STEAM_DECK.md](docs/STEAM_DECK.md) dosyasında.
+
 ## Kısayollar
 
 | Tuş | İşlev |
