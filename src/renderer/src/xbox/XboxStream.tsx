@@ -5,6 +5,7 @@ import { Picture, fitFor, outputSize, pictureLabel, type Fit, type PictureOption
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
+import { createStreamMachine } from '../lib/streamMachine'
 import { t } from '../../../shared/i18n'
 
 const HOLDER_ID = 'xbox-video-holder'
@@ -75,6 +76,8 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
 
   useEffect(() => {
     const xbox = window.hc.xbox
+    // Rejoining skips the server request: the session is already running.
+    const machine = createStreamMachine(resumeId ? 'negotiating' : 'provisioning')
     let sessionId = resumeId ?? ''
     let disposed = false
     let player: any
@@ -86,14 +89,17 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     let filters = ''
 
     const leave = (error?: string) => {
+      machine.send('end')
       if (exiting.current) return
       exiting.current = true
       onExit(error)
     }
 
     // The session outlives the connection, so a dropped link can be negotiated again.
+    // Both the player's failure callback and a failed negotiation land here; the
+    // machine lets only the first of them through.
     const reconnect = () => {
-      if (disposed) return
+      if (disposed || !machine.send('dropped')) return
       clearInterval(keepalive)
       clearInterval(meter)
       stopPicture?.()
@@ -105,7 +111,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       player = undefined
       document.getElementById(HOLDER_ID)?.replaceChildren()
       setTimeout(() => {
-        if (!disposed) negotiate().catch(reconnect)
+        if (!disposed && machine.send('retry')) negotiate().catch(reconnect)
       }, RECONNECT_DELAY_MS)
     }
 
@@ -137,12 +143,15 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       if (disposed) return
 
       const settings = getSettings()
-      player = new StreamPlayer(HOLDER_ID, {
+      const own = new StreamPlayer(HOLDER_ID, {
         input_touch: false,
         ui_touchenabled: false,
         input_mousekeyboard: settings.xboxMouseKeyboard,
         input_legacykeyboard: true,
       } as any)
+      player = own
+      // Events from a player that has since been replaced are stale.
+      const current = () => player === own && !disposed
       player.bind(
         settings.xboxTurnUrl
           ? { turnServer: { url: settings.xboxTurnUrl, username: settings.xboxTurnUsername, credential: settings.xboxTurnCredential } }
@@ -166,18 +175,21 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       // On phones the paired controller is rumbled by the app itself (src/mobile/bridge.ts).
       player.setVibrationMode(MOBILE ? 'Native' : 'Webview')
       player.setGamepadDeadZone(settings.xboxDeadZone / 100)
-      player.setConnectFailHandler(reconnect)
+      player.setConnectFailHandler(() => current() && reconnect())
       player.setSdpHandler((_client: unknown, offer: RTCSessionDescriptionInit) => {
         xbox.sendChatSdp(sessionId, offer.sdp!).then((r) => player.setRemoteOffer(r.sdp))
       })
       player.getEventBus().on('connectionstate', (event: { state: string }) => {
-        if (event.state !== 'connected') return
+        if (event.state !== 'connected' || !current() || !machine.send('connected')) return
         attempts = 0
         // The picture starts a few seconds after the connection; keep the veil until then.
         setStage(t('Görüntü bekleniyor'))
         const video = document.querySelector<HTMLVideoElement>(`#${HOLDER_ID} video`)
-        if (video && !video.videoWidth) video.addEventListener('loadeddata', () => setLive(true), { once: true })
-        else setLive(true)
+        const showPicture = () => {
+          if (current() && machine.send('picture')) setLive(true)
+        }
+        if (video && !video.videoWidth) video.addEventListener('loadeddata', showPicture, { once: true })
+        else showPicture()
         stopPicture?.()
         const options: PictureOptions = { fsr: settings.xboxFsr, sharpness: settings.xboxFsrSharpness, deband: settings.xboxDeband }
         stopPicture = (options.fsr || options.deband) && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
@@ -224,8 +236,9 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         } else if (session.playerState === 'started') {
           clearInterval(poll)
           setQueue(undefined)
-          negotiate().catch((e: Error) => leave(e.message))
+          if (machine.send('ready')) negotiate().catch((e: Error) => leave(e.message))
         } else if (session.state === 'WaitingForResources') {
+          machine.send('queued')
           // Once set, the estimate stays put and the card counts it down.
           setQueue((queue) => (queue?.seconds !== undefined ? queue : { seconds: session.waitingSeconds }))
         } else setQueue(undefined)
@@ -249,6 +262,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
 
     return () => {
       disposed = true
+      machine.send('end')
       clearInterval(poll)
       clearInterval(keepalive)
       clearInterval(meter)
