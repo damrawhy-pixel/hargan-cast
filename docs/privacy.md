@@ -26,6 +26,7 @@ Bu bilgiler cihazından Hargan Cast'e ya da başka bir yere gönderilmez. Hesapt
 - **Microsoft (Xbox):** Hesap girişi, oyun listesi, oyun bilgileri ve bulut akışı. Bu bağlantılar Microsoft'un gizlilik bildirimine tabidir: https://privacy.microsoft.com
 - **Sony (PlayStation):** Hesap girişi, oyun kataloğu, mağaza bilgileri ve bulut akışı. Bu bağlantılar Sony Interactive Entertainment'ın gizlilik politikasına tabidir: https://www.playstation.com/legal/privacy-policy/
 - **GitHub (yalnızca Windows sürümü):** Yeni sürüm olup olmadığını denetlemek ve güncellemeyi indirmek için. Bu sırada GitHub'a kimlik bilgisi gönderilmez.
+- **Cloudflare (yalnızca bağlantı testinde, Windows sürümü):** Ayarlar > Ağ > Bağlantı testi'ni başlattığında indirme hızını ölçmek için speed.cloudflare.com'dan birkaç saniye boyunca anlamsız veri indirilir. Hiçbir bilgi gönderilmez; test başlatılmadıkça bu bağlantı kurulmaz.
 
 Hesap girişleri Microsoft'un ve Sony'nin kendi giriş sayfalarında yapılır; şifren Hargan Cast'ten geçmez ve uygulama şifreni hiçbir zaman görmez.
 
@@ -76,6 +77,7 @@ None of this is sent to Hargan Cast or anywhere else. Signing out deletes the se
 - **Microsoft (Xbox):** sign-in, game list, game details and cloud streaming, governed by https://privacy.microsoft.com
 - **Sony (PlayStation):** sign-in, game catalog, store details and cloud streaming, governed by https://www.playstation.com/legal/privacy-policy/
 - **GitHub (Windows version only):** checking for and downloading app updates. No account details are sent.
+- **Cloudflare (connection test only, Windows version):** when you run Settings > Network > Connection test, a few seconds of filler data are downloaded from speed.cloudflare.com to measure download speed. Nothing is sent, and no connection is made unless you start the test.
 
 Sign-in happens on Microsoft's and Sony's own pages; your password never passes through Hargan Cast. During a stream, video, audio and controller input travel only between your device and Microsoft's or Sony's servers. For PlayStation streams, video is handed between parts of the app over a local connection (127.0.0.1) that never leaves the device.
 

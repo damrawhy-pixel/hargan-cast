@@ -1,7 +1,8 @@
-import { PROFILE_FIELDS, type AppSettings, type GameProfile as Profile } from '../../../shared/settings'
+import { PROFILE_FIELDS, settingsFor, type AppSettings, type GameProfile as Profile } from '../../../shared/settings'
 import { t } from '../../../shared/i18n'
 import type { HubItem } from '../lib/items'
 import { updateSettings, useSettings } from '../lib/useSettings'
+import { videoSurfaceSupported } from '../lib/videoSurface'
 import { RESOLUTIONS, psBitrates, videoFormats, xboxBitrates, xboxResolutions } from './SettingsPage'
 
 type Field = (typeof PROFILE_FIELDS)[number]
@@ -54,6 +55,9 @@ export function GameProfile({ item }: { item: HubItem }) {
   const row = { profile, onChange: change }
 
   const ps = item.ps
+  // The app's shaders only run when it does the scaling itself.
+  // (PlayStation falls back to them where the browser cannot feed a <video>.)
+  const shaders = settingsFor(settings, item.key).upscaler === 'shader' || (Boolean(item.ps) && !videoSurfaceSupported)
   const cloud = ps?.streamServiceType === 'pscloud'
   return (
     <details className="profile">
@@ -66,17 +70,19 @@ export function GameProfile({ item }: { item: HubItem }) {
           <>
             <ProfileChoice field={cloud ? 'psCloudResolution' : 'psNowResolution'} label={t('Çözünürlük')} options={RESOLUTIONS} {...row} />
             <ProfileChoice field={cloud ? 'psCloudBitrate' : 'psNowBitrate'} label={t('Bit hızı')} options={psBitrates()} {...row} />
-            <ProfileChoice field="psFsr" label="FSR" options={ON_OFF()} {...row} />
-            <ProfileChoice field="psDeband" label={t('Bant giderme')} options={ON_OFF()} {...row} />
+            {shaders && <ProfileChoice field="psFsr" label="FSR" options={ON_OFF()} {...row} />}
+            {shaders && <ProfileChoice field="psDeband" label={t('Bant giderme')} options={ON_OFF()} {...row} />}
           </>
         ) : (
           <>
             <ProfileChoice field="xboxResolution" label={t('Çözünürlük')} options={xboxResolutions()} {...row} />
             <ProfileChoice field="xboxBitrate" label={t('Bit hızı sınırı')} options={xboxBitrates()} {...row} />
-            <ProfileChoice field="xboxFsr" label="FSR" options={ON_OFF()} {...row} />
-            <ProfileChoice field="xboxDeband" label={t('Bant giderme')} options={ON_OFF()} {...row} />
+            {shaders && <ProfileChoice field="xboxFsr" label="FSR" options={ON_OFF()} {...row} />}
+            {shaders && <ProfileChoice field="xboxDeband" label={t('Bant giderme')} options={ON_OFF()} {...row} />}
           </>
         )}
+        <ProfileChoice field="upscaler" label={t('Büyütme')} options={[['shader', t('Uygulama (FSR)')], ['system', t('Ekran kartı (RTX Video / VSR)')]]} {...row} />
+        <ProfileChoice field="framePacing" label={t('Kare zamanlaması')} options={[['latency', t('En düşük gecikme')], ['smooth', t('En akıcı görüntü')]]} {...row} />
         <ProfileChoice field="videoFormat" label={t('Görüntü biçimi')} options={videoFormats()} {...row} />
         {custom > 0 && (
           <button className="ghost" data-nav onClick={() => void updateSettings({ gameProfiles: Object.fromEntries(Object.entries(settings.gameProfiles).filter(([k]) => k !== item.key)) })}>

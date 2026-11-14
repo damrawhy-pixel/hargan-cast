@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { XBOX_REGIONS, type AppSettings } from '../../../shared/settings'
 import type { NetworkProbe, NetworkReport, PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
 import { MOBILE } from '../lib/platform'
+import { videoSurfaceSupported } from '../lib/videoSurface'
+import { suggestedPsBitrate } from '../lib/bitrate'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
 import { t, type Message } from '../../../shared/i18n'
@@ -58,6 +60,9 @@ function NetworkTest() {
     setRunning(false)
   }
   const adapter = report?.adapter
+  const suggested = report?.downloadMbps ? suggestedPsBitrate(report.downloadMbps) : 0
+  const settings = useSettings()
+  const applied = suggested > 0 && settings.psCloudBitrate === suggested && settings.psNowBitrate === suggested
   return (
     <>
       <Row label={t('Bağlantı testi')} hint={t('Hizmetlerin ne kadar hızlı ve ne kadar düzenli yanıt verdiğini ölçer. Birkaç saniye sürer.')}>
@@ -69,6 +74,19 @@ function NetworkTest() {
           hint={adapter.kind === 'wifi' ? t('Kablosuz bağlantıda takılma çok daha olasıdır. Mümkünse kablo kullan; olmazsa 5 GHz ağa bağlan.') : adapter.name}
         >
           {adapter.linkSpeed && <output>{adapter.linkSpeed}</output>}
+        </Row>
+      )}
+      {report && (
+        <Row
+          label={t('İndirme hızı')}
+          hint={report.downloadMbps === undefined ? t('Ölçülemedi.') : suggested ? t('PlayStation için önerilen bit hızı: {n} Mb/sn. Kalite, ağ dalgalansa da kayıp başlamadan alabileceğin en yüksek düzeyde olur.', { n: suggested / 1000 }) : t('Bu hız akış için düşük; en düşük bit hızı bile takılabilir.')}
+        >
+          {report.downloadMbps !== undefined && <output>{report.downloadMbps} Mb/sn</output>}
+          {suggested > 0 && (
+            <button className="ghost" data-nav disabled={applied} onClick={() => void updateSettings({ psCloudBitrate: suggested, psNowBitrate: suggested })}>
+              {applied ? t('Uygulandı') : t('Uygula')}
+            </button>
+          )}
         </Row>
       )}
       {report?.probes.map((probe) => (
@@ -294,6 +312,7 @@ function datacenterOptions(list: PsDatacenter[]): [string, string][] {
 
 export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): void }) {
   const [section, setSection] = useState<Section>('general')
+  const settings = useSettings()
   const [servers, setServers] = useState<string[]>([])
   const [datacenters, setDatacenters] = useState<{ cloud: PsDatacenter[]; now: PsDatacenter[] }>({ cloud: [], now: [] })
   const [outputs, setOutputs] = useState<[string, string][]>([])
@@ -359,7 +378,10 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Slider field="brightness" label={t('Parlaklık')} min={50} max={150} step={1} unit="%" />
             <Slider field="contrast" label={t('Kontrast')} min={50} max={150} step={1} unit="%" />
             <Slider field="saturation" label={t('Doygunluk')} min={0} max={200} step={1} unit="%" />
+            {settings.upscaler === 'system' && <small className="setting-note">{t('Parlaklık, kontrast ve doygunluk %100 dışındayken görüntü uygulamanın katmanından geçer; ekran kartı büyütmesi o zaman çalışmayabilir.')}</small>}
             <Choice field="videoDecoder" label={t('PlayStation video çözücü')} options={[['prefer-hardware', t('Donanım')], ['prefer-software', t('Yazılım')], ['no-preference', t('Otomatik')]]} />
+            <Choice field="upscaler" label={t('Büyütme')} hint={t('Ekran kartı: NVIDIA RTX Video ve Intel VSR gibi sürücü büyütmeleri, açıksa görüntüye uygulanır ve görüntü ekrana en kısa yoldan gider. Uygulama: FSR, keskinlik ve bant giderme.')} options={[['shader', t('Uygulama (FSR)')], ['system', t('Ekran kartı (RTX Video / VSR)')]]} />
+            <Choice field="framePacing" label={t('Kare zamanlaması')} hint={t('Akıcı: kareler ekranın yenilenmesine hizalanır, ağdaki dalgalanma takılma olarak görünmez; bir iki kare gecikme ekler.')} options={[['latency', t('En düşük gecikme')], ['smooth', t('En akıcı görüntü')]]} />
           </section>
         )}
 
@@ -400,9 +422,11 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Choice field="psNowDatacenter" label={t('Veri merkezi')} hint={dcHint(datacenters.now)} options={datacenterOptions(datacenters.now)} />
             <h3>{t('Akış')}</h3>
             <Choice field="psCodec" label={t('Kodek')} hint={t('Otomatik, ekran kartının desteğine göre seçer.')} options={[['auto', t('Otomatik')], ['h265', t('H.265')], ['h264', t('H.264')]]} />
+            {settings.upscaler === 'shader' || !videoSurfaceSupported ? (<>
             <Toggle field="psFsr" label={t('FSR')} hint={fsrHint()} />
             <Slider field="psFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />
             <Toggle field="psDeband" label={t('Bant giderme')} hint={debandHint()} />
+            </>) : <small className="setting-note">{t('FSR, keskinlik ve bant giderme, Görüntü > Büyütme "Uygulama" iken çalışır.')}</small>}
             <Choice field="psGameLanguage" label={t('Oyun dili')} hint={t('Yalnızca o dili sunan veri merkezlerinde geçerlidir.')} options={[['', t('Hesaba göre')], ...LANGUAGES]} />
             <Slider field="psPacketLossMax" label={t('Paket kaybı sınırı')} hint={t('Aşılınca akış kalitesi düşürülür.')} min={1} max={30} step={1} unit="%" />
             <h3>{t('Giriş')}</h3>
@@ -439,9 +463,11 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Choice field="xboxResolution" label={t('Çözünürlük')} hint={t("Üst sınırı Microsoft belirler: Ultimate hesapta 720p dışındaki seçenekler 1440p'ye çıkabilir.")} options={[[720, t('720p')], [1080, t('Yüksek')], [1081, t('En yüksek')]]} />
             <Choice field="xboxBitrate" label={t('Bit hızı sınırı')} hint={t("Yalnızca düşürür: yavaş bağlantıda takılmayı azaltır. Kaliteyi Microsoft'un verdiğinin üstüne çıkarmaz.")} options={xboxBitrates()} />
             <Choice field="xboxCodec" label={t('Kodek')} hint={t('Microsoft yalnızca H.264 gönderiyor; en iyi görüntüyü Main profili verir.')} options={[['high', t('En iyi (H.264 Main)')], ['main', t('Orta (H.264 Constrained Baseline)')], ['baseline', t('Düşük (H.264 Baseline)')]]} />
+            {settings.upscaler === 'shader' ? (<>
             <Toggle field="xboxFsr" label={t('FSR')} hint={`${fsrHint()} ${t('Kapalıyken görüntü, ekran kartının kendi video yolundan geçer.')}`} />
             <Slider field="xboxFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />
             <Toggle field="xboxDeband" label={t('Bant giderme')} hint={`${debandHint()} ${t('FSR gibi görüntüyü ayrı bir katmandan geçirir; tepkiye bir kare kadar gecikme ekleyebilir.')}`} />
+            </>) : <small className="setting-note">{t('FSR, keskinlik ve bant giderme, Görüntü > Büyütme "Uygulama" iken çalışır.')}</small>}
             <Choice field="xboxGameLanguage" label={t('Oyun dili')} options={[['', t('Varsayılan')], ...LANGUAGES]} />
             <h3>{t('Bağlantı')}</h3>
             {/* Not offered on phones; see src/mobile/settings.ts. */}

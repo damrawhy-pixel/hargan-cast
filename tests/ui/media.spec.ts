@@ -24,15 +24,22 @@ test.beforeAll(async () => {
   })
 })
 
-test.afterAll(async () => {
+test.afterEach(async () => {
   await app?.close()
+})
+
+test.afterAll(() => {
   server?.kill()
 })
 
-test('a replayed PlayStation stream is decoded, painted and ends cleanly', async () => {
+for (const [name, picture] of [
+  ['app canvas, lowest latency', { upscaler: 'shader', framePacing: 'latency' }],
+  ['graphics card video, smoothest', { upscaler: 'system', framePacing: 'smooth' }],
+] as const) {
+test(`a replayed PlayStation stream is decoded, shown and ends cleanly (${name})`, async () => {
   app = await electron.launch({ args: [path.join(__dirname, 'media/main.cjs')] })
   const page = await app.firstWindow()
-  const settings = { ...DEFAULT_SETTINGS, language: 'tr', psPremium: true, showStats: true, psFsr: false, psDeband: false, fullscreenOnStream: false }
+  const settings = { ...DEFAULT_SETTINGS, ...picture, language: 'tr', psPremium: true, showStats: true, psFsr: true, psDeband: false, fullscreenOnStream: false }
   await page.addInitScript((s) => ((window as unknown as { __hcSettings: unknown }).__hcSettings = s), settings)
   await page.goto(HARNESS)
 
@@ -47,7 +54,8 @@ test('a replayed PlayStation stream is decoded, painted and ends cleanly', async
   const fps = Number((await stats.textContent())?.match(/(\d+)\s*kare\/sn/)?.[1] ?? 0)
   // CI machines have no GPU; a software decoder still has to keep a few frames a second.
   expect(fps).toBeGreaterThan(5)
-  await page.screenshot({ path: 'test-results/screens/ps-stream.png' })
+  await expect(page.locator(picture.upscaler === 'system' ? 'video.stream-surface' : 'canvas.stream-surface')).toBeVisible()
+  await page.screenshot({ path: `test-results/screens/ps-stream-${picture.upscaler}.png` })
 
   // The core sends its reset when the clip is over; the page leaves without an error.
   await expect(page.locator('.stream')).toBeHidden({ timeout: 30_000 })
@@ -57,3 +65,4 @@ test('a replayed PlayStation stream is decoded, painted and ends cleanly', async
   const errors: string[] = await page.evaluate(() => (window as unknown as { __hcErrors?: string[] }).__hcErrors ?? [])
   expect(errors).toEqual([])
 })
+}

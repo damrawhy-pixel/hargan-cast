@@ -58,6 +58,8 @@ export interface NetworkProbe {
 export interface NetworkReport {
   adapter?: { name: string; kind: 'wired' | 'wifi' | 'other'; linkSpeed?: string }
   probes: NetworkProbe[]
+  /** Measured download speed, Mb/s; undefined when the measurement failed. */
+  downloadMbps?: number
 }
 
 export interface GameInfo {

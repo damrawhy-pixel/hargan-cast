@@ -142,8 +142,39 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
   )
 }
 
+// The services lower the stream's resolution on their own when the network
+// struggles; say so for a moment, since the picture just gets softer otherwise.
+const NOTICE_MS = 6000
+const DROP_SHARE = 0.85
+
+function useResolutionNotice(live: boolean, size?: string) {
+  const [notice, setNotice] = useState<string>()
+  const best = useRef(0)
+  const dropped = useRef(false)
+  useEffect(() => {
+    const height = Number(size?.match(/^\d+×(\d+)/)?.[1] ?? 0)
+    if (!live || !height) return
+    if (height > best.current) best.current = height
+    if (height < best.current * DROP_SHARE) {
+      if (dropped.current) return
+      dropped.current = true
+      setNotice(t('Sunucu görüntüyü {h}p çözünürlüğe düşürdü; ağ yavaşladığında olur.', { h: height }))
+    } else if (dropped.current && height >= best.current) {
+      dropped.current = false
+      setNotice(t('Çözünürlük geri yükseldi: {h}p', { h: height }))
+    }
+  }, [live, size])
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(undefined), NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [notice])
+  return notice
+}
+
 export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
   useSessionReport(platform, title, live, stats)
+  const notice = useResolutionNotice(live, stats?.size)
   const touch = useTouchControls()
   const settings = settingsFor(getSettings(), profileKey)
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
@@ -267,6 +298,8 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
           {controller && <> · {controller}</>}
         </div>
       )}
+
+      {notice && !menu && <div className="stream-notice" role="status">{notice}</div>}
 
       {menu && (
         <div className="stream-menu" role="dialog" aria-label={t('Akış menüsü')} ref={menuRef}>

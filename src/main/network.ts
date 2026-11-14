@@ -1,6 +1,7 @@
 // A short connection check for the settings page: how fast and how steady the
 // services answer, and whether the PC is on cable or Wi-Fi. Cloud streams suffer
 // from jitter and Wi-Fi far more than from raw bandwidth.
+import { net } from 'electron'
 import { execFile } from 'node:child_process'
 import { lookup } from 'node:dns/promises'
 import { connect } from 'node:net'
@@ -70,7 +71,46 @@ function adapter(): Promise<NetworkReport['adapter']> {
   })
 }
 
+// Download speed: a few parallel downloads of filler data from Cloudflare's speed
+// test service, long enough to leave TCP slow start, cut off at a time limit. Only
+// run when the user starts the test (docs/privacy.md).
+const SPEED_URL = 'https://speed.cloudflare.com/__down?bytes='
+const SPEED_STREAMS = 4
+const SPEED_BYTES = 25_000_000
+const SPEED_LIMIT_MS = 8000
+const SPEED_WARMUP_MS = 1000
+
+async function downloadMbps(): Promise<number | undefined> {
+  const controller = new AbortController()
+  const started = performance.now()
+  let counted = 0
+  let countFrom = 0
+  const timer = setTimeout(() => controller.abort(), SPEED_LIMIT_MS)
+  const one = async () => {
+    const res = await net.fetch(SPEED_URL + SPEED_BYTES, { cache: 'no-store', signal: controller.signal })
+    const reader = res.body?.getReader()
+    if (!reader) return
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return
+      // Bytes from the first second, while TCP ramps up, would understate the line.
+      if (performance.now() - started >= SPEED_WARMUP_MS) {
+        if (!countFrom) countFrom = performance.now()
+        counted += value.byteLength
+      }
+    }
+  }
+  try {
+    await Promise.allSettled(Array.from({ length: SPEED_STREAMS }, one))
+  } finally {
+    clearTimeout(timer)
+  }
+  const seconds = (performance.now() - countFrom) / 1000
+  return countFrom && seconds > 0.5 ? Math.round((counted * 8) / seconds / 1e6) : undefined
+}
+
 export async function networkTest(targets: [string, string][]): Promise<NetworkReport> {
+  // Latency first: a download running at the same time would inflate it.
   const [found, ...probes] = await Promise.all([adapter(), ...targets.map(([name, url]) => probe(name, url))])
-  return { adapter: found, probes }
+  return { adapter: found, probes, downloadMbps: await downloadMbps().catch(() => undefined) }
 }

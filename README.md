@@ -50,6 +50,17 @@ npm run dev
 
 Dağıtım klasörü: `npm run dist`. Tüm denetimler: `npm run check`. Arayüz testleri: `npm run test:ui`. Kol biçimi testleri, kol gerekmeden: `npm run test:native`. Ayrıntılar ve kurallar [CONTRIBUTING.md](CONTRIBUTING.md), güvenlik modeli [SECURITY.md](SECURITY.md) dosyasında.
 
+## Görüntü kalitesi
+
+Bulut akışı sıkıştırılmış gelir; uygulama sunucudan en iyisini ister ve onu bozmadan ekrana getirir. En çok fark yaratan ayarlar:
+
+- **Görüntü > Büyütme:** *Ekran kartı* seçiliyse görüntü bir video katmanı olarak doğrudan ekrana gider ve NVIDIA RTX Video ya da Intel VSR sürücüde açıksa onları kullanır; *Uygulama* seçiliyse AMD FSR, gürültüye duyarlı keskinleştirme ve bant giderme çalışır.
+- **Görüntü > Kare zamanlaması:** *En akıcı görüntü*, kareleri ekranın yenilenmesine hizalar ve ağ dalgalanmasının takılma olarak görünmesini önler.
+- **Ağ > Bağlantı testi:** gecikmeyi, dalgalanmayı ve indirme hızını ölçer; hattının kaldırdığı en yüksek PlayStation bit hızını tek dokunuşla uygular.
+- **Bu oyuna özel ayarlar** (oyunun sayfasında): çözünürlük, bit hızı, büyütme ve kare zamanlamasını oyun başına ayarlar.
+
+Akış sırasında sunucu çözünürlüğü düşürürse ekranda kısa bir bildirim çıkar; F3 ile açılan istatistikler çözme süresini, dalgalanmayı ve atlanan kareleri gösterir.
+
 ## Steam Deck
 
 Windows sürümü Proton ile Deck'te çalışır; kurulum ve önerilen ayarlar [docs/STEAM_DECK.md](docs/STEAM_DECK.md) dosyasında.

@@ -42,6 +42,14 @@ export interface AppSettings {
   contrast: number
   saturation: number
   videoDecoder: 'prefer-hardware' | 'prefer-software' | 'no-preference'
+  /**
+   * Who scales the picture to the screen: the app's own shaders (FSR, debanding)
+   * or the graphics card's video path (NVIDIA RTX Video, Intel VSR, the OS scaler),
+   * which also lets the picture go straight to the display as a hardware overlay.
+   */
+  upscaler: 'shader' | 'system'
+  /** 'latency' shows each frame as it arrives; 'smooth' holds a frame or two to show them evenly. */
+  framePacing: 'latency' | 'smooth'
 
   // Sound, shared by both services
   audioOutputDevice: string
@@ -130,6 +138,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   contrast: 100,
   saturation: 100,
   videoDecoder: 'prefer-hardware',
+  upscaler: 'shader',
+  framePacing: 'latency',
 
   audioOutputDevice: '',
   audioVolume: 100,
@@ -203,6 +213,8 @@ export const XBOX_REGIONS: [string, Message][] = [
 /** What a game may set for itself: how its picture is asked for and shown. */
 export const PROFILE_FIELDS = [
   'videoFormat',
+  'upscaler',
+  'framePacing',
   'psCloudResolution',
   'psCloudBitrate',
   'psNowResolution',
@@ -243,6 +255,8 @@ const CHOICES: { [K in keyof AppSettings]?: readonly AppSettings[K][] } = {
   touchControls: ['auto', 'on', 'off'],
   videoFormat: ['', 'Stretch', 'Zoom', '16:10', '18:9', '21:9', '4:3'],
   videoDecoder: ['prefer-hardware', 'prefer-software', 'no-preference'],
+  upscaler: ['shader', 'system'],
+  framePacing: ['latency', 'smooth'],
   psCodec: ['auto', 'h264', 'h265'],
   xboxCodec: ['', 'high', 'main', 'baseline'],
   xboxTriggerRumble: ['', 'all', 'left', 'right'],

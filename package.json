@@ -1,7 +1,7 @@
 {
     "name": "hargan-cast",
     "productName": "Hargan Cast",
-    "version": "0.2.1",
+    "version": "1.0.0",
     "private": true,
     "description": "Hargan Cast",
     "license": "AGPL-3.0-only",

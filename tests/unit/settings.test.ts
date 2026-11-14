@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { suggestedPsBitrate } from '../../src/renderer/src/lib/bitrate'
 import { DEFAULT_SETTINGS, sanitizeSettings, settingsFor } from '../../src/shared/settings'
 
 describe('sanitizeSettings', () => {
@@ -47,5 +48,13 @@ describe('game profiles', () => {
     const settings = { ...DEFAULT_SETTINGS, xboxFsr: false, gameProfiles: { 'xbox:1': { xboxFsr: true } } }
     expect(settingsFor(settings, 'xbox:1').xboxFsr).toBe(true)
     expect(settingsFor(settings, 'xbox:2').xboxFsr).toBe(false)
+  })
+})
+
+describe('suggested PlayStation bit rate', () => {
+  it('leaves headroom and picks an offered rate', () => {
+    expect(suggestedPsBitrate(100)).toBe(50000)
+    expect(suggestedPsBitrate(30)).toBe(20000)
+    expect(suggestedPsBitrate(5)).toBe(0)
   })
 })

@@ -210,6 +210,10 @@ vec3 at(ivec2 p) {
   return texelFetch(src, clamp(p, ivec2(0), size - 1), 0).rgb;
 }
 
+float luma(vec3 c) {
+  return c.g + 0.5 * (c.r + c.b);
+}
+
 void main() {
   size = textureSize(src, 0);
   ivec2 p = ivec2(gl_FragCoord.xy);
@@ -221,6 +225,12 @@ void main() {
   vec3 hitMax = (1.0 - mx) / min(4.0 * mn - 4.0, vec3(-1.0 / 65536.0));
   vec3 lobeRGB = max(-hitMin, hitMax);
   float lobe = max(-(0.25 - 1.0 / 16.0), min(max(lobeRGB.r, max(lobeRGB.g, lobeRGB.b)), 0.0)) * con;
+  // FSR's own noise limit: where the centre stands out from an otherwise flat ring
+  // it is compression noise, not an edge, so sharpening backs off by up to half.
+  float bL = luma(b), dL = luma(d), eL = luma(e), fL = luma(f), hL = luma(h);
+  float spread = max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL);
+  float noise = clamp(abs(0.25 * (bL + dL + fL + hL) - eL) / max(spread, 1.0 / 65536.0), 0.0, 1.0);
+  lobe *= 1.0 - 0.5 * noise;
   color = vec4(dithered((lobe * (b + d + f + h) + e) / (4.0 * lobe + 1.0)), 1.0);
 }`
 

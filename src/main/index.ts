@@ -73,7 +73,10 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding')
 // Chromium drops smooth scrolling when Windows animation effects are off; the
 // launcher and rails glide regardless, and the app's own setting governs the rest.
 app.commandLine.appendSwitch('enable-smooth-scrolling')
-const features = ['PlatformHEVCDecoderSupport', 'D3D11VideoDecoder']
+// The last three are Chromium's hooks for the graphics drivers' own video upscaling
+// and SDR-to-HDR (NVIDIA RTX Video, Intel VSR). They act on <video> elements only,
+// and only when the user has turned the feature on in the driver's control panel.
+const features = ['PlatformHEVCDecoderSupport', 'D3D11VideoDecoder', 'NvidiaVpSuperResolution', 'NvidiaVpTrueHDR', 'IntelVpSuperResolution']
 if (boot.useVulkan) {
   app.commandLine.appendSwitch('use-vulkan')
   features.push('Vulkan', 'VulkanFromANGLE', 'DefaultANGLEVulkan')

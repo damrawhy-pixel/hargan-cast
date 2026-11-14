@@ -603,3 +603,6 @@ button { cursor: pointer; }
 .profile-body { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); }
 .profile-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .profile-body .ghost { justify-self: start; }
+
+/* A short message over the stream, such as a resolution change. */
+.stream-notice { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: min(90vw, 640px); padding: 10px 18px; border-radius: 999px; background: rgba(6, 7, 10, 0.78); color: #fff; font-size: 0.9rem; pointer-events: none; animation: viewer-in 240ms var(--ease) both; }

@@ -11,7 +11,13 @@ export interface View extends Size {
 export interface WorkerInit {
   type: 'init'
   url: string
-  canvas: OffscreenCanvas
+  /**
+   * The page's canvas to paint on. Without one, decoded frames go back to the page,
+   * which shows them in a <video> so the graphics card can scale them.
+   */
+  canvas?: OffscreenCanvas
+  /** 'smooth' shows canvas frames on the display's refresh instead of on arrival. */
+  pacing: 'latency' | 'smooth'
   codec: 'h264' | 'h265'
   audio: MessagePort
   decoder: HardwareAcceleration
@@ -26,6 +32,8 @@ export type WorkerEvent =
   /** `filters` is non-empty when post-processing runs; the page words it. */
   | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string; decodeMs?: number; jitterMs: number; skipped: number }
   | { type: 'firstFrame' }
+  /** A decoded frame for the page's <video>; the page closes it. */
+  | { type: 'frame'; frame: VideoFrame }
   | { type: 'rumble'; left: number; right: number }
   | { type: 'ended' }
   /** Translated on the page, which knows the interface language. */
@@ -78,6 +86,23 @@ let frames = 0
 let bytes = 0
 let lost = 0
 
+// Frames waiting for the next display refresh, in smooth pacing on a canvas. Two is
+// enough to ride out a late arrival; more would only add delay, so the oldest goes.
+const MAX_PACED = 2
+const paced: VideoFrame[] = []
+let pacing: WorkerInit['pacing'] = 'latency'
+let toPage = false
+
+function presentPaced() {
+  if (closing) return
+  const frame = paced.shift()
+  if (frame) {
+    paint(frame)
+    frame.close()
+  }
+  requestAnimationFrame(presentPaced)
+}
+
 const post = (e: WorkerEvent) => (self as unknown as Worker).postMessage(e)
 
 // Exactly one 'ended' or 'error' reaches the page, however the stream stops.
@@ -113,8 +138,19 @@ function createDecoder() {
     output(frame) {
       decodeSum += performance.now() - frame.timestamp / 1000
       decodeCount++
-      paint(frame)
-      frame.close()
+      frameSize = { width: frame.displayWidth, height: frame.displayHeight }
+      if (toPage) {
+        ;(self as unknown as Worker).postMessage({ type: 'frame', frame } satisfies WorkerEvent, [frame])
+      } else if (pacing === 'smooth') {
+        paced.push(frame)
+        while (paced.length > MAX_PACED) {
+          paced.shift()!.close()
+          skipped++
+        }
+      } else {
+        paint(frame)
+        frame.close()
+      }
       frames++
       decoderFailures = 0
       if (firstFrame) {
@@ -205,13 +241,18 @@ function start(init: WorkerInit) {
   codecString = CODECS[init.codec]
   hardware = init.decoder
   audioPort = init.audio
-  canvas = init.canvas
   view = init.view
-  // A canvas keeps the first kind of context it gets, so post-processing is decided once, here.
-  if (init.picture) picture = Picture.create(canvas, init.picture)
-  if (!picture) {
-    ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) ?? undefined
-    if (!ctx) return finish({ type: 'error', message: 'Görüntü yüzeyi oluşturulamadı' })
+  pacing = init.pacing
+  toPage = !init.canvas
+  if (init.canvas) {
+    canvas = init.canvas
+    // A canvas keeps the first kind of context it gets, so post-processing is decided once, here.
+    if (init.picture) picture = Picture.create(canvas, init.picture)
+    if (!picture) {
+      ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) ?? undefined
+      if (!ctx) return finish({ type: 'error', message: 'Görüntü yüzeyi oluşturulamadı' })
+    }
+    if (pacing === 'smooth') requestAnimationFrame(presentPaced)
   }
   createDecoder()
 
@@ -248,6 +289,7 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
     closing = true
     ws?.close()
     if (decoder && decoder.state !== 'closed') decoder.close()
+    for (const frame of paced.splice(0)) frame.close()
     picture?.dispose()
   }
 }

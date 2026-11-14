@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PsGame } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
 import { fitFor, pictureLabel } from '../lib/picture'
+import { startVideoSurface, videoSurfaceSupported } from '../lib/videoSurface'
 import { MOBILE } from '../lib/platform'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { getSettings } from '../lib/useSettings'
@@ -28,6 +29,9 @@ interface Props {
 
 export function PsStream({ game, onExit }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  // Chosen once: the surface element cannot change during a stream.
+  const [system] = useState(() => videoSurfaceSupported && settingsFor(getSettings(), `ps:${game.productId}`).upscaler === 'system')
   const [stage, setStage] = useState(() => t('Oturum hazırlanıyor'))
   const [live, setLive] = useState(false)
   const [stats, setStats] = useState<StreamStats>()
@@ -42,6 +46,7 @@ export function PsStream({ game, onExit }: Props) {
     let stopInput: (() => void) | undefined
     let audio: AudioContext | undefined
     let resizer: ResizeObserver | undefined
+    let surface: ReturnType<typeof startVideoSurface> | undefined
     let disposed = false
 
     const leave = (error?: string) => {
@@ -75,12 +80,14 @@ export function PsStream({ game, onExit }: Props) {
       const started = await window.hc.ps.stream(game, { hevc })
       if (disposed) return void window.hc.ps.stop()
 
-      const canvas = canvasRef.current!
+      const element: HTMLElement = system ? videoRef.current! : canvasRef.current!
       const fit = fitFor(settings.videoFormat)
-      const box = canvas.getBoundingClientRect()
+      const box = element.getBoundingClientRect()
       const view: View = { width: Math.round(box.width * devicePixelRatio), height: Math.round(box.height * devicePixelRatio), fit }
-      const picture = settings.psFsr || settings.psDeband ? { fsr: settings.psFsr, sharpness: settings.psFsrSharpness, deband: settings.psDeband } : undefined
-      const offscreen = canvas.transferControlToOffscreen()
+      // The app's shaders run only on its own canvas; on the video path the graphics card scales.
+      const picture = !system && (settings.psFsr || settings.psDeband) ? { fsr: settings.psFsr, sharpness: settings.psFsrSharpness, deband: settings.psDeband } : undefined
+      const offscreen = system ? undefined : canvasRef.current!.transferControlToOffscreen()
+      if (system) surface = startVideoSurface(videoRef.current!, settings.framePacing)
 
       audio = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 })
       await audio.audioWorklet.addModule('./pcm-worklet.js')
@@ -98,8 +105,12 @@ export function PsStream({ game, onExit }: Props) {
 
       worker.onmessage = (e: MessageEvent<WorkerEvent>) => {
         const msg = e.data
-        if (msg.type === 'firstFrame') setLive(true)
-        else if (msg.type === 'stats') setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, decodeMs: msg.decodeMs, jitterMs: msg.jitterMs, skipped: msg.skipped, size: msg.filters && picture ? `${msg.size} · ${pictureLabel(picture)}` : msg.size })
+        if (msg.type === 'frame') surface ? surface.push(msg.frame) : msg.frame.close()
+        else if (msg.type === 'firstFrame') setLive(true)
+        else if (msg.type === 'stats') {
+          const scaling = system ? t('ekran kartı büyütmesi') : msg.filters && picture ? pictureLabel(picture) : ''
+          setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, decodeMs: msg.decodeMs, jitterMs: msg.jitterMs, skipped: msg.skipped + (surface?.dropped() ?? 0), size: scaling ? `${msg.size} · ${scaling}` : msg.size })
+        }
         // On phones the app rumbles the paired controller itself, straight from the session.
         else if (msg.type === 'rumble') psVibration && !MOBILE && rumble(msg.left, msg.right, nativeDualSense)
         else if (msg.type === 'ended') leave()
@@ -107,8 +118,8 @@ export function PsStream({ game, onExit }: Props) {
       }
 
       command(
-        { type: 'init', url: started.url, canvas: offscreen, codec: started.codec, audio: channel.port2, decoder: settings.videoDecoder, view, picture },
-        [offscreen, channel.port2],
+        { type: 'init', url: started.url, canvas: offscreen, pacing: settings.framePacing, codec: started.codec, audio: channel.port2, decoder: settings.videoDecoder, view, picture },
+        offscreen ? [offscreen, channel.port2] : [channel.port2],
       )
       resizer = new ResizeObserver(([entry]) => {
         // Safari reports CSS pixels only; scale those to the screen's own.
@@ -118,9 +129,9 @@ export function PsStream({ game, onExit }: Props) {
         if (size) command({ type: 'view', view: { width: size.inlineSize, height: size.blockSize, fit } })
       })
       try {
-        resizer.observe(canvas, { box: 'device-pixel-content-box' })
+        resizer.observe(element, { box: 'device-pixel-content-box' })
       } catch {
-        resizer.observe(canvas)
+        resizer.observe(element)
       }
       stopInput = startInput((report) => command({ type: 'input', report }, [report]), nativeDualSense, {
         deadZone: settings.psDeadZone / 100,
@@ -138,6 +149,7 @@ export function PsStream({ game, onExit }: Props) {
       stopInput?.()
       worker?.postMessage({ type: 'close' } satisfies WorkerCommand)
       setTimeout(() => worker?.terminate(), 200)
+      surface?.dispose()
       void audio?.close()
       void window.hc.ps.stop()
       window.hc.platform.streaming(false)
@@ -148,7 +160,7 @@ export function PsStream({ game, onExit }: Props) {
 
   return (
     <StreamShell platform="playstation" profileKey={`ps:${game.productId}`} title={game.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={game.imageUrl || game.landscapeImageUrl} onExit={() => onExit()}>
-      <canvas ref={canvasRef} className="stream-surface" />
+      {system ? <video ref={videoRef} className="stream-surface" muted playsInline /> : <canvas ref={canvasRef} className="stream-surface" />}
     </StreamShell>
   )
 }

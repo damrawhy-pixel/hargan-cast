@@ -11,9 +11,18 @@ function applyLanguage(settings: AppSettings) {
 }
 applyLanguage(current)
 
+// The desktop scales the page from the main process (setZoomFactor); phones have no
+// such process, so the page scales itself. Same base size on both.
+const BASE_FONT_PX = 15
+function applyTextSize(settings: AppSettings) {
+  if (document.documentElement.dataset.platform !== 'mobile') return
+  document.documentElement.style.setProperty('zoom', String(settings.fontSize / BASE_FONT_PX))
+}
+
 function publish(next: AppSettings) {
   current = next
   applyLanguage(next)
+  applyTextSize(next)
   listeners.forEach((l) => l())
   return next
 }

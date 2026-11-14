@@ -15,6 +15,8 @@ const KEEPALIVE_MS = 30_000
 const STATS_MS = 1000
 const RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 1500
+// Enough to absorb one late packet burst at 60 fps without feeling slower.
+const SMOOTH_JITTER_MS = 40
 // Getting a server can take a while, and a queue as long as Microsoft says; but
 // a session that is neither queued nor started after this long is not coming.
 const PROVISION_TIMEOUT_MS = 3 * 60_000
@@ -125,6 +127,19 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       if (audioOutputDevice) void output?.setSinkId?.(audioOutputDevice)?.catch?.(() => {})
     }
 
+    // WebRTC holds frames in a jitter buffer before showing them. Zero shows each one
+    // as soon as it is whole; a small target evens out an unsteady network.
+    const applyPacing = (pacing: 'latency' | 'smooth') => {
+      const pc: RTCPeerConnection | undefined = player?._webrtcClient
+      for (const receiver of pc?.getReceivers() ?? []) {
+        try {
+          ;(receiver as RTCRtpReceiver & { jitterBufferTarget: number | null }).jitterBufferTarget = pacing === 'smooth' ? SMOOTH_JITTER_MS : 0
+        } catch {
+          // Older engines lack the setting; the browser's default stays.
+        }
+      }
+    }
+
     const measure = async (video: HTMLVideoElement | null) => {
       const state = await player?.getStreamState()
       if (!state || disposed) return
@@ -193,8 +208,12 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         else showPicture()
         stopPicture?.()
         const options: PictureOptions = { fsr: settings.xboxFsr, sharpness: settings.xboxFsrSharpness, deband: settings.xboxDeband }
-        stopPicture = (options.fsr || options.deband) && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
-        filters = stopPicture ? pictureLabel(options) : ''
+        // With the graphics card scaling, the <video> stays on screen untouched so its
+        // driver upscaler and the hardware overlay can work on it.
+        const shaders = settings.upscaler === 'shader' && (options.fsr || options.deband)
+        stopPicture = shaders && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
+        filters = stopPicture ? pictureLabel(options) : settings.upscaler === 'system' ? t('ekran kartı büyütmesi') : ''
+        applyPacing(settings.framePacing)
         applyAudio()
         // 'connected' can come more than once per link; one keepalive is enough.
         clearInterval(keepalive)
