@@ -137,7 +137,7 @@ target_link_libraries(chiaki PUBLIC
 	ws2_32 wsock32 bcrypt iphlpapi crypt32 secur32 winmm)
 
 # --- the sidecar
-set(CORE_SRC src/main.c src/crash_dump.c src/media_server.c src/controller_io.c src/dualsense.c src/dualsense_report.c src/haptics.c)
+set(CORE_SRC src/main.c src/console.c src/crash_dump.c src/display.c src/remap.c src/media_server.c src/controller_io.c src/dualsense.c src/dualsense_report.c src/haptics.c)
 set(CORE_LIBS chiaki hid setupapi ole32 uuid dbghelp)
 add_executable(hargan-ps-core ${CORE_SRC})
 target_link_libraries(hargan-ps-core PRIVATE ${CORE_LIBS})
@@ -157,7 +157,7 @@ set_target_properties(hargan-ps-core-diag PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../build/diag")
 
 # Byte-level tests of the DualSense formats; needs no controller.
-add_executable(hargan-ds-test EXCLUDE_FROM_ALL test/dualsense_test.c src/dualsense.c src/dualsense_report.c src/haptics.c)
+add_executable(hargan-ds-test EXCLUDE_FROM_ALL test/dualsense_test.c src/dualsense.c src/dualsense_report.c src/haptics.c src/remap.c)
 target_link_libraries(hargan-ds-test PRIVATE ${CORE_LIBS})
 target_include_directories(hargan-ds-test PRIVATE src)
 target_link_options(hargan-ds-test PRIVATE -static)

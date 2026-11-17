@@ -5,11 +5,38 @@ import { gameInfo, imageAt, knownInfo, ratingText } from '../lib/gameInfo'
 import { canStart, psFacts, serviceLabel, type HubItem } from '../lib/items'
 import { setSpotlight, toggleFavorite, useStore } from '../lib/store'
 import { GameProfile } from './GameProfile'
+import { Achievements } from './Achievements'
 import { useSettings } from '../lib/useSettings'
 
 const YEAR = (date?: string) => (date ? new Date(date).getFullYear() || undefined : undefined)
 const SCREENSHOT_WIDTH = 480
 const WIDE_WIDTH = 1920
+
+const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+
+/** A desktop shortcut or a Steam entry that starts this game straight away. */
+function LaunchShortcuts({ item }: { item: HubItem }) {
+  const [note, setNote] = useState<string>()
+  const platform = window.hc.platform
+  if (!platform.createShortcut) return null
+  const run = async (action: () => Promise<unknown>, done: string) => {
+    try {
+      await action()
+      setNote(done)
+    } catch (e) {
+      setNote(clean(e as Error))
+    }
+  }
+  return (
+    <div className="detail-shortcuts">
+      <button className="ghost" data-nav onClick={() => void run(() => platform.createShortcut!(item.key, item.name), t('Masaüstüne kısayol eklendi.'))}>{t('Masaüstü kısayolu')}</button>
+      {platform.addToSteam && (
+        <button className="ghost" data-nav onClick={() => void run(() => platform.addToSteam!(item.key, item.name), t("Steam'e eklendi. Steam'i yeniden başlatınca kütüphanende görünür."))}>{t("Steam'e ekle")}</button>
+      )}
+      {note && <small role="status">{note}</small>}
+    </div>
+  )
+}
 
 interface Props {
   item: HubItem
@@ -91,6 +118,8 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
               </button>
               <button className="ghost big detail-back" data-nav onClick={onClose}>{t('Geri')}</button>
             </div>
+            {item.action === 'play' && <LaunchShortcuts item={item} />}
+            {item.xbox && <Achievements productId={item.xbox.productId} titleId={item.xbox.titleId} compact />}
             {item.action === 'play' && <GameProfile item={item} />}
           </div>
         </div>

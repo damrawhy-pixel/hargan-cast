@@ -54,8 +54,9 @@ Dağıtım klasörü: `npm run dist`. Tüm denetimler: `npm run check`. Arayüz 
 
 Bulut akışı sıkıştırılmış gelir; uygulama sunucudan en iyisini ister ve onu bozmadan ekrana getirir. En çok fark yaratan ayarlar:
 
-- **Görüntü > Büyütme:** *Ekran kartı* seçiliyse görüntü bir video katmanı olarak doğrudan ekrana gider ve NVIDIA RTX Video ya da Intel VSR sürücüde açıksa onları kullanır; *Uygulama* seçiliyse AMD FSR, gürültüye duyarlı keskinleştirme ve bant giderme çalışır.
-- **Görüntü > Kare zamanlaması:** *En akıcı görüntü*, kareleri ekranın yenilenmesine hizalar ve ağ dalgalanmasının takılma olarak görünmesini önler.
+- **Görüntü > Büyütme:** *Ekran kartı* seçiliyse görüntü bir video katmanı olarak doğrudan ekrana gider ve NVIDIA RTX Video ya da Intel VSR sürücüde açıksa onları kullanır; *Uygulama* seçiliyse AMD FSR ya da halesiz Lanczos büyütme, gürültüye duyarlı keskinleştirme, sıkıştırma izi azaltma ve bant giderme çalışır.
+- **Görüntü > Kare zamanlaması:** *En akıcı görüntü*, kareleri ekranın yenilenmesine hizalar ve ağ dalgalanmasının takılma olarak görünmesini önler. **Ekran yenileme hızını akışa uydur**, akış sürerken 144 Hz gibi ekranları 60'ın katı bir hıza (120 Hz) geçirir; her kare eşit süre görünür.
+- **Renk ve HDR:** kod çözücü akışın kendi parametrelerinden (profil, bit derinliği, renk alanı) kurulur; renk bilgisi göndermeyen akış BT.709 olarak gösterilir. Kendi PS5'inden oynarken, Windows'ta HDR açıksa akış HDR10 olarak gelir.
 - **Ağ > Bağlantı testi:** gecikmeyi, dalgalanmayı ve indirme hızını ölçer; hattının kaldırdığı en yüksek PlayStation bit hızını tek dokunuşla uygular.
 - **Bu oyuna özel ayarlar** (oyunun sayfasında): çözünürlük, bit hızı, büyütme ve kare zamanlamasını oyun başına ayarlar.
 
@@ -71,9 +72,13 @@ Windows sürümü Proton ile Deck'te çalışır; kurulum ve önerilen ayarlar [
 | --- | --- |
 | F11 / Alt+Enter | Tam ekran |
 | Esc | Akış menüsü |
-| F3 | İstatistikler |
+| F3 | İstatistikler (ağ, tampon, çözme ve ekran sırası gecikmesi ile toplamı) |
+| F12 | Ekran görüntüsü (Resimler > Hargan Cast) |
+| F10 | An kaydı açıksa son saniyeleri MP4 olarak kaydet (Videolar > Hargan Cast) |
 | Kol: LB / RB | Alanlar arasında geçiş |
 | Kol: D-pad, sol çubuk, A | Kitaplıkta gezinme ve başlatma |
+
+Bir oyun doğrudan da açılabilir: `HarganCast.exe --play=xbox:<titleId>` ya da `hargancast://play/ps:<productId>`. Oyun sayfasındaki **Masaüstü kısayolu** ve **Steam'e ekle** bunu kendisi yazar. Kol düzeni (tuş atama, çubuk değiştirme, ters dikey) **Ayarlar > Kol düzeni**'nde ve oyun başına oyunun sayfasındadır.
 
 PlayStation klavye eşlemesi: Z ✕, X ○, A □, S △, Q L1, E R1, C L2, V R2, Enter Options, Backspace Share, T dokunmatik, Home PS.
 
@@ -87,7 +92,7 @@ Tüm ayarlar **Ayarlar** sekmesindedir ve şifreli olarak `vault/settings.bin` d
 
 ## Sınırlar
 
-Henüz yok: mikrofon, konsoldan Remote Play ve Xbox ev akışı.
+Kendi PS5/PS4'ünden Uzaktan Oynatma masaüstünde var (PlayStation alanı > Konsolların); telefonlarda henüz yok. PSN üzerinden ev dışından bağlantı yok; ev dışından oynamak için konsolun adresi elle girilebilir (port yönlendirme ya da VPN). Xbox ev akışı Microsoft'un aktarımıyla her yerden çalışır.
 
 ## Sorun giderme
 

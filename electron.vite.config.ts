@@ -10,6 +10,8 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     esbuild: legacyClassFields,
+    // Discord presence turns on only in builds given an application id.
+    define: { __DISCORD_CLIENT_ID__: JSON.stringify(process.env.HC_DISCORD_CLIENT_ID ?? '') },
     build: { rollupOptions: { input: { index: resolve('src/main/index.ts') } } },
   },
   preload: {

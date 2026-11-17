@@ -36,6 +36,50 @@ export interface XboxTitle {
   owned?: boolean
   gamePass?: boolean
   lastPlayed?: string
+  /** Set when this is the user's own console (xHome) rather than a cloud game: its server id. */
+  home?: string
+}
+
+export interface XboxAchievement {
+  id: string
+  name: string
+  description: string
+  gamerscore: number
+  unlocked: boolean
+  /** 0..100 for ones with a counter, while not unlocked. */
+  progress?: number
+  icon?: string
+  secret: boolean
+  unlockedAt?: string
+}
+
+export interface XboxAchievements {
+  unlocked: number
+  total: number
+  gamerscore: number
+  totalGamerscore: number
+  list: XboxAchievement[]
+}
+
+export interface XboxFriend {
+  xuid: string
+  gamertag: string
+  picture?: string
+  online: boolean
+  /** "Playing Forza Horizon 5", "Last seen 2h ago: Home", ... in the account's language. */
+  status: string
+  favorite: boolean
+}
+
+/** An Xbox the account can stream from over the internet or at home. */
+export interface XboxConsole {
+  serverId: string
+  name: string
+  /** XboxSeriesX, XboxSeriesS, XboxOne, ... */
+  type: string
+  /** On, ConnectedStandby (instant-on, can be woken) or Off. */
+  powerState: string
+  streamingEnabled: boolean
 }
 
 export interface XboxSession {
@@ -110,6 +154,8 @@ export interface PsCatalog {
 
 export interface PsStreamOptions {
   hevc: boolean
+  /** Remote Play on a PS5 only: ask for 10-bit HDR. */
+  hdr?: boolean
 }
 
 export interface PsDatacenter {
@@ -117,11 +163,32 @@ export interface PsDatacenter {
   rttMs?: number
 }
 
+/** A console found on the network (or at a typed address). */
+export interface PsFoundConsole {
+  address: string
+  name: string
+  ps5: boolean
+  state: 'ready' | 'standby' | 'unknown'
+  hostId: string
+  systemVersion: string
+  runningApp: string
+}
+
+/** A console this app is linked to; its keys stay in the main process. */
+export interface PsConsole {
+  id: string
+  name: string
+  address: string
+  ps5: boolean
+}
+
 export interface PsStreamStarted {
   url: string
   codec: 'h264' | 'h265'
   width: number
   height: number
+  /** Round trip to the server, measured as the session started. */
+  rttMs?: number
 }
 
 export type PsEvent =
@@ -131,7 +198,7 @@ export type PsEvent =
   | { ev: 'dualsense'; transport?: 'usb' | 'bluetooth' }
 
 export interface HarganApi {
-  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined>; networkTest?(): Promise<NetworkReport> }
+  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined>; networkTest?(): Promise<NetworkReport>; screenshot?(title: string): Promise<string | undefined>; saveClip?(title: string, data: ArrayBuffer): Promise<string>; showCapture?(file: string): void; takeLaunch?(): Promise<string | undefined>; discord?: boolean; presence?(title: string, service: string): void; onLaunch?(cb: (target: string) => void): () => void; createShortcut?(key: string, name: string): Promise<string>; addToSteam?(key: string, name: string): Promise<number> }
   settings: {
     get(): Promise<AppSettings>
     set(patch: Partial<AppSettings>): Promise<AppSettings>
@@ -145,6 +212,12 @@ export interface HarganApi {
     library(): Promise<XboxTitle[]>
     info(productId: string): Promise<GameInfo>
     startStream(titleId: string): Promise<string>
+    /** The user's own consoles that allow remote play. */
+    consoles(): Promise<XboxConsole[]>
+    /** The account's achievements in a game, or null when it has none or was never played. */
+    achievements(productId: string, titleId: string): Promise<XboxAchievements | null>
+    friends(): Promise<XboxFriend[]>
+    startHomeStream(serverId: string): Promise<string>
     activeSessions(): Promise<XboxActiveSession[]>
     adoptSession(id: string, titleId: string): Promise<void>
     endSession(id: string, titleId: string): Promise<void>
@@ -168,6 +241,16 @@ export interface HarganApi {
     testHaptics(): Promise<boolean>
     info(game: PsGame): Promise<GameInfo>
     routeSpeaker(): Promise<boolean>
+    /** Remote Play with the user's own console; desktop only. */
+    consoles?: {
+      list(): Promise<PsConsole[]>
+      discover(host?: string): Promise<PsFoundConsole[]>
+      register(found: PsFoundConsole, pin: string, accountId?: string): Promise<PsConsole>
+      forget(id: string): Promise<PsConsole[]>
+      moved(id: string, address: string): Promise<void>
+      wake(id: string): Promise<void>
+      stream(id: string, opts: PsStreamOptions): Promise<PsStreamStarted>
+    }
     onStatus(cb: (s: PsStatus) => void): () => void
     onEvent(cb: (e: PsEvent) => void): () => void
   }

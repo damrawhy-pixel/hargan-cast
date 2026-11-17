@@ -606,3 +606,69 @@ button { cursor: pointer; }
 
 /* A short message over the stream, such as a resolution change. */
 .stream-notice { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: min(90vw, 640px); padding: 10px 18px; border-radius: 999px; background: rgba(6, 7, 10, 0.78); color: #fff; font-size: 0.9rem; pointer-events: none; animation: viewer-in 240ms var(--ease) both; }
+
+/* Controller layout editor */
+.layout-editor { display: grid; gap: 8px; }
+.layout-grid { display: grid; gap: 6px; margin-top: 6px; }
+.layout-row { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(120px, 1.2fr) auto; gap: 10px; align-items: center; }
+.layout-row > span { color: var(--ink-soft); }
+.layout-row > span.layout-changed { color: var(--ink); font-weight: 600; }
+.layout-row .ghost { white-space: nowrap; }
+.layout-editor > .ghost { justify-self: start; margin-top: 6px; }
+@media (max-width: 560px) {
+  .layout-row { grid-template-columns: 1fr 1fr; }
+  .layout-row .ghost { grid-column: 1 / -1; justify-self: start; }
+}
+
+/* Remote Play: the user's own consoles */
+.consoles { margin-bottom: 28px; }
+.consoles .shelf-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.consoles .shelf-head h2 { margin-right: auto; }
+.consoles .hint { color: var(--ink-soft); margin: 6px 0 0; }
+.console-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.console-card { display: grid; gap: 6px; padding: 16px; border-radius: 16px; }
+.console-card small { color: var(--ink-soft); }
+.console-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.console-add, .console-link { display: grid; gap: 10px; margin-top: 14px; padding: 16px; border-radius: 16px; max-width: 560px; }
+.console-add > .ghost { justify-self: start; }
+.console-address { display: flex; gap: 8px; flex-wrap: wrap; }
+.console-address input { flex: 1 1 200px; }
+.console-link ol { margin: 0; padding-left: 20px; color: var(--ink-soft); }
+.console-link input[inputmode='numeric'] { font-size: 1.4rem; letter-spacing: 0.2em; max-width: 220px; }
+
+/* A screenshot leaves the app's own overlays out. */
+.stream--clean .stream-stats, .stream--clean .stream-notice, .stream--clean .touch { visibility: hidden; }
+.stream-toast { pointer-events: auto; display: flex; gap: 12px; align-items: center; }
+.stream-toast .link { color: #fff; text-decoration: underline; }
+
+.detail-shortcuts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.detail-shortcuts small { color: var(--ink-soft); }
+
+/* Xbox achievements */
+.achievements { display: grid; gap: 8px; margin-top: 14px; max-width: 560px; }
+.achievements-note { color: var(--ink-soft); margin-top: 12px; }
+.achievements-summary { display: grid; grid-template-columns: auto auto auto 1fr; gap: 12px; align-items: center; text-align: left; }
+.achievements-bar { display: block; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; min-width: 60px; }
+.achievements-bar span { display: block; height: 100%; background: var(--brand); }
+.achievements-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+.achievements-list li { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; opacity: 0.6; }
+.achievements-list li.unlocked { opacity: 1; }
+.achievements-list img, .achievements-icon { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; display: grid; place-items: center; background: rgba(255, 255, 255, 0.08); }
+.achievements-list div { display: grid; gap: 2px; }
+.achievements-list small { color: var(--ink-soft); }
+.stream-menu .achievements { max-width: none; width: 100%; }
+.stream-menu .achievements-list { max-height: 40vh; }
+
+/* Xbox friends */
+.friends { margin-bottom: 24px; }
+.friends .shelf-head { display: flex; gap: 10px; align-items: baseline; }
+.friends .shelf-head small { color: var(--ink-soft); }
+.friends-row { display: flex; gap: 14px; overflow-x: auto; padding: 8px 2px 12px; }
+.friend { display: grid; justify-items: center; gap: 4px; width: 96px; flex: none; text-align: center; opacity: 0.55; }
+.friend--online { opacity: 1; }
+.friend img, .friend-pic { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: rgba(255, 255, 255, 0.1); font-weight: 700; }
+.friend--online img, .friend--online .friend-pic { box-shadow: 0 0 0 3px #107c10; }
+.friend strong { font-size: 0.85rem; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.friend small { font-size: 0.72rem; color: var(--ink-soft); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.stream-filters { position: absolute; width: 0; height: 0; overflow: hidden; }

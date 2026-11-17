@@ -4,6 +4,7 @@ import type { NetworkProbe, NetworkReport, PsDatacenter, PsStatus, XboxStatus } 
 import { MOBILE } from '../lib/platform'
 import { videoSurfaceSupported } from '../lib/videoSurface'
 import { suggestedPsBitrate } from '../lib/bitrate'
+import { LayoutEditor } from './LayoutEditor'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
 import { t, type Message } from '../../../shared/i18n'
@@ -22,7 +23,10 @@ export const RESOLUTIONS: [number, string][] = [[720, '720p'], [1080, '1080p'], 
 // Built per render: the words follow the interface language.
 export const psBitrates = (): [number, string][] => [[0, t('Otomatik')], ...[5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000].map((b): [number, string] => [b, t('{n} Mb/sn', { n: b / 1000 })])]
 const psBitrateHint = () => t('Otomatik, çözünürlüğe göre seçer: 1080p için 20, 4K için 40 Mb/sn.')
-const fsrHint = () => t('Görüntüyü ekran boyutuna AMD FSR ile büyütür ve keskinleştirir. Görüntü ekrandan küçükse en çok fark eder.')
+const fsrHint = () => t('Görüntüyü ekran boyutuna büyütür ve keskinleştirir. Görüntü ekrandan küçükse en çok fark eder.')
+export const scalers = (): [AppSettings['psScaler'], string][] => [['fsr', t('FSR (keskin kenarlar)')], ['lanczos', t('Lanczos (doğal görüntü)')]]
+const scalerHint = () => t('FSR, oyunlardaki kenarları ve yazıları keskin tutar. Lanczos daha doğal, film gibi bir görüntü verir ve kenarlarda hale bırakmaz.')
+const denoiseHint = () => t('Düşük bit hızında kenarlarda beliren karıncalanmayı ve düz alanlardaki blokları yumuşatır, kenarları korur. Çok ince dokuları biraz yumuşatabilir.')
 const debandHint = () => t('Koyu ve düz renk geçişlerinde sıkıştırmanın bıraktığı basamakları yumuşatır.')
 // Microsoft sends at most about 27 Mb/s, so a higher cap would change nothing.
 export const xboxBitrates = (): [number, string][] => [[0, t('Sınırsız')], ...[5, 10, 15, 20].map((b): [number, string] => [b, t('En fazla {n} Mb/sn', { n: b })])]
@@ -30,7 +34,7 @@ const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.2
 
 const SECTIONS = [
   ['general', 'Genel'], ['picture', 'Görüntü'], ['sound', 'Ses'], ['touch', 'Dokunmatik'], ['playstation', 'PlayStation'],
-  ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['network', 'Ağ'], ['accounts', 'Hesaplar'],
+  ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['layout', 'Kol düzeni'], ['network', 'Ağ'], ['accounts', 'Hesaplar'],
 ] as const satisfies readonly (readonly [string, Message])[]
 type Section = (typeof SECTIONS)[number][0]
 
@@ -380,7 +384,12 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Slider field="saturation" label={t('Doygunluk')} min={0} max={200} step={1} unit="%" />
             {settings.upscaler === 'system' && <small className="setting-note">{t('Parlaklık, kontrast ve doygunluk %100 dışındayken görüntü uygulamanın katmanından geçer; ekran kartı büyütmesi o zaman çalışmayabilir.')}</small>}
             <Choice field="videoDecoder" label={t('PlayStation video çözücü')} options={[['prefer-hardware', t('Donanım')], ['prefer-software', t('Yazılım')], ['no-preference', t('Otomatik')]]} />
+            <Choice field="colorAssist" label={t('Renk körlüğü düzeltmesi')} hint={t('Ayırt edilemeyen renk farklarını görülebilen renklere taşır. Görüntüyü ayrı bir katmandan geçirir.')} options={[['off', t('Kapalı')], ['protan', t('Protanopi (kırmızı)')], ['deutan', t('Döteranopi (yeşil)')], ['tritan', t('Tritanopi (mavi)')]]} />
             <Choice field="upscaler" label={t('Büyütme')} hint={t('Ekran kartı: NVIDIA RTX Video ve Intel VSR gibi sürücü büyütmeleri, açıksa görüntüye uygulanır ve görüntü ekrana en kısa yoldan gider. Uygulama: FSR, keskinlik ve bant giderme.')} options={[['shader', t('Uygulama (FSR)')], ['system', t('Ekran kartı (RTX Video / VSR)')]]} />
+            {window.hc.platform.discord && <Toggle field="discordPresence" label={t("Discord'da oynadığını göster")} hint={t("Akış sırasında Discord'daki durumuna oyunun adı yazılır.")} />}
+            {!MOBILE && <Toggle field="replayBuffer" label={t('An kaydı')} hint={t('Akışın son saniyelerini ekran kartıyla kodlayıp bellekte tutar; F10 ya da akış menüsü bunları Videolar > Hargan Cast klasörüne MP4 olarak kaydeder. Ekran görüntüsü (F12) her zaman açıktır.')} />}
+            {!MOBILE && settings.replayBuffer && <Choice field="replaySeconds" label={t('Kayıt uzunluğu')} options={[[15, t('{n} saniye', { n: 15 })], [30, t('{n} saniye', { n: 30 })], [60, t('1 dakika')], [120, t('2 dakika')]]} />}
+            {!MOBILE && <Toggle field="matchRefreshRate" label={t('Ekran yenileme hızını akışa uydur')} hint={t("Akış sırasında ekranı 60'ın katı bir hıza geçirir (örneğin 144 Hz yerine 120 Hz); her kare ekranda eşit süre kalır, takılma hissi kaybolur. Akış bitince eski hıza döner. G-Sync veya FreeSync açıksa gerekmez.")} />}
             <Choice field="framePacing" label={t('Kare zamanlaması')} hint={t('Akıcı: kareler ekranın yenilenmesine hizalanır, ağdaki dalgalanma takılma olarak görünmez; bir iki kare gecikme ekler.')} options={[['latency', t('En düşük gecikme')], ['smooth', t('En akıcı görüntü')]]} />
           </section>
         )}
@@ -420,13 +429,24 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Choice field="psNowResolution" label={t('Çözünürlük')} options={RESOLUTIONS} />
             <Choice field="psNowBitrate" label={t('Bit hızı')} hint={psBitrateHint()} options={psBitrates()} />
             <Choice field="psNowDatacenter" label={t('Veri merkezi')} hint={dcHint(datacenters.now)} options={datacenterOptions(datacenters.now)} />
+            {!MOBILE && (
+              <>
+                <h3>{t('Kendi konsolun')}</h3>
+                <Choice field="psRemoteResolution" label={t('Çözünürlük')} hint={t('PS4 en fazla 1080p gönderir; 1080p yalnızca PS4 Pro’da.')} options={RESOLUTIONS} />
+                <Choice field="psRemoteBitrate" label={t('Bit hızı')} hint={t('Otomatik, çözünürlüğe göre seçer: 1080p için 15, 4K için 40 Mb/sn.')} options={psBitrates()} />
+                <Choice field="psRemoteFps" label={t('Kare hızı')} options={[[60, t('60 kare/sn')], [30, t('30 kare/sn')]]} />
+                <Toggle field="psHdr" label={t('HDR')} hint={t("PS5'te, Windows'ta HDR açıkken ve ekran kartı HEVC 10 bit çözebiliyorsa çalışır. HDR akışı ekran kartının video yolundan gösterilir.")} />
+              </>
+            )}
             <h3>{t('Akış')}</h3>
             <Choice field="psCodec" label={t('Kodek')} hint={t('Otomatik, ekran kartının desteğine göre seçer.')} options={[['auto', t('Otomatik')], ['h265', t('H.265')], ['h264', t('H.264')]]} />
             {settings.upscaler === 'shader' || !videoSurfaceSupported ? (<>
-            <Toggle field="psFsr" label={t('FSR')} hint={fsrHint()} />
-            <Slider field="psFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />
+            <Toggle field="psFsr" label={t('Büyütme ve keskinleştirme')} hint={fsrHint()} />
+            {settings.psFsr && <Choice field="psScaler" label={t('Büyütme yöntemi')} hint={scalerHint()} options={scalers()} />}
+            {settings.psFsr && <Slider field="psFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />}
+            <Toggle field="psDenoise" label={t('Sıkıştırma izlerini azalt')} hint={denoiseHint()} />
             <Toggle field="psDeband" label={t('Bant giderme')} hint={debandHint()} />
-            </>) : <small className="setting-note">{t('FSR, keskinlik ve bant giderme, Görüntü > Büyütme "Uygulama" iken çalışır.')}</small>}
+            </>) : <small className="setting-note">{t('Uygulamanın görüntü süzgeçleri, Görüntü > Büyütme "Uygulama" iken çalışır.')}</small>}
             <Choice field="psGameLanguage" label={t('Oyun dili')} hint={t('Yalnızca o dili sunan veri merkezlerinde geçerlidir.')} options={[['', t('Hesaba göre')], ...LANGUAGES]} />
             <Slider field="psPacketLossMax" label={t('Paket kaybı sınırı')} hint={t('Aşılınca akış kalitesi düşürülür.')} min={1} max={30} step={1} unit="%" />
             <h3>{t('Giriş')}</h3>
@@ -464,10 +484,12 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Choice field="xboxBitrate" label={t('Bit hızı sınırı')} hint={t("Yalnızca düşürür: yavaş bağlantıda takılmayı azaltır. Kaliteyi Microsoft'un verdiğinin üstüne çıkarmaz.")} options={xboxBitrates()} />
             <Choice field="xboxCodec" label={t('Kodek')} hint={t('Microsoft yalnızca H.264 gönderiyor; en iyi görüntüyü Main profili verir.')} options={[['high', t('En iyi (H.264 Main)')], ['main', t('Orta (H.264 Constrained Baseline)')], ['baseline', t('Düşük (H.264 Baseline)')]]} />
             {settings.upscaler === 'shader' ? (<>
-            <Toggle field="xboxFsr" label={t('FSR')} hint={`${fsrHint()} ${t('Kapalıyken görüntü, ekran kartının kendi video yolundan geçer.')}`} />
-            <Slider field="xboxFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />
+            <Toggle field="xboxFsr" label={t('Büyütme ve keskinleştirme')} hint={`${fsrHint()} ${t('Kapalıyken görüntü, ekran kartının kendi video yolundan geçer.')}`} />
+            {settings.xboxFsr && <Choice field="xboxScaler" label={t('Büyütme yöntemi')} hint={scalerHint()} options={scalers()} />}
+            {settings.xboxFsr && <Slider field="xboxFsrSharpness" label={t('Keskinlik')} hint={t('0 kapalı, 10 en keskin.')} min={0} max={10} step={1} unit="" />}
+            <Toggle field="xboxDenoise" label={t('Sıkıştırma izlerini azalt')} hint={`${denoiseHint()} ${t('Görüntüyü ayrı bir katmandan geçirir.')}`} />
             <Toggle field="xboxDeband" label={t('Bant giderme')} hint={`${debandHint()} ${t('FSR gibi görüntüyü ayrı bir katmandan geçirir; tepkiye bir kare kadar gecikme ekleyebilir.')}`} />
-            </>) : <small className="setting-note">{t('FSR, keskinlik ve bant giderme, Görüntü > Büyütme "Uygulama" iken çalışır.')}</small>}
+            </>) : <small className="setting-note">{t('Uygulamanın görüntü süzgeçleri, Görüntü > Büyütme "Uygulama" iken çalışır.')}</small>}
             <Choice field="xboxGameLanguage" label={t('Oyun dili')} options={[['', t('Varsayılan')], ...LANGUAGES]} />
             <h3>{t('Bağlantı')}</h3>
             {/* Not offered on phones; see src/mobile/settings.ts. */}
@@ -478,6 +500,14 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Text field="xboxTurnUrl" label={t('Adres')} hint={t('Doğrudan bağlantı kurulamıyorsa kendi TURN sunucunu kullan.')} placeholder={t('turn:adres:3478')} />
             <Text field="xboxTurnUsername" label={t('Kullanıcı adı')} />
             <Text field="xboxTurnCredential" label={t('Parola')} secret />
+          </section>
+        )}
+
+        {section === 'layout' && (
+          <section>
+            <h2>{t('Kol düzeni')}</h2>
+            <small className="setting-note">{t('PlayStation ve Xbox akışlarında, bütün kollarda geçerlidir. Bir oyuna ayrı düzen, oyunun sayfasındaki özel ayarlardan verilir.')}</small>
+            <LayoutEditor value={settings} onChange={(patch) => void updateSettings(patch)} />
           </section>
         )}
 

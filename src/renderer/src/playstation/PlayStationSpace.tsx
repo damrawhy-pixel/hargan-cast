@@ -5,6 +5,9 @@ import type { HubItem } from '../lib/items'
 import { loadPlayStation, useStore } from '../lib/store'
 import { useSettings } from '../lib/useSettings'
 import { t } from '../../../shared/i18n'
+import type { PsConsole } from '../../../shared/types'
+import { MOBILE } from '../lib/platform'
+import { Consoles } from './Consoles'
 
 const TOKEN_PAGE = 'https://ca.account.sony.com/api/v1/ssocookie'
 
@@ -24,9 +27,10 @@ const clean = (e: Error) => e.message.replace(/^Error invoking remote method '[^
 
 interface Props {
   onOpen(item: HubItem, art: HTMLElement | null): void
+  onPlayConsole(console: PsConsole): void
 }
 
-export function PlayStationSpace({ onOpen }: Props) {
+export function PlayStationSpace({ onOpen, onPlayConsole }: Props) {
   const status = useStore((s) => s.ps)
   const catalog = useStore((s) => s.psCatalog)
   const items = useStore((s) => s.psItems)
@@ -72,7 +76,8 @@ export function PlayStationSpace({ onOpen }: Props) {
   return (
     <div className="space-body">
       {(catalog?.warning || error) && <p className="banner" role="alert">{error ?? catalog?.warning}</p>}
-      {!catalog && loading ? (
+      {!MOBILE && <Consoles onPlay={onPlayConsole} />}
+      {!catalog && loading && items.length === 0 ? (
         <SkeletonGrid />
       ) : (
         <Library

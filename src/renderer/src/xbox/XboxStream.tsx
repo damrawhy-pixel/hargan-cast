@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { XboxTitle } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
-import { Picture, fitFor, outputSize, pictureLabel, type Fit, type PictureOptions, type Size } from '../lib/picture'
+import { Picture, fitFor, outputSize, pictureActive, pictureLabel, pictureOptionsFor, type Fit, type PictureOptions, type Size } from '../lib/picture'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
@@ -140,10 +140,27 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       }
     }
 
+    // WebRTC counts the jitter buffer's delay cumulatively; the change between two
+    // samples gives the delay of the frames in between.
+    let buffered = { delay: 0, count: 0 }
+    const bufferDelay = async () => {
+      const pc: RTCPeerConnection | undefined = player?._webrtcClient
+      let ms: number | undefined
+      ;(await pc?.getStats().catch(() => undefined))?.forEach((s) => {
+        if (s.type !== 'inbound-rtp' || s.kind !== 'video' || typeof s.jitterBufferDelay !== 'number') return
+        const count = s.jitterBufferEmittedCount - buffered.count
+        if (count > 0) ms = ((s.jitterBufferDelay - buffered.delay) / count) * 1000
+        buffered = { delay: s.jitterBufferDelay, count: s.jitterBufferEmittedCount }
+      })
+      return ms
+    }
+
     const measure = async (video: HTMLVideoElement | null) => {
       const state = await player?.getStreamState()
+      const bufferMs = await bufferDelay()
       if (!state || disposed) return
       setStats({
+        bufferMs,
         fps: state.fps,
         mbps: parseFloat(state.br) || 0,
         lost: parseInt(state.pl) || 0,
@@ -207,10 +224,10 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         if (video && !video.videoWidth) video.addEventListener('loadeddata', showPicture, { once: true })
         else showPicture()
         stopPicture?.()
-        const options: PictureOptions = { fsr: settings.xboxFsr, sharpness: settings.xboxFsrSharpness, deband: settings.xboxDeband }
+        const options = pictureOptionsFor(settings, 'xbox')
         // With the graphics card scaling, the <video> stays on screen untouched so its
         // driver upscaler and the hardware overlay can work on it.
-        const shaders = settings.upscaler === 'shader' && (options.fsr || options.deband)
+        const shaders = settings.upscaler === 'shader' && pictureActive(options)
         stopPicture = shaders && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
         filters = stopPicture ? pictureLabel(options) : settings.upscaler === 'system' ? t('ekran kartı büyütmesi') : ''
         applyPacing(settings.framePacing)
@@ -270,8 +287,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     if (resumeId) {
       xbox.adoptSession(resumeId, title.titleId).then(() => negotiate()).catch(() => leave(t('Oturuma dönülemedi, oyunu yeniden başlat')))
     } else {
-      xbox
-        .startStream(title.titleId)
+      ;(title.home ? xbox.startHomeStream(title.home) : xbox.startStream(title.titleId))
         .then((id) => {
           sessionId = id
           if (disposed) void xbox.stopStream(id)
@@ -296,7 +312,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell platform="xbox" profileKey={`xbox:${title.titleId}`} title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
+    <StreamShell platform="xbox" achievements={title.home ? undefined : { productId: title.productId, titleId: title.titleId }} profileKey={`xbox:${title.titleId}`} title={title.name} stage={stage} live={live} stats={stats} queue={queue} image={title.poster ?? title.image} onExit={() => onExit()}>
       <div id={HOLDER_ID} className="stream-surface" />
     </StreamShell>
   )

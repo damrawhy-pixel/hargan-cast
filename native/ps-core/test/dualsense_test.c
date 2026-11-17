@@ -5,6 +5,7 @@
 #include "dualsense.h"
 #include "dualsense_report.h"
 #include "haptics.h"
+#include "remap.h"
 
 #include <chiaki/controller.h>
 
@@ -207,8 +208,45 @@ static void test_haptics(void)
 	CHECK(haptics_to_motor(mid, 0, 1.0f) == 0);
 }
 
+// The controller layout, as the app sends it for a DualSense the core reads itself.
+static void test_remap(void)
+{
+	PadLayout layout;
+	remap_identity(&layout);
+	ChiakiControllerState s;
+	chiaki_controller_state_set_idle(&s);
+	s.buttons = CHIAKI_CONTROLLER_BUTTON_CROSS | CHIAKI_CONTROLLER_BUTTON_PS;
+	s.l2_state = 200;
+	s.left_x = 1000;
+	s.right_y = -32768;
+
+	ChiakiControllerState same = s;
+	remap_apply(&layout, &same);
+	CHECK(memcmp(&same, &s, sizeof(s)) == 0);
+
+	// Cross and circle swapped, L2 onto R2, sticks swapped, look inverted.
+	remap_parse(&layout, "1,0,2,3,4,5,7,6,8,9,10,11,12,13,14,15,16,17");
+	layout.swap_sticks = true;
+	layout.invert_y = true;
+	remap_apply(&layout, &s);
+	CHECK(s.buttons & CHIAKI_CONTROLLER_BUTTON_MOON);
+	CHECK(!(s.buttons & CHIAKI_CONTROLLER_BUTTON_CROSS));
+	CHECK(s.buttons & CHIAKI_CONTROLLER_BUTTON_PS);
+	CHECK(s.l2_state == 0 && s.r2_state == 200);
+	CHECK(s.right_x == 1000 && s.left_y == -32768);
+	CHECK(s.right_y == 0); // the left stick's centre, inverted
+
+	// A malformed map leaves the layout as it was.
+	PadLayout keep;
+	remap_identity(&keep);
+	remap_parse(&keep, "1,0,99");
+	remap_parse(&keep, "1,0");
+	CHECK(keep.map[0] == 0 && keep.map[1] == 1);
+}
+
 int main(void)
 {
+	test_remap();
 	test_input();
 	test_output();
 	test_calibration();

@@ -1,6 +1,7 @@
 // Runs the whole media path off the UI thread: socket, decode, paint.
 
 import { Picture, outputSize, pictureLabel, type Fit, type PictureOptions, type Size } from '../lib/picture'
+import { decoderConfig, dynamicRange, readFormat, type DynamicRange } from '../lib/sps'
 import type { Message } from '../../../shared/i18n'
 
 /** The canvas's box on screen, in device pixels. */
@@ -30,7 +31,7 @@ export type WorkerCommand = WorkerInit | { type: 'view'; view: View } | { type: 
 
 export type WorkerEvent =
   /** `filters` is non-empty when post-processing runs; the page words it. */
-  | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string; decodeMs?: number; jitterMs: number; skipped: number }
+  | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string; decodeMs?: number; waitMs?: number; jitterMs: number; skipped: number }
   | { type: 'firstFrame' }
   /** A decoded frame for the page's <video>; the page closes it. */
   | { type: 'frame'; frame: VideoFrame }
@@ -46,7 +47,9 @@ const MEDIA_RUMBLE = 4
 const MEDIA_RESET = 6
 const REQUEST_KEY_FRAME = new Uint8Array([2])
 
+// Only when a key frame's own parameters cannot be read.
 const CODECS = { h264: 'avc1.640033', h265: 'hev1.1.6.L153.B0' }
+const CODEC_NAMES = { h264: 'H.264', h265: 'HEVC' }
 // Decoder failures in a row before giving up on the hardware path, then on the stream.
 const DECODER_RETRIES = 3
 // Frames waiting in the decoder before the stream is cut back to the next key
@@ -62,7 +65,12 @@ let picture: Picture | undefined
 let view: View
 let frameSize: Size = { width: 0, height: 0 }
 let audioPort: MessagePort
-let codecString = ''
+let family: WorkerInit['codec'] = 'h264'
+/** Built from the stream's own parameters on its first key frame, rebuilt when they change. */
+let config: VideoDecoderConfig | undefined
+let configKey = ''
+let bitDepth = 8
+let range: DynamicRange = 'SDR'
 let hardware: HardwareAcceleration = 'prefer-hardware'
 let waitingForKey = true
 // Chunks carry their arrival time in microseconds, so the decoder sees the real
@@ -89,16 +97,38 @@ let lost = 0
 // Frames waiting for the next display refresh, in smooth pacing on a canvas. Two is
 // enough to ride out a late arrival; more would only add delay, so the oldest goes.
 const MAX_PACED = 2
-const paced: VideoFrame[] = []
+const paced: { frame: VideoFrame; at: number }[] = []
+// Time decoded frames spend waiting for their refresh, in smooth pacing.
+let waitSum = 0
+let waitCount = 0
 let pacing: WorkerInit['pacing'] = 'latency'
 let toPage = false
+// The display's refresh, measured, and the stream's frame rate, counted each second.
+let refreshMs = 1000 / 60
+let lastRefresh = 0
+let refreshesSinceShown = 0
+let streamFps = 60
 
-function presentPaced() {
+// One frame per refresh at most. When the display runs at a whole multiple of the
+// stream (120 Hz for 60 fps) every frame is held for the same number of refreshes,
+// so an early frame waits its turn instead of cutting the one before short. A
+// pile-up is shown straight away: catching up beats an even cadence.
+function presentPaced(now: number) {
   if (closing) return
-  const frame = paced.shift()
-  if (frame) {
+  if (lastRefresh) {
+    const interval = now - lastRefresh
+    if (interval > 2 && interval < 50) refreshMs += (interval - refreshMs) / 32
+  }
+  lastRefresh = now
+  refreshesSinceShown++
+  const cadence = Math.max(1, Math.round(1000 / refreshMs / streamFps))
+  if (paced.length > 1 || (paced.length && refreshesSinceShown >= cadence)) {
+    const { frame, at } = paced.shift()!
     paint(frame)
     frame.close()
+    waitSum += performance.now() - at
+    waitCount++
+    refreshesSinceShown = 0
   }
   requestAnimationFrame(presentPaced)
 }
@@ -136,15 +166,16 @@ function createDecoder() {
   decoder?.state !== 'closed' && decoder?.close()
   decoder = new VideoDecoder({
     output(frame) {
+      range = dynamicRange(frame.colorSpace)
       decodeSum += performance.now() - frame.timestamp / 1000
       decodeCount++
       frameSize = { width: frame.displayWidth, height: frame.displayHeight }
       if (toPage) {
         ;(self as unknown as Worker).postMessage({ type: 'frame', frame } satisfies WorkerEvent, [frame])
       } else if (pacing === 'smooth') {
-        paced.push(frame)
+        paced.push({ frame, at: performance.now() })
         while (paced.length > MAX_PACED) {
-          paced.shift()!.close()
+          paced.shift()!.frame.close()
           skipped++
         }
       } else {
@@ -172,7 +203,25 @@ function createDecoder() {
       requestKeyFrame()
     },
   })
-  decoder.configure({ codec: codecString, hardwareAcceleration: hardware, optimizeForLatency: true })
+  if (config) decoder.configure({ ...config, hardwareAcceleration: hardware })
+}
+
+// A key frame carries the stream's parameter sets. The decoder takes its codec
+// string and colours from them, so a 10-bit or HDR stream is decoded as one and a
+// stream that names no colours is still shown with the right ones.
+function onKeyFrame(au: Uint8Array) {
+  const format = readFormat(au, family)
+  const next = format ? decoderConfig(format, hardware) : config ?? { codec: CODECS[family], hardwareAcceleration: hardware, optimizeForLatency: true }
+  const key = JSON.stringify([next.codec, next.colorSpace])
+  if (key === configKey) return
+  configKey = key
+  config = next
+  bitDepth = format?.bitDepth ?? 8
+  if (decoder && decoder.state !== 'closed') decoder.configure({ ...config, hardwareAcceleration: hardware })
+}
+
+function videoLabel() {
+  return [CODEC_NAMES[family] + (bitDepth > 8 ? ` ${bitDepth} bit` : ''), range !== 'SDR' && range].filter(Boolean).join(' · ')
 }
 
 function onVideo(view: DataView, data: Uint8Array) {
@@ -192,6 +241,7 @@ function onVideo(view: DataView, data: Uint8Array) {
     }
     waitingForKey = false
   }
+  if (key) onKeyFrame(data.subarray(6))
   timestamp = Math.max(timestamp + 1, Math.round(now * 1000))
   if (decoder?.state !== 'configured') return
   if (!key && decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
@@ -238,7 +288,7 @@ function onMessage(e: MessageEvent<ArrayBuffer>) {
 }
 
 function start(init: WorkerInit) {
-  codecString = CODECS[init.codec]
+  family = init.codec
   hardware = init.decoder
   audioPort = init.audio
   view = init.view
@@ -269,13 +319,15 @@ function start(init: WorkerInit) {
       fps: frames,
       mbps: (bytes * 8) / 1e6,
       lost,
-      size: `${frameSize.width}×${frameSize.height}`,
+      size: `${frameSize.width}×${frameSize.height} · ${videoLabel()}`,
       filters: picture ? pictureLabel(picture.options) : '',
       decodeMs: decodeCount ? decodeSum / decodeCount : undefined,
+      waitMs: waitCount ? waitSum / waitCount : undefined,
       jitterMs: jitter,
       skipped,
     })
-    frames = bytes = decodeSum = decodeCount = 0
+    if (frames > 10) streamFps = frames
+    frames = bytes = decodeSum = decodeCount = waitSum = waitCount = 0
   }, 1000)
 }
 
@@ -289,7 +341,7 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
     closing = true
     ws?.close()
     if (decoder && decoder.state !== 'closed') decoder.close()
-    for (const frame of paced.splice(0)) frame.close()
+    for (const { frame } of paced.splice(0)) frame.close()
     picture?.dispose()
   }
 }

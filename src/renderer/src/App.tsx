@@ -11,16 +11,19 @@ import { canStart, type HubItem } from './lib/items'
 import { reducedMotion, useMotionSetting } from './lib/motion'
 import { readSetting, writeSetting } from './lib/settings'
 import { useSpatialNavigation } from './lib/spatialNavigation'
-import { rememberPlayed } from './lib/store'
+import { rememberPlayed, useStore } from './lib/store'
 import { getSettings } from './lib/useSettings'
 import { PlayStationSpace } from './playstation/PlayStationSpace'
-import { XboxSpace } from './xbox/XboxSpace'
+import { XboxSpace, consoleTitle } from './xbox/XboxSpace'
 import { t } from '../../shared/i18n'
+import type { PsConsole, XboxTitle } from '../../shared/types'
 
 const PsStream = lazy(() => import('./playstation/PsStream').then((m) => ({ default: m.PsStream })))
 const XboxStream = lazy(() => import('./xbox/XboxStream').then((m) => ({ default: m.XboxStream })))
 
 const TOAST_MS = 4500
+// How long a shortcut's game may take to appear while the libraries load.
+const LAUNCH_WAIT_MS = 60_000
 const ORDER = SPACES.map(([id]) => id)
 
 // Shared-element morphs where the browser supports them, plain state otherwise.
@@ -32,6 +35,11 @@ function transition(update: () => void) {
 export function App() {
   const [space, setSpace] = useState<Space>(() => readSetting<Space>('space', 'home'))
   const [stream, setStream] = useState<HubItem>()
+  // A Remote Play stream from the user's own console, instead of a game.
+  const [remote, setRemote] = useState<PsConsole>()
+  // The same for an Xbox: its own console, streamed through Microsoft.
+  const [homeXbox, setHomeXbox] = useState<XboxTitle>()
+  const playing = Boolean(stream || remote || homeXbox)
   const [resumeId, setResumeId] = useState<string>()
   const [toast, setToast] = useState<string>()
   const [about, setAbout] = useState(false)
@@ -67,7 +75,7 @@ export function App() {
   const splashDone = useCallback(() => setSplash('gone'), [])
 
   const home = useCallback(() => go('home'), [go])
-  useSpatialNavigation(!stream && splash === 'gone', step, home)
+  useSpatialNavigation(!playing && splash === 'gone', step, home)
 
   const showDetail = useCallback((item: HubItem, art: HTMLElement | null) => {
     if (art) art.style.viewTransitionName = 'game-art'
@@ -110,35 +118,85 @@ export function App() {
     transition(() => setStream(item))
   }, [])
 
+  const playConsole = useCallback((target: PsConsole) => transition(() => setRemote(target)), [])
+  const playXboxConsole = useCallback((target: XboxTitle) => transition(() => setHomeXbox(target)), [])
+
   const finish = (error?: string) => {
-    transition(() => setStream(undefined))
+    transition(() => {
+      setStream(undefined)
+      setRemote(undefined)
+      setHomeXbox(undefined)
+    })
     if (error) {
       window.hc.platform.log?.(`stream ended: ${error}`)
       showToast(error)
     }
   }
 
+  // A game or console named by a shortcut, a Steam entry or a hargancast:// link.
+  const [launch, setLaunch] = useState<string>()
+  useEffect(() => {
+    void window.hc.platform.takeLaunch?.().then((target) => target && setLaunch(target))
+    return window.hc.platform.onLaunch?.(setLaunch)
+  }, [])
+  const psItems = useStore((s) => s.psItems)
+  const xboxItems = useStore((s) => s.xboxItems)
+  useEffect(() => {
+    if (!launch || splash !== 'gone' || playing) return
+    if (launch.startsWith('console:')) {
+      setLaunch(undefined)
+      const rest = launch.slice('console:'.length)
+      const id = rest.slice(rest.indexOf(':') + 1)
+      const missing = () => showToast(t('Konsol bulunamadı.'))
+      if (rest.startsWith('ps:'))
+        void window.hc.ps.consoles?.list().then((list) => {
+          const found = list.find((c) => c.id === id)
+          if (found) playConsole(found)
+          else missing()
+        })
+      else
+        void window.hc.xbox.consoles().then((list) => {
+          const found = list.find((c) => c.serverId === id)
+          if (found) playXboxConsole(consoleTitle(found))
+          else missing()
+        })
+      return
+    }
+    const item = [...psItems, ...xboxItems].find((i) => i.key === launch)
+    if (item) {
+      setLaunch(undefined)
+      play(item, null)
+      return
+    }
+    // The libraries load after start; give up if the game never turns up.
+    const timer = setTimeout(() => {
+      setLaunch(undefined)
+      showToast(t('Kısayoldaki oyun kütüphanende bulunamadı.'))
+    }, LAUNCH_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [launch, splash, playing, psItems, xboxItems, play, playConsole, playXboxConsole, showToast])
+
   return (
     <div className="app" data-space={space} data-direction={direction} data-splash={splash === 'gone' ? undefined : splash}>
-      <Backdrop hidden={Boolean(stream)} />
+      <Backdrop hidden={playing} />
 
-      {!stream && <TopBar space={space} onSelect={go} onAbout={() => setAbout(true)} />}
+      {!playing && <TopBar space={space} onSelect={go} onAbout={() => setAbout(true)} />}
 
       {/* All stay mounted so switching is instant; `hidden` stops their paint cost. */}
-      <main className="space" data-theme="home" hidden={space !== 'home' || Boolean(stream)}>
+      <main className="space" data-theme="home" hidden={space !== 'home' || playing}>
         <Home onOpen={showDetail} onPlay={play} onGo={go} onResume={resume} />
       </main>
-      <main className="space" data-theme="playstation" hidden={space !== 'playstation' || Boolean(stream)}>
-        <PlayStationSpace onOpen={showDetail} />
+      <main className="space" data-theme="playstation" hidden={space !== 'playstation' || playing}>
+        <PlayStationSpace onOpen={showDetail} onPlayConsole={playConsole} />
       </main>
-      <main className="space" data-theme="xbox" hidden={space !== 'xbox' || Boolean(stream)}>
-        <XboxSpace onOpen={showDetail} onOpenSettings={() => go('settings')} />
+      <main className="space" data-theme="xbox" hidden={space !== 'xbox' || playing}>
+        <XboxSpace onOpen={showDetail} onOpenSettings={() => go('settings')} onPlayConsole={playXboxConsole} />
       </main>
-      <main className="space" data-theme="settings" hidden={space !== 'settings' || Boolean(stream)}>
-        <SettingsPage active={space === 'settings' && !stream} onAbout={() => setAbout(true)} />
+      <main className="space" data-theme="settings" hidden={space !== 'settings' || playing}>
+        <SettingsPage active={space === 'settings' && !playing} onAbout={() => setAbout(true)} />
       </main>
 
-      {detail && !stream && (
+      {detail && !playing && (
         <GameDetail
           item={detail}
           onClose={closeDetail}
@@ -155,7 +213,17 @@ export function App() {
       {toast && <div className="toast glass" role="status">{toast}</div>}
       {about && <About onClose={() => setAbout(false)} />}
 
-      {stream && (
+      {remote && (
+        <Suspense fallback={null}>
+          <PsStream console={remote} onExit={finish} />
+        </Suspense>
+      )}
+      {homeXbox && (
+        <Suspense fallback={null}>
+          <XboxStream title={homeXbox} onExit={finish} />
+        </Suspense>
+      )}
+      {stream && !remote && !homeXbox && (
         <Suspense fallback={null}>
           {stream.ps
             ? <PsStream game={stream.ps} onExit={finish} />

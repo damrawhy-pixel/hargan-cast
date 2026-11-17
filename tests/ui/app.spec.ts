@@ -93,3 +93,28 @@ test('settings survive a restart', async () => {
   await page.getByRole('button', { name: 'Ayarlar' }).click()
   await expect(page.getByRole('switch', { name: 'İmleci gizle' })).toHaveAttribute('aria-checked', 'false')
 })
+
+test('the controller layout editor stores a swap and resets it', async () => {
+  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  await page.locator('.settings-nav button', { hasText: 'Kol düzeni' }).click()
+  await expect(page.locator('.layout-row')).toHaveCount(18)
+  // Cross / A now comes from the physical Circle / B button.
+  await page.getByRole('combobox', { name: '✕ / A' }).selectOption({ label: '○ / B' })
+  await expect(page.locator('.layout-row span.layout-changed')).toHaveCount(1)
+  await page.getByRole('switch', { name: 'Sol ve sağ çubuğu değiştir' }).click()
+  await page.getByRole('button', { name: 'Standart düzene dön' }).click()
+  await expect(page.locator('.layout-row span.layout-changed')).toHaveCount(0)
+  await expect(page.getByRole('switch', { name: 'Sol ve sağ çubuğu değiştir' })).toHaveAttribute('aria-checked', 'false')
+  await shot('layout-editor')
+})
+
+test('the upscaling method shows only while upscaling is on', async () => {
+  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  await page.locator('.settings-nav button', { hasText: 'PlayStation' }).click()
+  const method = page.getByText('Büyütme yöntemi')
+  await expect(method).toBeVisible()
+  await page.getByRole('switch', { name: 'Büyütme ve keskinleştirme' }).click()
+  await expect(method).toBeHidden()
+  await expect(page.getByRole('switch', { name: 'Sıkıştırma izlerini azalt' })).toBeVisible()
+  await expect(page.getByText('Kendi konsolun')).toBeVisible()
+})

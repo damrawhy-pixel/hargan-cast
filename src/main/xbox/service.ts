@@ -1,7 +1,7 @@
 import https from 'node:https'
 import axios from 'axios'
 import { app, session } from 'electron'
-import type { GameInfo, XboxActiveSession, XboxSession, XboxStatus, XboxTitle } from '../../shared/types'
+import type { GameInfo, XboxAchievement, XboxAchievements, XboxActiveSession, XboxConsole, XboxFriend, XboxSession, XboxStatus, XboxTitle } from '../../shared/types'
 import { log } from '../log'
 import { locale, t } from '../../shared/i18n'
 import Authentication from './authentication'
@@ -254,6 +254,67 @@ export default class XboxService {
       }))
   }
 
+  // Achievements live under Xbox Live's numeric title id; a cloud title is known by
+  // its product id, so the account's title history links the two.
+  private titleIds = new Map<string, string>()
+
+  private async numericTitleId(productId: string, titleId: string) {
+    if (/^\d+$/.test(titleId)) return titleId
+    if (!this.titleIds.size) for (const t of await this.library().catch(() => [])) if (t.productId) this.titleIds.set(t.productId, t.titleId)
+    return this.titleIds.get(productId)
+  }
+
+  async achievements(productId: string, titleId: string): Promise<XboxAchievements | null> {
+    const xuid = this.webToken?.data.DisplayClaims.xui[0].xid
+    const id = xuid ? await this.numericTitleId(String(productId), String(titleId)) : undefined
+    if (!id) return null
+    const data = await this.xblGet('achievements.xboxlive.com', `/users/xuid(${xuid})/achievements?titleId=${id}&maxItems=1000`, '2')
+    const list: XboxAchievement[] = (data.achievements ?? []).map((a: any) => {
+      const unlocked = a.progressState === 'Achieved'
+      const requirement = a.progression?.requirements?.[0]
+      const current = Number(requirement?.current)
+      const target = Number(requirement?.target)
+      return {
+        id: String(a.id),
+        name: String(a.name ?? ''),
+        description: String((unlocked ? a.description : a.lockedDescription) || a.description || ''),
+        gamerscore: Number(a.rewards?.find((r: any) => r.type === 'Gamerscore')?.value ?? 0),
+        unlocked,
+        progress: !unlocked && target > 0 && current >= 0 ? Math.min(100, Math.round((current / target) * 100)) : undefined,
+        icon: toHttps(a.mediaAssets?.find((m: any) => m.type === 'Icon')?.url),
+        secret: Boolean(a.isSecret) && !unlocked,
+        unlockedAt: unlocked ? a.progression?.timeUnlocked : undefined,
+      }
+    })
+    if (!list.length) return null
+    // Unlocked first, newest first; then the rest by how close they are.
+    list.sort((x, y) => Number(y.unlocked) - Number(x.unlocked) || (y.unlockedAt ?? '').localeCompare(x.unlockedAt ?? '') || (y.progress ?? 0) - (x.progress ?? 0))
+    const done = list.filter((a) => a.unlocked)
+    return {
+      unlocked: done.length,
+      total: list.length,
+      gamerscore: done.reduce((sum, a) => sum + a.gamerscore, 0),
+      totalGamerscore: list.reduce((sum, a) => sum + a.gamerscore, 0),
+      list,
+    }
+  }
+
+  async friends(): Promise<XboxFriend[]> {
+    if (!this.webToken) return []
+    const data = await this.xblGet('peoplehub.xboxlive.com', '/users/me/people/social/decoration/presencedetail', '5')
+    return (data.people ?? [])
+      .filter((p: any) => p.isFollowedByCaller !== false)
+      .map((p: any): XboxFriend => ({
+        xuid: String(p.xuid),
+        gamertag: String(p.modernGamertag || p.gamertag || ''),
+        picture: toHttps(p.displayPicRaw),
+        online: p.presenceState === 'Online',
+        status: String(p.presenceText ?? ''),
+        favorite: Boolean(p.isFavorite),
+      }))
+      .sort((a: XboxFriend, b: XboxFriend) => Number(b.online) - Number(a.online) || Number(b.favorite) - Number(a.favorite) || a.gamertag.localeCompare(b.gamertag))
+  }
+
   /** The cloud region this account streams through, when it has one. */
   regionUrl(): string | undefined {
     const token = this.streamingTokens?.xCloudToken
@@ -291,6 +352,24 @@ export default class XboxService {
     const id = (await this._streams.startStream('cloud', titleId).finally(() => this.storeSettings())) as string
     this.trackSession({ id, titleId })
     return id
+  }
+
+  async consoles(): Promise<XboxConsole[]> {
+    if (!this.streamingTokens?.xHomeToken) return []
+    const list = (await this._streams.getConsoles()) as any[]
+    return list.map((c) => ({
+      serverId: String(c.serverId),
+      name: String(c.deviceName || c.serverId),
+      type: String(c.consoleType || ''),
+      powerState: String(c.powerState || ''),
+      streamingEnabled: c.consoleStreamingEnabled !== false,
+    }))
+  }
+
+  /** Streams from the user's own console; no session to resume, it simply runs on. */
+  async startHomeStream(serverId: string) {
+    this.storeSettings(settingsFor(this.settings, `xbox:home:${serverId}`))
+    return (await this._streams.startStream('home', serverId).finally(() => this.storeSettings())) as string
   }
 
   // Microsoft's own "active sessions" endpoint does not list running sessions, so

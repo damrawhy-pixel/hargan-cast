@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { PsCatalog, PsStatus, XboxActiveSession, XboxStatus, XboxTitle } from '../../../shared/types'
+import type { PsCatalog, PsStatus, XboxActiveSession, XboxStatus, XboxTitle, PsGame } from '../../../shared/types'
 import { mergeXbox, psItem, xboxItem, type HubItem } from './items'
 import { readSetting, writeSetting } from './settings'
 
@@ -22,10 +22,13 @@ interface State {
 const MAX_RECENTS = 16
 const SPOTLIGHT_DELAY_MS = 110
 
+const PS_CACHE_LIMIT = 3_000_000
+
 let state: State = {
   ps: { state: 'restoring' },
   xbox: { state: 'restoring', hasCloud: false },
-  psItems: [],
+  // Like the Xbox list: the last catalog shows while the core starts and checks for a new one.
+  psItems: readSetting<PsGame[]>('psGames', []).map(psItem),
   psLoading: false,
   // The live list takes seconds; the last one shows meanwhile.
   xboxItems: readSetting<XboxTitle[]>('xboxTitles', []).map(xboxItem),
@@ -61,6 +64,9 @@ export function loadPlayStation(force = false) {
     .then((psCatalog) => {
       const psItems = psCatalog.games.map(psItem)
       patch({ psCatalog, psItems, psLoading: false })
+      // Browser storage holds a few megabytes; a catalog bigger than that is simply not kept.
+      const cached = JSON.stringify(psCatalog.games)
+      writeSetting('psGames', cached.length < PS_CACHE_LIMIT ? psCatalog.games : [])
       preloadArt(psItems)
     })
     .catch((e: Error) => patch({ psError: clean(e), psLoading: false }))
@@ -86,7 +92,10 @@ function onPs(ps: PsStatus) {
   const wasIn = state.ps.state === 'signedIn'
   patch({ ps })
   if (ps.state === 'signedIn' && !wasIn) loadPlayStation()
-  if (ps.state === 'signedOut') patch({ psCatalog: undefined, psItems: [] })
+  if (ps.state === 'signedOut') {
+    writeSetting('psGames', [])
+    patch({ psCatalog: undefined, psItems: [] })
+  }
 }
 
 function onXbox(xbox: XboxStatus) {

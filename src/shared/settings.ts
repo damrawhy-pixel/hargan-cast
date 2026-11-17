@@ -41,6 +41,8 @@ export interface AppSettings {
   brightness: number
   contrast: number
   saturation: number
+  /** Colour-blindness correction for the stream picture. */
+  colorAssist: 'off' | 'protan' | 'deutan' | 'tritan'
   videoDecoder: 'prefer-hardware' | 'prefer-software' | 'no-preference'
   /**
    * Who scales the picture to the screen: the app's own shaders (FSR, debanding)
@@ -50,6 +52,13 @@ export interface AppSettings {
   upscaler: 'shader' | 'system'
   /** 'latency' shows each frame as it arrives; 'smooth' holds a frame or two to show them evenly. */
   framePacing: 'latency' | 'smooth'
+  /** Desktop: while streaming, switch the monitor to a multiple of 60 Hz (144 to 120). */
+  matchRefreshRate: boolean
+  /** Desktop: keep the last replaySeconds of a stream, to save as a clip. */
+  replayBuffer: boolean
+  replaySeconds: number
+  /** Show the game being played in Discord; offered only in builds with a Discord app id. */
+  discordPresence: boolean
 
   // Sound, shared by both services
   audioOutputDevice: string
@@ -63,9 +72,20 @@ export interface AppSettings {
   psNowBitrate: number
   psNowDatacenter: string
   psCodec: 'auto' | 'h264' | 'h265'
+  // Remote Play with the user's own console
+  psRemoteResolution: number
+  /** kb/s; 0 picks by resolution. */
+  psRemoteBitrate: number
+  psRemoteFps: number
+  /** PS5 only: HDR when the screen and the decoder can show it. */
+  psHdr: boolean
+  /** The app's own upscaling and sharpening, with psScaler choosing how. */
   psFsr: boolean
+  psScaler: 'fsr' | 'lanczos'
   psFsrSharpness: number
   psDeband: boolean
+  /** Edge-preserving filter against compression noise. */
+  psDenoise: boolean
   psPremium: boolean
   psGameLanguage: string
   psPacketLossMax: number
@@ -80,14 +100,23 @@ export interface AppSettings {
   psTriggers: boolean
   psVibration: boolean
 
+  // Controller layout, both services
+  /** '' is the standard layout; otherwise, for each standard button, the physical one that presses it. */
+  buttonMap: string
+  swapSticks: boolean
+  /** Inverts the right stick's vertical axis. */
+  invertY: boolean
+
   // Xbox
   xboxResolution: number
   xboxBitrate: number
   xboxCodec: '' | 'high' | 'main' | 'baseline'
   xboxGameLanguage: string
   xboxFsr: boolean
+  xboxScaler: 'fsr' | 'lanczos'
   xboxFsrSharpness: number
   xboxDeband: boolean
+  xboxDenoise: boolean
   xboxRegionIp: string
   xboxSignalServer: string
   xboxIpv6: boolean
@@ -137,9 +166,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   brightness: 100,
   contrast: 100,
   saturation: 100,
+  colorAssist: 'off',
   videoDecoder: 'prefer-hardware',
   upscaler: 'shader',
   framePacing: 'latency',
+  matchRefreshRate: false,
+  replayBuffer: false,
+  replaySeconds: 30,
+  discordPresence: false,
 
   audioOutputDevice: '',
   audioVolume: 100,
@@ -151,9 +185,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   psNowBitrate: 0,
   psNowDatacenter: 'Auto',
   psCodec: 'auto',
+  psRemoteResolution: 1080,
+  psRemoteBitrate: 0,
+  psRemoteFps: 60,
+  psHdr: true,
   psFsr: true,
+  psScaler: 'fsr',
   psFsrSharpness: 4,
   psDeband: true,
+  psDenoise: false,
   psPremium: false,
   psGameLanguage: '',
   psPacketLossMax: 5,
@@ -168,13 +208,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
   psTriggers: true,
   psVibration: true,
 
+  buttonMap: '',
+  swapSticks: false,
+  invertY: false,
+
   xboxResolution: 1080,
   xboxBitrate: 0,
   xboxCodec: 'high',
   xboxGameLanguage: 'en-US',
   xboxFsr: false,
+  xboxScaler: 'fsr',
   xboxFsrSharpness: 4,
   xboxDeband: false,
+  xboxDenoise: false,
   xboxRegionIp: '',
   xboxSignalServer: '',
   xboxIpv6: false,
@@ -219,12 +265,24 @@ export const PROFILE_FIELDS = [
   'psCloudBitrate',
   'psNowResolution',
   'psNowBitrate',
+  'psRemoteResolution',
+  'psRemoteBitrate',
+  'psHdr',
   'psFsr',
+  'psScaler',
+  'psFsrSharpness',
   'psDeband',
+  'psDenoise',
   'xboxResolution',
   'xboxBitrate',
   'xboxFsr',
+  'xboxScaler',
+  'xboxFsrSharpness',
   'xboxDeband',
+  'xboxDenoise',
+  'buttonMap',
+  'swapSticks',
+  'invertY',
 ] as const satisfies readonly (keyof AppSettings)[]
 
 export type GameProfile = Partial<Pick<AppSettings, (typeof PROFILE_FIELDS)[number]>>
@@ -257,7 +315,13 @@ const CHOICES: { [K in keyof AppSettings]?: readonly AppSettings[K][] } = {
   videoDecoder: ['prefer-hardware', 'prefer-software', 'no-preference'],
   upscaler: ['shader', 'system'],
   framePacing: ['latency', 'smooth'],
+  colorAssist: ['off', 'protan', 'deutan', 'tritan'],
   psCodec: ['auto', 'h264', 'h265'],
+  psScaler: ['fsr', 'lanczos'],
+  psRemoteResolution: [720, 1080, 1440, 2160],
+  psRemoteFps: [30, 60],
+  replaySeconds: [15, 30, 60, 120],
+  xboxScaler: ['fsr', 'lanczos'],
   xboxCodec: ['', 'high', 'main', 'baseline'],
   xboxTriggerRumble: ['', 'all', 'left', 'right'],
 }
@@ -284,6 +348,8 @@ const RANGES: { [K in keyof AppSettings]?: [number, number] } = {
   xboxMouseSensitivity: [0.1, 5],
 }
 const NUMBER_SPAN = 1_000_000
+// Eighteen button indexes, 0 to 17.
+const BUTTON_MAP = /^(?:(?:1[0-7]|[0-9]),){17}(?:1[0-7]|[0-9])$/
 const MAX_TEXT = 512
 
 /**
@@ -311,6 +377,7 @@ export function sanitizeSettings(input: unknown): Partial<AppSettings> {
       out[key] = Math.min(max, Math.max(min, value))
     } else if (typeof value === 'string') {
       if (value.length > MAX_TEXT) continue
+      if (field === 'buttonMap' && value && !BUTTON_MAP.test(value)) continue
       out[key] = value
     } else out[key] = value
   }

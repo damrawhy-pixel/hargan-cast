@@ -7,11 +7,14 @@
 // Media:   loopback WebSocket, see media_server.h.
 
 #include "controller_io.h"
+#include "console.h"
 #include "crash_dump.h"
+#include "display.h"
 #include "curl_http.h"
 #include "dualsense.h"
 #include "haptics.h"
 #include "media_server.h"
+#include "remap.h"
 
 #include <chiaki/cloudcatalog.h>
 #include <chiaki/cloudsession.h>
@@ -45,6 +48,12 @@ typedef struct
 	bool foreign, attr_passed, hevc;
 	bool native_dualsense, triggers, vibration, ps_chord;
 	int resolution, bitrate, haptic_strength, packet_loss_max;
+	char *button_map;
+	bool swap_sticks, invert_y;
+	// Remote Play to the user's own console.
+	char *host, *regist_key, *rp_key;
+	bool ps5, hdr;
+	int fps;
 } StreamRequest;
 
 typedef struct
@@ -76,6 +85,8 @@ static int trigger_intensity_bits, rumble_intensity_bits;
 static float user_haptic_gain = 1.0f;
 static bool user_triggers = true, user_vibration = true;
 static bool use_native_dualsense;
+// The user's controller layout, for the DualSense read here; the page applies it to the others.
+static PadLayout pad_layout;
 static HANDLE quit_event;
 
 static uint32_t audio_channels = 2;
@@ -405,6 +416,7 @@ static void on_dualsense_state(const ChiakiControllerState *state)
 {
 	EnterCriticalSection(&input_lock);
 	dualsense_state = *state;
+	remap_apply(&pad_layout, &dualsense_state);
 	publish_controller_state();
 	LeaveCriticalSection(&input_lock);
 }
@@ -560,11 +572,14 @@ static void free_request(StreamRequest *r)
 	SecureZeroMemory(r->npsso, strlen(r->npsso));
 	free(r->service); free(r->game); free(r->npsso); free(r->country); free(r->lang);
 	free(r->game_lang); free(r->owned_ent); free(r->owned_platform);
-	free(r->datacenter); free(r->prior_datacenters);
+	free(r->datacenter); free(r->prior_datacenters); free(r->button_map);
+	if(r->rp_key)
+		SecureZeroMemory(r->rp_key, strlen(r->rp_key));
+	free(r->host); free(r->regist_key); free(r->rp_key);
 	free(r);
 }
 
-static void video_profile_for(ChiakiConnectVideoProfile *p, int resolution, int bitrate, bool hevc)
+static void video_profile_for(ChiakiConnectVideoProfile *p, int resolution, int bitrate, bool hevc, bool hdr, int fps)
 {
 	memset(p, 0, sizeof(*p));
 	switch(resolution)
@@ -575,8 +590,97 @@ static void video_profile_for(ChiakiConnectVideoProfile *p, int resolution, int 
 		default: p->width = 1920; p->height = 1080; break;
 	}
 	p->bitrate = (unsigned int)bitrate;
-	p->max_fps = 60;
-	p->codec = hevc ? CHIAKI_CODEC_H265 : CHIAKI_CODEC_H264;
+	p->max_fps = fps == 30 ? 30 : 60;
+	p->codec = hdr ? CHIAKI_CODEC_H265_HDR : hevc ? CHIAKI_CODEC_H265 : CHIAKI_CODEC_H264;
+}
+
+// Runs a connected session until it quits: the part cloud streams and Remote Play
+// share. Answers the stream request through `reply` either way.
+static void run_session(StreamRequest *req, ChiakiConnectInfo *info, json_object *reply, uint64_t rtt_us)
+{
+	ChiakiErrorCode err;
+	stream_codec = req->hevc ? CODEC_FAMILY_H265 : CODEC_FAMILY_H264;
+	free(video_header);
+	video_header = NULL;
+	video_header_size = 0;
+
+	err = chiaki_session_init(&session, info, &core_log);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(0));
+		json_object_object_add(reply, "error", json_object_new_string(chiaki_error_string(err)));
+		emit(reply);
+		return;
+	}
+
+	chiaki_session_set_ps_chord(&session, req->ps_chord, 0);
+
+	chiaki_opus_decoder_init(&opus, &core_log);
+	chiaki_opus_decoder_set_cb(&opus, on_audio_settings, on_audio_frame, NULL);
+	ChiakiAudioSink sink;
+	chiaki_opus_decoder_get_sink(&opus, &sink);
+	chiaki_session_set_audio_sink(&session, &sink);
+	ChiakiAudioSink haptics_sink = { 0 };
+	haptics_sink.frame_cb = on_haptics;
+	chiaki_session_set_haptics_sink(&session, &haptics_sink);
+	chiaki_session_set_video_sample_cb(&session, on_video, NULL);
+	chiaki_session_set_event_cb(&session, on_event, NULL);
+
+	ResetEvent(quit_event);
+	err = chiaki_session_start(&session);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(0));
+		json_object_object_add(reply, "error", json_object_new_string(chiaki_error_string(err)));
+		emit(reply);
+		chiaki_opus_decoder_fini(&opus);
+		chiaki_session_fini(&session);
+		return;
+	}
+
+	chiaki_controller_state_set_idle(&renderer_state);
+	chiaki_controller_state_set_idle(&dualsense_state);
+	haptic_gain = 1.0f;
+	haptic_motor_on = false;
+	triggers_enabled = true;
+	trigger_intensity_bits = rumble_intensity_bits = 0;
+	user_haptic_gain = (float)req->haptic_strength / 100.0f;
+	user_triggers = req->triggers;
+	user_vibration = req->vibration;
+	use_native_dualsense = req->native_dualsense;
+	EnterCriticalSection(&input_lock);
+	remap_identity(&pad_layout);
+	remap_parse(&pad_layout, req->button_map);
+	pad_layout.swap_sticks = req->swap_sticks;
+	pad_layout.invert_y = req->invert_y;
+	LeaveCriticalSection(&input_lock);
+	InterlockedExchange(&session_live, 1);
+	if(use_native_dualsense)
+	{
+		haptics_start();
+		dualsense_start(on_dualsense_state, on_dualsense_link);
+	}
+
+	json_object_object_add(reply, "ok", json_object_new_boolean(1));
+	json_object_object_add(reply, "codec", json_object_new_string(req->hevc ? "h265" : "h264"));
+	json_object_object_add(reply, "width", json_object_new_int((int)info->video_profile.width));
+	json_object_object_add(reply, "height", json_object_new_int((int)info->video_profile.height));
+	json_object_object_add(reply, "rttMs", json_object_new_int((int)(rtt_us / 1000)));
+	emit(reply);
+
+	WaitForSingleObject(quit_event, INFINITE);
+
+	if(use_native_dualsense)
+	{
+		dualsense_stop();
+		haptics_stop();
+	}
+	InterlockedExchange(&session_live, 0);
+	chiaki_session_stop(&session);
+	chiaki_session_join(&session);
+	chiaki_opus_decoder_fini(&opus);
+	chiaki_session_fini(&session);
+	media_server_send(MEDIA_RESET, NULL, 0, NULL, 0);
 }
 
 static unsigned __stdcall stream_thread(void *arg)
@@ -623,7 +727,7 @@ static unsigned __stdcall stream_thread(void *arg)
 	memset(&info, 0, sizeof(info));
 	info.ps5 = pscloud;
 	info.host = res.server_ip;
-	video_profile_for(&info.video_profile, req->resolution, req->bitrate, req->hevc);
+	video_profile_for(&info.video_profile, req->resolution, req->bitrate, req->hevc, false, 60);
 	info.video_profile_auto_downgrade = true;
 	info.enable_dualsense = true;
 	info.packet_loss_max = (double)req->packet_loss_max / 100.0;
@@ -637,87 +741,103 @@ static unsigned __stdcall stream_thread(void *arg)
 	info.cloud_mtu_out = res.mtu_out;
 	info.cloud_rtt_us = res.rtt_us;
 
-	stream_codec = req->hevc ? CODEC_FAMILY_H265 : CODEC_FAMILY_H264;
-	free(video_header);
-	video_header = NULL;
-	video_header_size = 0;
-
-	err = chiaki_session_init(&session, &info, &core_log);
-	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		json_object_object_add(reply, "ok", json_object_new_boolean(0));
-		json_object_object_add(reply, "error", json_object_new_string(chiaki_error_string(err)));
-		emit(reply);
-		goto done;
-	}
-
-	chiaki_session_set_ps_chord(&session, req->ps_chord, 0);
-
-	chiaki_opus_decoder_init(&opus, &core_log);
-	chiaki_opus_decoder_set_cb(&opus, on_audio_settings, on_audio_frame, NULL);
-	ChiakiAudioSink sink;
-	chiaki_opus_decoder_get_sink(&opus, &sink);
-	chiaki_session_set_audio_sink(&session, &sink);
-	ChiakiAudioSink haptics_sink = { 0 };
-	haptics_sink.frame_cb = on_haptics;
-	chiaki_session_set_haptics_sink(&session, &haptics_sink);
-	chiaki_session_set_video_sample_cb(&session, on_video, NULL);
-	chiaki_session_set_event_cb(&session, on_event, NULL);
-
-	ResetEvent(quit_event);
-	err = chiaki_session_start(&session);
-	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		json_object_object_add(reply, "ok", json_object_new_boolean(0));
-		json_object_object_add(reply, "error", json_object_new_string(chiaki_error_string(err)));
-		emit(reply);
-		chiaki_opus_decoder_fini(&opus);
-		chiaki_session_fini(&session);
-		goto done;
-	}
-
-	chiaki_controller_state_set_idle(&renderer_state);
-	chiaki_controller_state_set_idle(&dualsense_state);
-	haptic_gain = 1.0f;
-	haptic_motor_on = false;
-	triggers_enabled = true;
-	trigger_intensity_bits = rumble_intensity_bits = 0;
-	user_haptic_gain = (float)req->haptic_strength / 100.0f;
-	user_triggers = req->triggers;
-	user_vibration = req->vibration;
-	use_native_dualsense = req->native_dualsense;
-	InterlockedExchange(&session_live, 1);
-	if(use_native_dualsense)
-	{
-		haptics_start();
-		dualsense_start(on_dualsense_state, on_dualsense_link);
-	}
-
-	json_object_object_add(reply, "ok", json_object_new_boolean(1));
-	json_object_object_add(reply, "codec", json_object_new_string(req->hevc ? "h265" : "h264"));
-	json_object_object_add(reply, "width", json_object_new_int((int)info.video_profile.width));
-	json_object_object_add(reply, "height", json_object_new_int((int)info.video_profile.height));
-	emit(reply);
-
-	WaitForSingleObject(quit_event, INFINITE);
-
-	if(use_native_dualsense)
-	{
-		dualsense_stop();
-		haptics_stop();
-	}
-	InterlockedExchange(&session_live, 0);
-	chiaki_session_stop(&session);
-	chiaki_session_join(&session);
-	chiaki_opus_decoder_fini(&opus);
-	chiaki_session_fini(&session);
-	media_server_send(MEDIA_RESET, NULL, 0, NULL, 0);
+	run_session(req, &info, reply, res.rtt_us);
 
 done:
 	chiaki_cloud_provision_result_fini(&res);
 	free_request(req);
 	InterlockedExchange(&stop_requested, 0);
 	InterlockedExchange(&stream_busy, 0);
+	return 0;
+}
+
+// --- Remote Play with the user's own console ---------------------------------
+
+static unsigned __stdcall remote_thread(void *arg)
+{
+	StreamRequest *req = arg;
+	json_object *reply = json_object_new_object();
+	json_object_object_add(reply, "id", json_object_new_int(req->id));
+
+	ChiakiConnectInfo info;
+	memset(&info, 0, sizeof(info));
+	info.ps5 = req->ps5;
+	info.host = req->host;
+	info.service_type = CHIAKI_SERVICE_TYPE_REMOTE_PLAY;
+	uint8_t regist_key[CHIAKI_SESSION_AUTH_SIZE];
+	if(!console_hex_decode(req->regist_key, regist_key, sizeof(regist_key)) || !console_hex_decode(req->rp_key, info.morning, sizeof(info.morning)))
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(0));
+		json_object_object_add(reply, "error", json_object_new_string("CONSOLE_KEYS"));
+		emit(reply);
+		goto done;
+	}
+	memcpy(info.regist_key, regist_key, sizeof(info.regist_key));
+	// HDR needs HEVC; the page only asks for it where the screen and decoder can show it.
+	req->hevc = req->hevc || req->hdr;
+	video_profile_for(&info.video_profile, req->resolution, req->bitrate, req->hevc, req->hdr, req->fps);
+	info.video_profile_auto_downgrade = true;
+	info.enable_dualsense = true;
+	info.packet_loss_max = (double)req->packet_loss_max / 100.0;
+
+	emit_event("progress", "stage", "Connecting to console");
+	run_session(req, &info, reply, 0);
+
+done:
+	SecureZeroMemory(regist_key, sizeof(regist_key));
+	SecureZeroMemory(info.morning, sizeof(info.morning));
+	free_request(req);
+	InterlockedExchange(&stop_requested, 0);
+	InterlockedExchange(&stream_busy, 0);
+	return 0;
+}
+
+typedef struct
+{
+	int id;
+	char *action, *host, *account, *regist_key;
+	bool ps5;
+	uint32_t pin;
+} ConsoleRequest;
+
+// Finding, linking and waking consoles each block for seconds, so each gets a thread.
+static unsigned __stdcall console_thread(void *arg)
+{
+	ConsoleRequest *r = arg;
+	json_object *reply = json_object_new_object();
+	json_object_object_add(reply, "id", json_object_new_int(r->id));
+	if(strcmp(r->action, "discover") == 0)
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		json_object_object_add(reply, "consoles", console_discover(&core_log, r->host, 2500));
+	}
+	else if(strcmp(r->action, "register") == 0)
+	{
+		const char *error = NULL;
+		json_object *linked = console_register(&core_log, r->host, r->ps5, r->account, r->pin, &error);
+		json_object_object_add(reply, "ok", json_object_new_boolean(linked != NULL));
+		if(linked)
+			json_object_object_add(reply, "console", linked);
+		else
+			json_object_object_add(reply, "error", json_object_new_string(error && strcmp(error, "account") == 0 ? "CONSOLE_ACCOUNT" : "CONSOLE_REGIST"));
+	}
+	else if(strcmp(r->action, "wake") == 0)
+	{
+		bool woke = console_wake(&core_log, r->host, r->regist_key, r->ps5);
+		json_object_object_add(reply, "ok", json_object_new_boolean(woke));
+		if(!woke)
+			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_WAKE"));
+	}
+	else
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(0));
+		json_object_object_add(reply, "error", json_object_new_string("CONSOLE_ACTION"));
+	}
+	emit(reply);
+	if(r->account)
+		SecureZeroMemory(r->account, strlen(r->account));
+	free(r->action); free(r->host); free(r->account); free(r->regist_key);
+	free(r);
 	return 0;
 }
 
@@ -883,7 +1003,54 @@ static void handle_command(const char *line)
 			r->vibration = bool_field(cmd, "vibration");
 			r->ps_chord = bool_field(cmd, "psChord");
 			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
+			r->button_map = dup_field(cmd, "buttonMap");
+			r->swap_sticks = bool_field(cmd, "swapSticks");
+			r->invert_y = bool_field(cmd, "invertY");
 			CloseHandle((HANDLE)_beginthreadex(NULL, 0, stream_thread, r, 0, NULL));
+		}
+	}
+	else if(strcmp(name, "console") == 0)
+	{
+		ConsoleRequest *r = calloc(1, sizeof(*r));
+		r->id = id;
+		r->action = dup_field(cmd, "action");
+		r->host = dup_field(cmd, "host");
+		r->account = dup_field(cmd, "accountId");
+		r->regist_key = dup_field(cmd, "registKey");
+		r->ps5 = bool_field(cmd, "ps5");
+		r->pin = (uint32_t)int_field(cmd, "pin", 0);
+		CloseHandle((HANDLE)_beginthreadex(NULL, 0, console_thread, r, 0, NULL));
+	}
+	else if(strcmp(name, "remoteStream") == 0)
+	{
+		if(InterlockedCompareExchange(&stream_busy, 1, 0) != 0)
+			emit_reply_error(id, "Zaten aktif bir oturum var");
+		else
+		{
+			StreamRequest *r = calloc(1, sizeof(*r));
+			r->id = id;
+			// Unused by Remote Play, but every request owns real strings.
+			r->service = strdup(""); r->game = strdup(""); r->npsso = strdup(""); r->country = strdup(""); r->lang = strdup("");
+			r->game_lang = strdup(""); r->owned_ent = strdup(""); r->owned_platform = strdup(""); r->datacenter = strdup(""); r->prior_datacenters = strdup("");
+			r->host = dup_field(cmd, "host");
+			r->regist_key = dup_field(cmd, "registKey");
+			r->rp_key = dup_field(cmd, "rpKey");
+			r->ps5 = bool_field(cmd, "ps5");
+			r->hevc = bool_field(cmd, "hevc");
+			r->hdr = bool_field(cmd, "hdr");
+			r->fps = int_field(cmd, "fps", 60);
+			r->resolution = int_field(cmd, "resolution", 1080);
+			r->bitrate = int_field(cmd, "bitrate", 15000);
+			r->native_dualsense = bool_field(cmd, "nativeDualSense");
+			r->haptic_strength = int_field(cmd, "hapticStrength", 100);
+			r->triggers = bool_field(cmd, "triggers");
+			r->vibration = bool_field(cmd, "vibration");
+			r->ps_chord = bool_field(cmd, "psChord");
+			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
+			r->button_map = dup_field(cmd, "buttonMap");
+			r->swap_sticks = bool_field(cmd, "swapSticks");
+			r->invert_y = bool_field(cmd, "invertY");
+			CloseHandle((HANDLE)_beginthreadex(NULL, 0, remote_thread, r, 0, NULL));
 		}
 	}
 	else if(strcmp(name, "speakerRoute") == 0)
@@ -905,6 +1072,34 @@ static void handle_command(const char *line)
 			r->gain = (float)int_field(cmd, "strength", 100) / 100.0f;
 			CloseHandle((HANDLE)_beginthreadex(NULL, 0, haptic_test_thread, r, 0, NULL));
 		}
+	}
+	else if(strcmp(name, "display") == 0)
+	{
+		// The app's window handle travels as a decimal string: JSON numbers lose 64-bit precision.
+		json_object *reply = json_object_new_object();
+		json_object_object_add(reply, "id", json_object_new_int(id));
+		json_object *jaction;
+		const char *action = json_object_object_get_ex(cmd, "action", &jaction) ? json_object_get_string(jaction) : "";
+		if(strcmp(action, "match") == 0)
+		{
+			char *hwnd_text = dup_field(cmd, "hwnd");
+			HWND hwnd = (HWND)(uintptr_t)_strtoui64(hwnd_text ? hwnd_text : "0", NULL, 10);
+			free(hwnd_text);
+			int from = 0, to = 0;
+			int result = display_match(hwnd, int_field(cmd, "fps", 60), &from, &to);
+			json_object_object_add(reply, "ok", json_object_new_boolean(result >= 0));
+			json_object_object_add(reply, "changed", json_object_new_boolean(result == 1));
+			json_object_object_add(reply, "from", json_object_new_int(from));
+			json_object_object_add(reply, "to", json_object_new_int(to));
+			if(result < 0)
+				json_object_object_add(reply, "error", json_object_new_string("display"));
+		}
+		else
+		{
+			display_restore();
+			json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		}
+		emit(reply);
 	}
 #ifdef HARGAN_DIAG
 	else if(strcmp(name, "diag") == 0)
@@ -932,6 +1127,7 @@ int main(void)
 	InitializeCriticalSection(&out_lock);
 	InitializeCriticalSection(&input_lock);
 	quit_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+	remap_identity(&pad_layout);
 
 	chiaki_log_init(&core_log, CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR, on_log, NULL);
 	if(chiaki_lib_init() != CHIAKI_ERR_SUCCESS)
@@ -980,6 +1176,7 @@ int main(void)
 	}
 
 	// stdin closes when the app exits; end a running session properly, then follow it.
+	display_restore();
 	InterlockedExchange(&stop_requested, 1);
 	SetEvent(quit_event);
 	for(int waited = 0; waited < 2000 && InterlockedCompareExchange(&stream_busy, 0, 0); waited += 50)

@@ -3,6 +3,9 @@ import { SignIn } from '../components/SignIn'
 import type { HubItem } from '../lib/items'
 import { loadXbox, useStore } from '../lib/store'
 import { t } from '../../../shared/i18n'
+import type { XboxConsole, XboxTitle } from '../../../shared/types'
+import { useCallback, useEffect, useState } from 'react'
+import { Friends } from './Friends'
 
 const filters = (favorites: Set<string>): LibraryFilter[] => [
   // Everything this account can start right now, however it got access.
@@ -17,9 +20,54 @@ const filters = (favorites: Set<string>): LibraryFilter[] => [
 interface Props {
   onOpen(item: HubItem, art: HTMLElement | null): void
   onOpenSettings(): void
+  onPlayConsole(title: XboxTitle): void
 }
 
-export function XboxSpace({ onOpen, onOpenSettings }: Props) {
+/** A console as something XboxStream can play. */
+export const consoleTitle = (c: XboxConsole): XboxTitle => ({ titleId: `home:${c.serverId}`, productId: '', name: c.name, categories: [], recent: false, home: c.serverId })
+
+const POWER: Record<string, Parameters<typeof t>[0]> = { On: 'Açık', ConnectedStandby: 'Hızlı başlatmada bekliyor', Off: 'Kapalı' }
+
+/** The account's own Xboxes that allow remote play; Microsoft relays the stream. */
+function XboxConsoles({ onPlay }: { onPlay(title: XboxTitle): void }) {
+  const [consoles, setConsoles] = useState<XboxConsole[]>([])
+  const [loading, setLoading] = useState(true)
+  const load = useCallback(() => {
+    setLoading(true)
+    void window.hc.xbox.consoles().then(setConsoles).catch(() => setConsoles([])).finally(() => setLoading(false))
+  }, [])
+  useEffect(load, [load])
+  if (!loading && consoles.length === 0) return null
+  return (
+    <section className="consoles">
+      <div className="shelf-head">
+        <h2>{t('Konsolların')}</h2>
+        <button className="ghost" data-nav disabled={loading} onClick={load}>{loading ? t('Aranıyor') : t('Yenile')}</button>
+      </div>
+      <div className="console-list">
+        {consoles.map((c) => (
+          <div className="console-card glass" key={c.serverId}>
+            <strong>{c.name}</strong>
+            <small>{c.type.replace(/^Xbox/, 'Xbox ')} · {t(POWER[c.powerState] ?? 'Durumu bilinmiyor')}</small>
+            {!c.streamingEnabled && <small>{t('Konsolda Ayarlar > Cihazlar ve bağlantılar > Uzak özellikler açık olmalı.')}</small>}
+            <div className="console-actions">
+              <button
+                className="primary"
+                data-nav
+                disabled={!c.streamingEnabled || c.powerState === 'Off'}
+                onClick={() => onPlay(consoleTitle(c))}
+              >
+                {t('Oyna')}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export function XboxSpace({ onOpen, onOpenSettings, onPlayConsole }: Props) {
   const status = useStore((s) => s.xbox)
   const items = useStore((s) => s.xboxItems)
   const loading = useStore((s) => s.xboxLoading)
@@ -51,6 +99,8 @@ export function XboxSpace({ onOpen, onOpenSettings }: Props) {
         </div>
       )}
       {error && <p className="banner" role="alert">{error}</p>}
+      <XboxConsoles onPlay={onPlayConsole} />
+      <Friends />
       {items.length === 0 && loading ? (
         <SkeletonGrid />
       ) : (

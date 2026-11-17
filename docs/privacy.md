@@ -18,6 +18,8 @@ Hargan Cast; Windows, Android ve iOS için bir bulut oyun istemcisidir. Kendi Xb
 | PlayStation oturum anahtarı (NPSSO) | PlayStation kataloğunu yüklemek ve akış başlatmak için | Aynı şekilde, yalnızca cihazında |
 | Uygulama ayarları | Seçtiğin görüntü, ses ve kontrol ayarlarını hatırlamak için | Yalnızca cihazında |
 | PlayStation katalog önbelleği | Kataloğu her seferinde baştan indirmemek için | Yalnızca cihazında |
+| Bağlı PlayStation konsollarının anahtarları ve PSN hesap kimliği | Kendi konsoluna yeniden PIN girmeden bağlanmak için | Windows'ta şifreli olarak kullanıcı klasöründe |
+| Ekran görüntüleri ve an kayıtları | Akış sırasında senin aldıkların | Resimler ve Videolar altındaki Hargan Cast klasörlerinde; an kaydı açıkken son saniyeler yalnızca bellekte tutulur |
 
 Bu bilgiler cihazından Hargan Cast'e ya da başka bir yere gönderilmez. Hesaptan çıkış yaptığında oturum anahtarları silinir; uygulamayı kaldırdığında hepsi silinir.
 
@@ -26,6 +28,8 @@ Bu bilgiler cihazından Hargan Cast'e ya da başka bir yere gönderilmez. Hesapt
 - **Microsoft (Xbox):** Hesap girişi, oyun listesi, oyun bilgileri ve bulut akışı. Bu bağlantılar Microsoft'un gizlilik bildirimine tabidir: https://privacy.microsoft.com
 - **Sony (PlayStation):** Hesap girişi, oyun kataloğu, mağaza bilgileri ve bulut akışı. Bu bağlantılar Sony Interactive Entertainment'ın gizlilik politikasına tabidir: https://www.playstation.com/legal/privacy-policy/
 - **GitHub (yalnızca Windows sürümü):** Yeni sürüm olup olmadığını denetlemek ve güncellemeyi indirmek için. Bu sırada GitHub'a kimlik bilgisi gönderilmez.
+- **Kendi PlayStation konsolun (yerel ağ):** Konsolu bulmak, PIN ile bağlamak, uyandırmak ve akış için. Bağlarken PSN hesap kimliğin Sony'den (dms.api.playstation.com) bir kez alınır ve konsola verilir.
+- **Discord (yalnızca açarsan):** Ayarlar'da açarsan, oynadığın oyunun adı bilgisayarındaki Discord uygulamasına yerel olarak iletilir; Discord bunu arkadaşlarına gösterir.
 - **Cloudflare (yalnızca bağlantı testinde, Windows sürümü):** Ayarlar > Ağ > Bağlantı testi'ni başlattığında indirme hızını ölçmek için speed.cloudflare.com'dan birkaç saniye boyunca anlamsız veri indirilir. Hiçbir bilgi gönderilmez; test başlatılmadıkça bu bağlantı kurulmaz.
 
 Hesap girişleri Microsoft'un ve Sony'nin kendi giriş sayfalarında yapılır; şifren Hargan Cast'ten geçmez ve uygulama şifreni hiçbir zaman görmez.
@@ -69,6 +73,8 @@ Hargan Cast is a cloud gaming client for Windows, Android and iOS. It lets you s
 - **Microsoft/Xbox session tokens**, so you stay signed in. Encrypted in your user folder on Windows; in the app's private storage on phones.
 - **PlayStation session token (NPSSO)**, to load the PlayStation catalog and start streams. Stored only on your device.
 - **App settings** and a **PlayStation catalog cache**. Stored only on your device.
+- **Keys of your linked PlayStation consoles and your PSN account id**, to reconnect without a new PIN. Encrypted in your user folder on Windows.
+- **Screenshots and replay clips** you take while streaming, in Hargan Cast folders under Pictures and Videos. With the replay buffer on, the last seconds are kept in memory only.
 
 None of this is sent to Hargan Cast or anywhere else. Signing out deletes the session tokens; uninstalling the app deletes everything.
 
@@ -77,6 +83,8 @@ None of this is sent to Hargan Cast or anywhere else. Signing out deletes the se
 - **Microsoft (Xbox):** sign-in, game list, game details and cloud streaming, governed by https://privacy.microsoft.com
 - **Sony (PlayStation):** sign-in, game catalog, store details and cloud streaming, governed by https://www.playstation.com/legal/privacy-policy/
 - **GitHub (Windows version only):** checking for and downloading app updates. No account details are sent.
+- **Your own PlayStation console (local network):** finding, linking with its PIN, waking and streaming. Linking fetches your PSN account id from Sony (dms.api.playstation.com) once and hands it to the console.
+- **Discord (only if you turn it on):** the name of the game you play goes to the Discord app on your PC, which shows it to your friends.
 - **Cloudflare (connection test only, Windows version):** when you run Settings > Network > Connection test, a few seconds of filler data are downloaded from speed.cloudflare.com to measure download speed. Nothing is sent, and no connection is made unless you start the test.
 
 Sign-in happens on Microsoft's and Sony's own pages; your password never passes through Hargan Cast. During a stream, video, audio and controller input travel only between your device and Microsoft's or Sony's servers. For PlayStation streams, video is handed between parts of the app over a local connection (127.0.0.1) that never leaves the device.

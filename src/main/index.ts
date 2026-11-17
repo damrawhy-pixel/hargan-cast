@@ -1,6 +1,11 @@
-import { app, BrowserWindow, crashReporter, ipcMain, net, powerSaveBlocker, protocol, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, crashReporter, desktopCapturer, ipcMain, net, powerSaveBlocker, protocol, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { saveClip, saveScreenshot, showCapture } from './captures'
+import { safeName } from './names'
+import { addToSteam } from './steam'
+import { LAUNCH, PROTOCOL, launchTarget } from './launch'
+import { DISCORD_CLIENT_ID, setPresence } from './discord'
 import { exportDiagnostics } from './diagnostics'
 import { environmentLabel, GAME_MODE, UNDER_WINE } from './environment'
 import { networkTest } from './network'
@@ -35,8 +40,8 @@ const CONTENT_SECURITY_POLICY = [
 
 // What the interface may ask the browser for: the microphone for Xbox party chat,
 // pointer and keyboard lock for mouse-and-keyboard games, full screen and the
-// audio output picker. Sign-in windows get nothing.
-const RENDERER_PERMISSIONS = new Set(['media', 'pointerLock', 'keyboardLock', 'fullscreen', 'speaker-selection'])
+// audio output picker, and its own window for the replay buffer. Sign-in windows get nothing.
+const RENDERER_PERMISSIONS = new Set(['media', 'display-capture', 'pointerLock', 'keyboardLock', 'fullscreen', 'speaker-selection'])
 
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
@@ -142,10 +147,16 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: true,
+      // Under Proton the Windows Steam the app sees is a stub; adding games there does nothing.
+      additionalArguments: [...(UNDER_WINE ? ['--hc-under-wine'] : []), ...(DISCORD_CLIENT_ID ? ['--hc-discord'] : [])],
     },
   })
 
-  win.once('ready-to-show', () => win?.show())
+  win.once('ready-to-show', () => {
+    win?.show()
+    // Since the process started: the number to watch when startup work is added.
+    log(`startup: window shown after ${Math.round(performance.now())} ms`)
+  })
   win.webContents.on('did-finish-load', applyWindowSettings)
   win.on('closed', () => (win = undefined))
   win.on('unresponsive', () => log('window unresponsive'))
@@ -194,10 +205,13 @@ function serveRenderer() {
 
 // Only the app's own page may call into this process; a frame from anywhere else
 // (a sign-in page, an injected iframe) is refused and logged.
+let pendingLaunch = launchTarget(process.argv)
+
+const fromApp = (url: string) => url.startsWith(`${APP_SCHEME}://app/`) || (DEV_RENDERER_URL !== undefined && url.startsWith(DEV_RENDERER_URL))
+
 function trusted(e: IpcMainEvent | IpcMainInvokeEvent) {
   const url = e.senderFrame?.url ?? ''
-  const dev = DEV_RENDERER_URL
-  const ok = e.sender === win?.webContents && (url.startsWith(`${APP_SCHEME}://app/`) || (dev !== undefined && url.startsWith(dev)))
+  const ok = e.sender === win?.webContents && fromApp(url)
   if (!ok) log(`ipc refused from ${url.split('?')[0] || 'unknown frame'}`)
   return ok
 }
@@ -213,9 +227,23 @@ const handle = (channel: string, handler: (...args: any[]) => unknown) =>
     return handler(...args)
   })
 
+// Both services stream at 60 frames a second.
+const STREAM_FPS = 60
+
+function matchDisplay(on: boolean) {
+  if (process.platform !== 'win32') return
+  if (!on) return void ps.restoreDisplay()
+  if (!win || !settings.get().matchRefreshRate) return
+  const hwnd = win.getNativeWindowHandle().readBigUInt64LE().toString()
+  ps.matchDisplay(hwnd, STREAM_FPS)
+    .then((r) => r.changed && log(`display: ${r.from} Hz -> ${r.to} Hz while streaming`))
+    .catch((e: Error) => log(`display: ${e.message}`))
+}
+
 function registerIpc() {
   listen('app:fullscreen', (on: boolean) => win?.setFullScreen(on === true))
   listen('app:streaming', (on: boolean) => {
+    if (on !== streaming) matchDisplay(on)
     streaming = on
     applyWindowSettings()
     if (on && sleepBlocker === undefined) sleepBlocker = powerSaveBlocker.start('prevent-display-sleep')
@@ -233,6 +261,33 @@ function registerIpc() {
     if (typeof url === 'string' && url.startsWith('https://')) void shell.openExternal(url)
   })
   listen('app:log', (text: unknown) => log(String(text).slice(0, 1000)))
+  listen('app:presence', (title: unknown, service: unknown) => {
+    if (!settings.get().discordPresence || typeof title !== 'string' || !title) return void setPresence(undefined)
+    void setPresence({ title, service: String(service), since: Date.now() })
+  })
+  handle('app:takeLaunch', () => {
+    const target = pendingLaunch
+    pendingLaunch = undefined
+    return target
+  })
+  handle('app:createShortcut', (key: unknown, name: unknown) => {
+    if (typeof key !== 'string' || !LAUNCH.test(key) || process.platform !== 'win32') throw new Error(t('Kısayol oluşturulamadı'))
+    const file = path.join(app.getPath('desktop'), `${safeName(String(name))}.lnk`)
+    const ok = shell.writeShortcutLink(file, 'create', { target: process.execPath, args: `--play=${key}`, description: String(name), icon: process.execPath, iconIndex: 0 })
+    if (!ok) throw new Error(t('Kısayol oluşturulamadı'))
+    return file
+  })
+  handle('app:addToSteam', async (key: unknown, name: unknown) => {
+    if (typeof key !== 'string' || !LAUNCH.test(key)) throw new Error(t("Steam'e eklenemedi"))
+    try {
+      return await addToSteam({ name: safeName(String(name)), exe: process.execPath, launchOptions: `--play=${key}`, icon: process.execPath })
+    } catch {
+      throw new Error(t('Steam bulunamadı ya da kütüphanesine yazılamadı'))
+    }
+  })
+  handle('app:screenshot', (title: unknown) => (win ? saveScreenshot(win, title) : undefined))
+  handle('app:saveClip', (title: unknown, data: unknown) => saveClip(title, data))
+  listen('app:showCapture', (file: unknown) => showCapture(file))
   listen('app:error', (text: unknown) => log(`renderer: ${String(text).slice(0, 4000)}`))
   handle('app:diagnostics', () => exportDiagnostics(win, settings.get()))
   handle('app:networkTest', async () => {
@@ -255,6 +310,10 @@ function registerIpc() {
     'xbox:library': () => xbox.library(),
     'xbox:info': (productId) => xbox.info(productId),
     'xbox:startStream': (id) => xbox.startStream(id),
+    'xbox:consoles': () => xbox.consoles(),
+    'xbox:achievements': (productId, titleId) => xbox.achievements(productId, titleId),
+    'xbox:friends': () => xbox.friends(),
+    'xbox:startHomeStream': (serverId) => xbox.startHomeStream(serverId),
     'xbox:activeSessions': () => xbox.activeSessions(),
     'xbox:adoptSession': (id, titleId) => xbox.adoptSession(id, titleId),
     'xbox:endSession': (id, titleId) => xbox.endSession(id, titleId),
@@ -292,6 +351,13 @@ function registerIpc() {
     'ps:testHaptics': () => ps.testHaptics(),
     'ps:info': (game) => ps.info(game),
     'ps:routeSpeaker': () => ps.routeSpeaker(),
+    'ps:consoles': () => ps.consoles(),
+    'ps:discoverConsoles': (host) => ps.discoverConsoles(host),
+    'ps:registerConsole': (found, pin, accountId) => ps.registerConsole(found, pin, accountId),
+    'ps:forgetConsole': (id) => ps.forgetConsole(id),
+    'ps:consoleMoved': (id, address) => ps.updateConsoleAddress(id, address),
+    'ps:wakeConsole': (id) => ps.wakeConsole(id),
+    'ps:remoteStream': (id, opts) => ps.remoteStream(id, opts),
   }
   for (const [channel, handler] of Object.entries(routes)) handle(channel, handler)
 }
@@ -315,16 +381,33 @@ function restrictPermissions() {
   for (const ses of [session.defaultSession, session.fromPartition('persist:xbox'), session.fromPartition('persist:playstation')]) {
     ses.setPermissionRequestHandler((contents, permission, callback) => callback(allow(contents, permission)))
   }
+  // The replay buffer may capture this window and the system's sound, and only when it is on.
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (!win || !fromApp(request.frame?.url ?? '') || !settings.get().replayBuffer) return callback({})
+    const id = win.getMediaSourceId()
+    desktopCapturer
+      .getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } })
+      .then((sources) => {
+        const own = sources.find((s) => s.id === id)
+        callback(own ? { video: own, audio: 'loopback' } : {})
+      })
+      .catch(() => callback({}))
+  })
 }
 
 app.setAppUserModelId('app.hargan.cast')
 
 // Two copies would fight over the vault files and the controller.
 if (!app.requestSingleInstanceLock()) app.exit(0)
-app.on('second-instance', () => {
+app.on('second-instance', (_e, argv) => {
   if (win?.isMinimized()) win.restore()
   win?.focus()
+  const target = launchTarget(argv)
+  if (target && !streaming) win?.webContents.send('app:launch', target)
 })
+
+// Installed builds open hargancast:// links; the installer registers it too.
+if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL)
 
 app.whenReady().then(() => {
   serveRenderer()

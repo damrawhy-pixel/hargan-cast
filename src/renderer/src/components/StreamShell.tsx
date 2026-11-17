@@ -4,6 +4,10 @@ import { connectedPads } from '../lib/gamepads'
 import { getSettings } from '../lib/useSettings'
 import { settingsFor } from '../../../shared/settings'
 import { physicalPads } from '../lib/virtualPad'
+import { installLayout, parseButtonMap } from '../lib/remap'
+import { ReplayBuffer } from '../lib/capture'
+import { Achievements } from './Achievements'
+import { svgMatrix } from '../lib/colorAssist'
 import { TouchControls, type TouchPlatform } from './TouchControls'
 import { t } from '../../../shared/i18n'
 
@@ -14,6 +18,10 @@ export interface StreamStats {
   size?: string
   rttMs?: number
   decodeMs?: number
+  /** Time in the network jitter buffer before decoding, ms. */
+  bufferMs?: number
+  /** Time a decoded frame waits for its screen refresh, ms. */
+  waitMs?: number
   /** Variation in frame arrival, ms. */
   jitterMs?: number
   /** Frames dropped to catch up, since the start. */
@@ -36,6 +44,8 @@ interface Props {
   queue?: StreamQueue
   controller?: string
   image?: string
+  /** An Xbox game's ids, for its achievements in the menu. */
+  achievements?: { productId: string; titleId: string }
   onExit(): void
   children: ReactNode
 }
@@ -50,6 +60,16 @@ const PAD_UP = 12
 const PAD_DOWN = 13
 
 const FIT = { Stretch: 'fill', Zoom: 'cover' } as Record<string, string>
+
+/**
+ * The part of the delay that can be measured here: the trip to the server and
+ * back, then buffering, decoding and waiting for the screen. The server's own
+ * time to run the game and encode the frame comes on top.
+ */
+export function totalLatency(s: StreamStats): number | undefined {
+  if (s.rttMs === undefined) return undefined
+  return Math.round(s.rttMs + (s.bufferMs ?? 0) + (s.decodeMs ?? 0) + (s.waitMs ?? 0))
+}
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
@@ -90,14 +110,16 @@ function useTouchControls() {
       window.removeEventListener('gamepaddisconnected', check)
     }
   }, [watch])
-  return MOBILE && (mode === 'on' || (mode === 'auto' && !padInUse))
+  // A TV has no touch screen to put them on.
+  const touchScreen = typeof matchMedia === 'function' && matchMedia('(any-pointer: coarse)').matches
+  return MOBILE && (mode === 'on' || (mode === 'auto' && touchScreen && !padInUse))
 }
 
 // One line per stream in the log (time to picture, frame rate, bit rate, loss,
 // latency), so "it stuttered yesterday" can be looked up afterwards.
 function useSessionReport(platform: string, title: string, live: boolean, stats?: StreamStats) {
   const started = useRef(Date.now())
-  const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, decode: 0, decodeSamples: 0, jitter: 0, jitterSamples: 0, skipped: 0, lost: 0, size: '', liveAt: 0 })
+  const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, total: 0, totalSamples: 0, decode: 0, decodeSamples: 0, jitter: 0, jitterSamples: 0, skipped: 0, lost: 0, size: '', liveAt: 0 })
 
   useEffect(() => {
     if (live && !totals.current.liveAt) totals.current.liveAt = Date.now()
@@ -113,6 +135,11 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
     if (stats.rttMs !== undefined) {
       t.rtt += stats.rttMs
       t.rttSamples++
+    }
+    const total = totalLatency(stats)
+    if (total !== undefined) {
+      t.total += total
+      t.totalSamples++
     }
     if (stats.decodeMs !== undefined) {
       t.decode += stats.decodeMs
@@ -135,7 +162,7 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
       const toPicture = t.liveAt ? `${((t.liveAt - started.current) / 1000).toFixed(1)} s` : 'never'
       window.hc.platform.log?.(
         `stream ${platform} "${title}": ${seconds} s, picture after ${toPicture}, fps avg ${avg(t.fps, t.samples)} min ${t.samples ? t.minFps : '-'}, ` +
-          `${avg(t.mbps, t.samples)} Mb/s, lost ${t.lost}, rtt ${avg(t.rtt, t.rttSamples)} ms, decode ${avg(t.decode, t.decodeSamples)} ms, jitter ${avg(t.jitter, t.jitterSamples)} ms, skipped ${t.skipped}, ${t.size || '-'}`,
+          `${avg(t.mbps, t.samples)} Mb/s, lost ${t.lost}, rtt ${avg(t.rtt, t.rttSamples)} ms, measured delay ${avg(t.total, t.totalSamples)} ms, decode ${avg(t.decode, t.decodeSamples)} ms, jitter ${avg(t.jitter, t.jitterSamples)} ms, skipped ${t.skipped}, ${t.size || '-'}`,
       )
     },
     [platform, title],
@@ -172,7 +199,7 @@ function useResolutionNotice(live: boolean, size?: string) {
   return notice
 }
 
-export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, onExit, children }: Props) {
+export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, achievements, onExit, children }: Props) {
   useSessionReport(platform, title, live, stats)
   const notice = useResolutionNotice(live, stats?.size)
   const touch = useTouchControls()
@@ -180,13 +207,74 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
   const ratio = settings.videoFormat.includes(':') ? settings.videoFormat.replace(':', ' / ') : undefined
   // Any CSS filter, even a neutral one, keeps video off the GPU's direct path to the screen.
   const adjusted = settings.brightness !== 100 || settings.contrast !== 100 || settings.saturation !== 100
+  const assist = settings.colorAssist !== 'off' ? settings.colorAssist : undefined
+  const filters = [adjusted && `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)`, assist && 'url(#hc-color-assist)'].filter(Boolean)
   const pictureStyle = {
     '--stream-fit': FIT[settings.videoFormat] ?? 'contain',
     '--stream-ratio': ratio ?? 'auto',
-    filter: adjusted ? `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%)` : undefined,
+    filter: filters.length ? filters.join(' ') : undefined,
   } as CSSProperties
 
+  // The user's controller layout, for this stream's whole life.
+  const [layout] = useState(() => ({ map: parseButtonMap(settings.buttonMap), swapSticks: settings.swapSticks, invertY: settings.invertY }))
+  useEffect(() => installLayout(layout), [layout])
+
   const [menu, setMenu] = useState(false)
+  // Discord's "Playing" line, while the picture is up.
+  useEffect(() => {
+    if (!live) return
+    window.hc.platform.presence?.(title, platform === 'playstation' ? 'PlayStation' : 'Xbox')
+    return () => window.hc.platform.presence?.('', '')
+  }, [live, title, platform])
+  // Screenshots and the replay buffer, on the desktop.
+  const [capture] = useState(() => ({ shots: !MOBILE && Boolean(window.hc.platform.screenshot), replay: !MOBILE && settings.replayBuffer, seconds: settings.replaySeconds }))
+  const replay = useRef<ReplayBuffer>()
+  const [replaying, setReplaying] = useState(false)
+  const [clean, setClean] = useState(false)
+  const [toast, setToast] = useState<{ text: string; file?: string }>()
+  useEffect(() => {
+    if (!capture.replay || !live) return
+    let stopped = false
+    void ReplayBuffer.start(capture.seconds).then((buffer) => {
+      if (stopped) return buffer?.stop()
+      replay.current = buffer
+      setReplaying(Boolean(buffer))
+    })
+    return () => {
+      stopped = true
+      replay.current?.stop()
+      replay.current = undefined
+      setReplaying(false)
+    }
+  }, [capture, live])
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(undefined), NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  const screenshot = async () => {
+    setMenu(false)
+    // Without the stats and menus: two frames for them to leave the screen.
+    setClean(true)
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const file = await window.hc.platform.screenshot?.(title).catch(() => undefined)
+    setClean(false)
+    setToast(file ? { text: t('Ekran görüntüsü kaydedildi'), file } : { text: t('Ekran görüntüsü alınamadı') })
+  }
+  const saveClip = async () => {
+    setMenu(false)
+    const data = await replay.current?.save().catch(() => undefined)
+    if (!data) return setToast({ text: t('Kaydedilecek görüntü henüz yok') })
+    const file = await window.hc.platform.saveClip?.(title, data).catch(() => undefined)
+    setToast(file ? { text: t('Son {n} saniye kaydedildi', { n: capture.seconds }), file } : { text: t('Kayıt kaydedilemedi') })
+  }
+  // The key handler is set up once; it reaches the current versions through this.
+  const actions = useRef({ screenshot, saveClip })
+  useEffect(() => {
+    actions.current = { screenshot, saveClip }
+  })
+
   const [showStats, setShowStats] = useState(() => getSettings().showStats)
   const [idle, setIdle] = useState(false)
   const idleTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -197,6 +285,14 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
       if (e.code === 'F3') {
         e.preventDefault()
         setShowStats((s) => !s)
+      }
+      if (e.code === 'F12' && !e.repeat) {
+        e.preventDefault()
+        void actions.current.screenshot()
+      }
+      if (e.code === 'F10' && !e.repeat) {
+        e.preventDefault()
+        void actions.current.saveClip()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -269,10 +365,17 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
 
   return (
     <div
-      className={`stream ${idle && !menu && settings.hideCursor ? 'stream--idle' : ''}`}
+      className={`stream ${idle && !menu && settings.hideCursor ? 'stream--idle' : ''} ${clean ? 'stream--clean' : ''}`}
       onMouseMove={onMove}
       onDoubleClick={() => settings.doubleClickFullscreen && window.hc.platform.toggleFullscreen()}
     >
+      {assist && (
+        <svg className="stream-filters" aria-hidden="true">
+          <filter id="hc-color-assist" colorInterpolationFilters="linearRGB">
+            <feColorMatrix type="matrix" values={svgMatrix(assist)} />
+          </filter>
+        </svg>
+      )}
       <div className={`stream-picture ${ratio ? 'stream-picture--ratio' : ''}`} style={pictureStyle}>{children}</div>
 
       {touch && live && !menu && <TouchControls platform={platform} onMenu={() => setMenu(true)} />}
@@ -291,7 +394,10 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
         <div className={`stream-stats ${settings.statsVertical ? 'stream-stats--vertical' : ''}`}>
           <b>{stats.fps}</b> {t('kare/sn')} · <b>{stats.mbps.toFixed(1)}</b> Mb/{t('sn')} · {t('kayıp')} <b>{stats.lost}</b>
           {stats.rttMs !== undefined && <> · {t('gecikme')} <b>{stats.rttMs}</b> ms</>}
+          {stats.bufferMs !== undefined && <> · {t('tampon')} <b>{stats.bufferMs.toFixed(0)}</b> ms</>}
           {stats.decodeMs !== undefined && <> · {t('çözme')} <b>{stats.decodeMs.toFixed(1)}</b> ms</>}
+          {stats.waitMs !== undefined && <> · {t('ekran sırası')} <b>{stats.waitMs.toFixed(1)}</b> ms</>}
+          {totalLatency(stats) !== undefined && <> · {t('toplam')} ≈ <b>{totalLatency(stats)}</b> ms</>}
           {stats.jitterMs !== undefined && <> · {t('dalgalanma')} <b>{stats.jitterMs.toFixed(1)}</b> ms</>}
           {stats.skipped ? <> · {t('atlanan')} <b>{stats.skipped}</b></> : null}
           {stats.size && <> · {stats.size}</>}
@@ -299,13 +405,22 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
         </div>
       )}
 
-      {notice && !menu && <div className="stream-notice" role="status">{notice}</div>}
+      {notice && !menu && !toast && <div className="stream-notice" role="status">{notice}</div>}
+      {toast && !clean && (
+        <div className="stream-notice stream-toast" role="status">
+          {toast.text}
+          {toast.file && <button className="link" onClick={() => window.hc.platform.showCapture?.(toast.file!)}>{t('Klasörde göster')}</button>}
+        </div>
+      )}
 
       {menu && (
         <div className="stream-menu" role="dialog" aria-label={t('Akış menüsü')} ref={menuRef}>
           <h3>{title}</h3>
           <button className="primary" onClick={() => setMenu(false)}>{t('Oyuna dön')}</button>
           <button className="ghost" onClick={() => setShowStats((s) => !s)}>{showStats ? t('İstatistikleri gizle') : t('İstatistikleri göster')}</button>
+          {capture.shots && <button className="ghost" onClick={() => void screenshot()}>{t('Ekran görüntüsü al (F12)')}</button>}
+          {achievements && <Achievements productId={achievements.productId} titleId={achievements.titleId} compact />}
+          {replaying && <button className="ghost" onClick={() => void saveClip()}>{t('Son {n} saniyeyi kaydet (F10)', { n: capture.seconds })}</button>}
           <button className="ghost danger" onClick={onExit}>{t('Akışı bitir')}</button>
           <small>{t('Kolda View + Menu düğmelerini basılı tutarak açılır.')}</small>
         </div>

@@ -5,13 +5,17 @@ import fs from 'node:fs'
 import path from 'node:path'
 import readline from 'node:readline'
 import { settingsFor, type AppSettings } from '../../shared/settings'
-import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
+import type { GameInfo, PsCatalog, PsConsole, PsDatacenter, PsEvent, PsFoundConsole, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
 import { t } from '../../shared/i18n'
 import { log, safeUrl } from '../log'
 import SecureStore from '../secureStore'
 import {
+  accountIdBase64,
   catalogWarning,
   DEFAULT_CONTEXT,
+  REMOTE_PLAY_CLIENT,
+  remoteStreamArgs,
+  validAccountId,
   sessionExpired,
   SESSION_URL,
   SIGN_IN_PAGE_HOST,
@@ -36,6 +40,16 @@ const CORE_LOG_ON_EXIT = 20
 const CORE_HELLO_MS = 15_000
 const CATALOG_TIMEOUT_MS = 180_000
 const QUICK_TIMEOUT_MS = 20_000
+const CONSOLE_TIMEOUT_MS = 30_000
+const SONY_AUTHORIZE = 'https://ca.account.sony.com/api/authz/v3/oauth/authorize'
+const SONY_TOKEN = 'https://ca.account.sony.com/api/authz/v3/oauth/token'
+const SONY_ACCOUNT = 'https://dms.api.playstation.com/api/v1/devices/accounts/me'
+
+/** A linked console with the keys the core needs; only the main process sees these. */
+interface StoredConsole extends PsConsole {
+  registKey: string
+  rpKey: string
+}
 
 interface Pending {
   resolve(value: any): void
@@ -317,6 +331,7 @@ export default class PlayStationService {
       codec: reply.codec,
       width: reply.width,
       height: reply.height,
+      rttMs: reply.rttMs || undefined,
     }
   }
 
@@ -351,6 +366,123 @@ export default class PlayStationService {
     await this.ensureCore()
     const { routed } = await this.call('speakerRoute', {}, QUICK_TIMEOUT_MS)
     return routed
+  }
+
+  /** Fits the monitor's refresh rate to a stream for its duration; see display.c. */
+  async matchDisplay(hwnd: string, fps: number): Promise<{ changed: boolean; from: number; to: number }> {
+    await this.ensureCore()
+    return this.call('display', { action: 'match', hwnd, fps }, QUICK_TIMEOUT_MS)
+  }
+
+  async restoreDisplay() {
+    if (this.core) await this.call('display', { action: 'restore' }, QUICK_TIMEOUT_MS).catch(() => undefined)
+  }
+
+  // --- Remote Play with the user's own console -------------------------------
+
+  private stored(): StoredConsole[] {
+    return this.vault.get<StoredConsole[]>('consoles', [])
+  }
+
+  consoles(): PsConsole[] {
+    return this.stored().map(({ id, name, address, ps5 }) => ({ id, name, address, ps5 }))
+  }
+
+  /** Consoles on the local network, or at a typed address (another network, a VPN). */
+  async discoverConsoles(host?: string): Promise<PsFoundConsole[]> {
+    await this.ensureCore()
+    const { consoles } = await this.call('console', { action: 'discover', host: typeof host === 'string' ? host.trim() : '' }, QUICK_TIMEOUT_MS)
+    return consoles ?? []
+  }
+
+  /**
+   * The PSN account id, which a console wants at linking. Sony hands it out to
+   * the Remote Play app's own login, which the saved session can do silently.
+   */
+  private async accountId(): Promise<string> {
+    const cached = this.vault.get<string>('accountId', '')
+    if (cached) return cached
+    const npsso = this.npsso()
+    if (!npsso) throw new Error(sessionExpired())
+    const ses = session.fromPartition('ps-account')
+    try {
+      await ses.cookies.set({ url: 'https://ca.account.sony.com', name: 'npsso', value: npsso, secure: true, httpOnly: true })
+      const authorize = new URL(SONY_AUTHORIZE)
+      for (const [k, v] of Object.entries({ response_type: 'code', client_id: REMOTE_PLAY_CLIENT.id, redirect_uri: REMOTE_PLAY_CLIENT.redirect, scope: REMOTE_PLAY_CLIENT.scope, service_entity: 'urn:service-entity:psn', prompt: 'none' }))
+        authorize.searchParams.set(k, v)
+      // Sony answers with a redirect to the Remote Play page carrying the code.
+      const redirected = await ses.fetch(authorize.toString(), { cache: 'no-store' })
+      const code = new URL(redirected.url).searchParams.get('code')
+      if (!code) throw new Error('code')
+      const basic = Buffer.from(`${REMOTE_PLAY_CLIENT.id}:${REMOTE_PLAY_CLIENT.secret}`).toString('base64')
+      const token = await ses.fetch(SONY_TOKEN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${basic}` },
+        body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REMOTE_PLAY_CLIENT.redirect, token_format: 'jwt' }).toString(),
+      })
+      const { access_token: access } = (await token.json()) as { access_token?: string }
+      if (!access) throw new Error('token')
+      const me = await ses.fetch(SONY_ACCOUNT, { headers: { Authorization: `Bearer ${access}` } })
+      const { accountId } = (await me.json()) as { accountId?: string | number }
+      if (!accountId) throw new Error('account')
+      const id = accountIdBase64(String(accountId))
+      this.vault.set('accountId', id)
+      return id
+    } catch (e) {
+      log(`ps account id: ${(e as Error).message}`)
+      throw new Error(t('PSN hesap kimliği alınamadı. Gelişmiş bölümünden elle girebilirsin.'))
+    } finally {
+      void ses.clearStorageData()
+    }
+  }
+
+  /** Links the app to a console with the PIN it shows; `accountId` overrides the looked-up one. */
+  async registerConsole(found: { address: string; ps5: boolean; name?: string; hostId?: string }, pin: string, accountId?: string): Promise<PsConsole> {
+    const digits = String(pin).replace(/\D/g, '')
+    if (digits.length !== 8) throw new Error(t('PIN 8 haneli olmalı.'))
+    if (accountId && !validAccountId(accountId)) throw new Error(t('Bu bir PSN hesap kimliğine benzemiyor.'))
+    const account = accountId?.trim() || (await this.accountId())
+    await this.ensureCore()
+    const { console: linked } = await this.call('console', { action: 'register', host: found.address, ps5: found.ps5, accountId: account, pin: Number(digits) }, CONSOLE_TIMEOUT_MS)
+    if (accountId) this.vault.set('accountId', account)
+    const entry: StoredConsole = {
+      id: found.hostId || linked.mac || crypto.randomUUID(),
+      name: linked.name || found.name || (linked.ps5 ? 'PS5' : 'PS4'),
+      address: found.address,
+      ps5: Boolean(linked.ps5),
+      registKey: linked.registKey,
+      rpKey: linked.rpKey,
+    }
+    this.vault.set('consoles', [...this.stored().filter((c) => c.id !== entry.id), entry])
+    return { id: entry.id, name: entry.name, address: entry.address, ps5: entry.ps5 }
+  }
+
+  forgetConsole(id: string) {
+    this.vault.set('consoles', this.stored().filter((c) => c.id !== id))
+    return this.consoles()
+  }
+
+  /** A console found at a new address (DHCP moved it) keeps its keys. */
+  updateConsoleAddress(id: string, address: string) {
+    this.vault.set('consoles', this.stored().map((c) => (c.id === id ? { ...c, address } : c)))
+  }
+
+  async wakeConsole(id: string) {
+    const target = this.stored().find((c) => c.id === id)
+    if (!target) throw new Error(t('Konsol bulunamadı.'))
+    await this.ensureCore()
+    await this.call('console', { action: 'wake', host: target.address, ps5: target.ps5, registKey: target.registKey }, QUICK_TIMEOUT_MS)
+  }
+
+  async remoteStream(id: string, opts: PsStreamOptions): Promise<PsStreamStarted> {
+    const target = this.stored().find((c) => c.id === id)
+    if (!target) throw new Error(t('Konsol bulunamadı.'))
+    await this.ensureCore()
+    const settings = settingsFor(this.settings(), `console:${id}`)
+    const reply = await this.call('remoteStream', { ...remoteStreamArgs(target, opts, settings), registKey: target.registKey, rpKey: target.rpKey })
+    const media = this.media
+    if (!media) throw new Error(t('PlayStation çekirdeği beklenmedik şekilde kapandı'))
+    return { url: `ws://127.0.0.1:${media.port}/${media.token}`, codec: reply.codec, width: reply.width, height: reply.height }
   }
 
   async stop() {

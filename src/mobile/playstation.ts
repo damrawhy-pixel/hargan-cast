@@ -180,6 +180,7 @@ export default class MobilePlayStation {
     return {
       url: `ws://127.0.0.1:${this.media!.port}/${this.media!.token}`,
       codec: reply.codec,
+      rttMs: reply.rttMs || undefined,
       width: reply.width,
       height: reply.height,
     }

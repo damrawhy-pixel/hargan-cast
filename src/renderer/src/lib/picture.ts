@@ -1,11 +1,18 @@
 // Post-processing for stream frames, on a page canvas or, for PlayStation, inside
 // the media worker on an OffscreenCanvas:
-//   1. debanding: smooths the steps a video codec leaves in dark, flat gradients
-//   2. scaling: AMD FidelityFX Super Resolution 1.0 (MIT) EASU, or bilinear
-//   3. sharpening: FSR 1.0 RCAS
+//   1. artifact reduction: an edge-preserving filter that takes out the mosquito
+//      noise and blocking a codec leaves at low bit rates
+//   2. debanding: smooths the steps a video codec leaves in dark, flat gradients
+//   3. scaling: AMD FidelityFX Super Resolution 1.0 (MIT) EASU, Lanczos-3 with
+//      anti-ringing, or bilinear
+//   4. sharpening: FSR 1.0 RCAS
 // The last pass dithers, so a smoothed gradient does not band again at 8 bits.
+//
+// It stays on WebGL: only WebGL and 2D canvases take the low-latency
+// "desynchronized" mode, which spares the compositor's extra frame of delay.
 
 import { t } from '../../../shared/i18n'
+import type { AppSettings } from '../../../shared/settings'
 
 export type Fit = 'contain' | 'cover' | 'fill'
 
@@ -14,15 +21,36 @@ export interface Size {
   height: number
 }
 
+/** 'fsr' keeps game edges crisp; 'lanczos' is the classic, more natural video scaler. */
+export type Scaler = 'off' | 'fsr' | 'lanczos'
+
 export interface PictureOptions {
-  fsr: boolean
-  /** 0 turns sharpening off; 10 is the strongest. Only used with FSR. */
+  scaler: Scaler
+  /** 0 turns sharpening off; 10 is the strongest. Only used with a scaler. */
   sharpness: number
   deband: boolean
+  denoise: boolean
 }
 
+const SCALER_NAMES: Record<Scaler, string> = { off: '', fsr: 'FSR', lanczos: 'Lanczos' }
+
 /** What the stats line says is running, or '' when nothing is. */
-export const pictureLabel = (o: PictureOptions) => [o.fsr && 'FSR', o.deband && t('bant giderme')].filter(Boolean).join(' · ')
+export const pictureLabel = (o: PictureOptions) =>
+  [SCALER_NAMES[o.scaler], o.denoise && t('iz azaltma'), o.deband && t('bant giderme')].filter(Boolean).join(' · ')
+
+/** A service's picture settings as shader options. */
+export function pictureOptionsFor(s: AppSettings, service: 'ps' | 'xbox'): PictureOptions {
+  const ps = service === 'ps'
+  return {
+    scaler: (ps ? s.psFsr : s.xboxFsr) ? (ps ? s.psScaler : s.xboxScaler) : 'off',
+    sharpness: ps ? s.psFsrSharpness : s.xboxFsrSharpness,
+    deband: ps ? s.psDeband : s.xboxDeband,
+    denoise: ps ? s.psDenoise : s.xboxDenoise,
+  }
+}
+
+/** Whether the options do anything at all; without them frames are shown as they come. */
+export const pictureActive = (o: PictureOptions) => o.scaler !== 'off' || o.deband || o.denoise
 
 // Picture formats with a fixed ratio size their own box, so the frame fills it.
 export const fitFor = (videoFormat: string): Fit => (videoFormat === 'Zoom' ? 'cover' : videoFormat === '' ? 'contain' : 'fill')
@@ -38,6 +66,9 @@ export function outputSize(box: Size, frame: Size, fit: Fit): Size {
 const DEBAND_THRESHOLD = 2 / 255
 const DEBAND_RADIUS = 24
 const DEBAND_ROUNDS = 4
+// About six shades in 255: codec noise is smaller, real edges are larger.
+const DENOISE_STRENGTH = 0.025
+const ANTIRING = 0.8
 
 const HEADER = `#version 300 es
 precision highp float;
@@ -95,6 +126,100 @@ void main() {
     c = avg;
   }
   color = vec4(c, 1.0);
+}`
+
+// A bilateral filter: neighbours count by distance and by how close their
+// brightness is, so small codec noise averages away while real edges, which differ
+// by more than a few shades, are left alone. Keeps orientation, like DEBAND.
+const DENOISE = `${HEADER}
+uniform float strength; // the brightness difference still treated as noise
+ivec2 size;
+
+vec3 at(ivec2 p) {
+  return texelFetch(src, clamp(p, ivec2(0), size - 1), 0).rgb;
+}
+
+float luma(vec3 c) {
+  return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void main() {
+  size = textureSize(src, 0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 c = at(p);
+  float l = luma(c);
+  float range = -0.5 / (strength * strength);
+  vec3 sum = c;
+  float weight = 1.0;
+  for (int y = -2; y <= 2; y++) {
+    for (int x = -2; x <= 2; x++) {
+      if (x == 0 && y == 0) continue;
+      vec3 s = at(p + ivec2(x, y));
+      float d = luma(s) - l;
+      float w = exp(d * d * range - float(x * x + y * y) * 0.22);
+      sum += s * w;
+      weight += w;
+    }
+  }
+  color = vec4(sum / weight, 1.0);
+}`
+
+// Lanczos-3, in two passes (across, then down). Anti-ringing pulls each result most
+// of the way back inside its two nearest pixels, so edges get no bright halos.
+const LANCZOS = `
+uniform float scale; // input pixels per output pixel
+uniform float antiring;
+
+float lanczos(float x) {
+  x = abs(x);
+  if (x < 1e-5) return 1.0;
+  if (x >= 3.0) return 0.0;
+  float px = 3.14159265 * x;
+  return 3.0 * sin(px) * sin(px / 3.0) / (px * px);
+}
+`
+
+// Across: writes output width at the source's height, keeping orientation.
+const LANCZOS_X = `${HEADER}${LANCZOS}
+void main() {
+  ivec2 size = textureSize(src, 0);
+  ivec2 o = ivec2(gl_FragCoord.xy);
+  float s = (float(o.x) + 0.5) * scale - 0.5;
+  int base = int(floor(s));
+  float f = s - float(base);
+  vec3 sum = vec3(0.0);
+  float weight = 0.0;
+  for (int i = -2; i <= 3; i++) {
+    float k = lanczos(float(i) - f);
+    sum += texelFetch(src, ivec2(clamp(base + i, 0, size.x - 1), o.y), 0).rgb * k;
+    weight += k;
+  }
+  vec3 a = texelFetch(src, ivec2(clamp(base, 0, size.x - 1), o.y), 0).rgb;
+  vec3 b = texelFetch(src, ivec2(clamp(base + 1, 0, size.x - 1), o.y), 0).rgb;
+  vec3 raw = sum / weight;
+  color = vec4(mix(raw, clamp(raw, min(a, b), max(a, b)), antiring), 1.0);
+}`
+
+// Down: writes the output, flipped like EASU so row 0 of the source ends up on top.
+const LANCZOS_Y = `${HEADER}${DITHER}${LANCZOS}
+uniform vec2 outSize;
+void main() {
+  ivec2 size = textureSize(src, 0);
+  int x = int(gl_FragCoord.x);
+  float s = (outSize.y - 1.0 - floor(gl_FragCoord.y) + 0.5) * scale - 0.5;
+  int base = int(floor(s));
+  float f = s - float(base);
+  vec3 sum = vec3(0.0);
+  float weight = 0.0;
+  for (int i = -2; i <= 3; i++) {
+    float k = lanczos(float(i) - f);
+    sum += texelFetch(src, ivec2(x, clamp(base + i, 0, size.y - 1)), 0).rgb * k;
+    weight += k;
+  }
+  vec3 a = texelFetch(src, ivec2(x, clamp(base, 0, size.y - 1)), 0).rgb;
+  vec3 b = texelFetch(src, ivec2(x, clamp(base + 1, 0, size.y - 1)), 0).rgb;
+  vec3 raw = sum / weight;
+  color = vec4(dithered(mix(raw, clamp(raw, min(a, b), max(a, b)), antiring)), 1.0);
 }`
 
 // Plain bilinear. Source row 0 is the top.
@@ -269,14 +394,19 @@ function texture(gl: Gl) {
 }
 
 export class Picture {
-  options: PictureOptions = { fsr: true, sharpness: 5, deband: false }
+  options: PictureOptions = { scaler: 'fsr', sharpness: 5, deband: false, denoise: false }
 
   private copy!: WebGLProgram
   private easu!: WebGLProgram
   private rcas!: WebGLProgram
   private deband!: WebGLProgram
+  private denoise!: WebGLProgram
+  private lanczosX!: WebGLProgram
+  private lanczosY!: WebGLProgram
   private source!: WebGLTexture
+  private clean!: Target
   private smooth!: Target
+  private wide!: Target
   private middle!: Target
   // Half floats keep the in-between shades that debanding creates, when the GPU can render to them.
   private precise = false
@@ -322,9 +452,15 @@ export class Picture {
     this.easu = program(gl, EASU)
     this.rcas = program(gl, RCAS)
     this.deband = program(gl, DEBAND)
+    this.denoise = program(gl, DENOISE)
+    this.lanczosX = program(gl, LANCZOS_X)
+    this.lanczosY = program(gl, LANCZOS_Y)
     this.source = texture(gl)
-    this.smooth = { texture: texture(gl), framebuffer: gl.createFramebuffer()!, size: { width: 0, height: 0 } }
-    this.middle = { texture: texture(gl), framebuffer: gl.createFramebuffer()!, size: { width: 0, height: 0 } }
+    const target = (): Target => ({ texture: texture(gl), framebuffer: gl.createFramebuffer()!, size: { width: 0, height: 0 } })
+    this.clean = target()
+    this.smooth = target()
+    this.wide = target()
+    this.middle = target()
     gl.bindVertexArray(gl.createVertexArray())
     gl.disable(gl.BLEND)
     gl.disable(gl.DEPTH_TEST)
@@ -362,7 +498,7 @@ export class Picture {
   draw(frame: TexImageSource, width: number, height: number) {
     const gl = this.gl
     if (this.lost || gl.isContextLost()) return
-    const { fsr, sharpness, deband } = this.options
+    const { scaler, sharpness, deband, denoise } = this.options
     const out = { width: this.canvas.width, height: this.canvas.height }
     this.frame++
 
@@ -370,6 +506,12 @@ export class Picture {
     gl.bindTexture(gl.TEXTURE_2D, this.source)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame)
     let input = this.source
+
+    if (denoise) {
+      this.bindTarget(this.clean, { width, height })
+      this.run(this.denoise, input, (at) => gl.uniform1f(at('strength'), DENOISE_STRENGTH))
+      input = this.clean.texture
+    }
 
     if (deband) {
       this.bindTarget(this.smooth, { width, height })
@@ -380,21 +522,36 @@ export class Picture {
       input = this.smooth.texture
     }
 
-    const upscale = fsr && (out.width > width || out.height > height)
-    const sharpen = fsr && sharpness > 0
-    // Only the pass that writes the screen dithers; debanding is pointless without it.
-    const ditherLast = deband ? 1 : 0
+    const upscale = scaler !== 'off' && (out.width > width || out.height > height)
+    const sharpen = scaler !== 'off' && sharpness > 0
+    // Only the pass that writes the screen dithers; smoothing is pointless without it.
+    const ditherLast = deband || denoise ? 1 : 0
 
-    this.bindTarget(sharpen ? this.middle : null, out)
-    this.run(upscale ? this.easu : this.copy, input, (at) => {
-      gl.uniform2f(at('outSize'), out.width, out.height)
-      gl.uniform1f(at('dither'), sharpen ? 0 : ditherLast)
-      if (upscale) {
-        const sx = width / out.width
-        const sy = height / out.height
-        gl.uniform4f(at('con0'), sx, sy, 0.5 * sx - 0.5, 0.5 * sy - 0.5)
-      }
-    })
+    if (upscale && scaler === 'lanczos') {
+      this.bindTarget(this.wide, { width: out.width, height })
+      this.run(this.lanczosX, input, (at) => {
+        gl.uniform1f(at('scale'), width / out.width)
+        gl.uniform1f(at('antiring'), ANTIRING)
+      })
+      this.bindTarget(sharpen ? this.middle : null, out)
+      this.run(this.lanczosY, this.wide.texture, (at) => {
+        gl.uniform1f(at('scale'), height / out.height)
+        gl.uniform1f(at('antiring'), ANTIRING)
+        gl.uniform2f(at('outSize'), out.width, out.height)
+        gl.uniform1f(at('dither'), sharpen ? 0 : ditherLast)
+      })
+    } else {
+      this.bindTarget(sharpen ? this.middle : null, out)
+      this.run(upscale ? this.easu : this.copy, input, (at) => {
+        gl.uniform2f(at('outSize'), out.width, out.height)
+        gl.uniform1f(at('dither'), sharpen ? 0 : ditherLast)
+        if (upscale) {
+          const sx = width / out.width
+          const sy = height / out.height
+          gl.uniform4f(at('con0'), sx, sy, 0.5 * sx - 0.5, 0.5 * sy - 0.5)
+        }
+      })
+    }
 
     if (!sharpen) return
     this.bindTarget(null, out)

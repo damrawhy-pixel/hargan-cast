@@ -626,6 +626,7 @@ static void *stream_thread(void *arg)
 	json_object_object_add(reply, "codec", json_object_new_string(req->hevc ? "h265" : "h264"));
 	json_object_object_add(reply, "width", json_object_new_int((int)info.video_profile.width));
 	json_object_object_add(reply, "height", json_object_new_int((int)info.video_profile.height));
+	json_object_object_add(reply, "rttMs", json_object_new_int((int)(res.rtt_us / 1000)));
 	emit(reply);
 
 	// A stop that came in while the session was being set up still counts.

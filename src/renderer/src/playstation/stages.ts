@@ -18,6 +18,7 @@ const STAGES: [RegExp, Message][] = [
   [/^Acquiring License/, 'Lisans alınıyor'],
   [/^Checking License/, 'Lisans denetleniyor'],
   [/^Creating Session/, 'Oturum oluşturuluyor'],
+  [/^Connecting to console/, 'Konsola bağlanılıyor'],
 ]
 
 export function psStage(stage: string) {
@@ -37,6 +38,15 @@ export function psQuit(reason: string) {
   if (reason.includes('Server shut down')) return t('Sunucu kapandı, akış sona erdi')
   if (reason.includes('Remote has disconnected')) return t('Sunucu bağlantıyı kapattı')
   if (reason.includes('Connection Refused')) return t('Sunucu bağlantıyı reddetti')
+  if (reason.includes('Remote Play on Console is already in use')) return t('Konsolda Uzaktan Oynatma şu an başka bir cihazda açık')
+  if (reason.includes('Remote Play on Console has crashed')) return t('Konsolun Uzaktan Oynatma hizmeti durdu. Konsolu yeniden başlatmayı dene.')
+  if (reason.includes('RP-Version mismatch')) return t('Konsolun sistem yazılımı bu sürümle uyumsuz. Konsolu güncelle.')
   if (reason.includes('in use')) return t('Bu hesapta başka bir akış açık')
   return t('PlayStation bağlantısı kesildi')
+}
+
+/** Quit reasons that mean the network failed, not the server or the account, so a new session can fix them. */
+export function reconnectable(reason: string) {
+  if (/Server shut down|in use|Refused|mismatch/.test(reason)) return false
+  return /Stream Connection|Ctrl failed to connect|Unknown Ctrl Error/.test(reason)
 }

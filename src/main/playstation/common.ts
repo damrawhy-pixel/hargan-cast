@@ -98,6 +98,61 @@ export function streamArgs(game: PsGame, opts: PsStreamOptions, settings: AppSet
     hapticStrength: settings.psHapticStrength,
     triggers: settings.psTriggers,
     vibration: settings.psVibration,
+    buttonMap: settings.buttonMap,
+    swapSticks: settings.swapSticks,
+    invertY: settings.invertY,
+  }
+}
+
+// --- Remote Play with the user's own console --------------------------------
+
+/** The client's own Remote Play app id and its published secret, for the account id lookup. */
+export const REMOTE_PLAY_CLIENT = { id: SIGN_IN_PARAMS.client_id, secret: 'mvaiZkRsAsI1IBkY', redirect: SIGN_IN_PARAMS.redirect_uri, scope: SIGN_IN_PARAMS.scope }
+
+/** Consoles take the PSN account id as 8 little-endian bytes, base64. */
+export function accountIdBase64(decimal: string) {
+  let n = BigInt(decimal)
+  let bytes = ''
+  for (let i = 0; i < 8; i++) {
+    bytes += String.fromCharCode(Number(n & 0xffn))
+    n >>= 8n
+  }
+  return btoa(bytes)
+}
+
+/** A base64 account id someone pasted, checked: it must be 8 bytes. */
+export function validAccountId(text: string) {
+  try {
+    return atob(text.trim()).length === 8
+  } catch {
+    return false
+  }
+}
+
+// kb/s per resolution on automatic; a home network takes more than the cloud's.
+const REMOTE_BITRATE: Record<number, number> = { 720: 10000, 1080: 15000, 1440: 30000, 2160: 40000 }
+
+/** The core's `remoteStream` command, minus its id and the console's keys. */
+export function remoteStreamArgs(target: { address: string; ps5: boolean }, opts: PsStreamOptions, settings: AppSettings) {
+  // A PS4 sends 1080p at most, and only the Pro does that.
+  const resolution = target.ps5 ? settings.psRemoteResolution : Math.min(settings.psRemoteResolution, 1080)
+  return {
+    host: target.address,
+    ps5: target.ps5,
+    hevc: target.ps5 && opts.hevc,
+    hdr: target.ps5 && opts.hevc && Boolean(opts.hdr),
+    fps: settings.psRemoteFps,
+    resolution,
+    bitrate: settings.psRemoteBitrate || (REMOTE_BITRATE[resolution] ?? REMOTE_BITRATE[1080]),
+    packetLossMax: settings.psPacketLossMax,
+    psChord: settings.psOptionsShareForPs,
+    nativeDualSense: settings.psNativeDualSense,
+    hapticStrength: settings.psHapticStrength,
+    triggers: settings.psTriggers,
+    vibration: settings.psVibration,
+    buttonMap: settings.buttonMap,
+    swapSticks: settings.swapSticks,
+    invertY: settings.invertY,
   }
 }
 
@@ -151,6 +206,10 @@ export function parseStorePage(html: string): GameInfo {
 }
 
 export function friendlyError(message: string) {
+  if (message === 'CONSOLE_REGIST') return t('Konsol bağlanmadı. PIN doğru mu ve konsolda Uzaktan Oynatma açık mı? PIN birkaç dakikada yenilenir.')
+  if (message === 'CONSOLE_ACCOUNT') return t('PSN hesap kimliği okunamadı.')
+  if (message === 'CONSOLE_WAKE') return t('Konsol uyandırılamadı. Aynı ağda mı?')
+  if (message === 'CONSOLE_KEYS') return t('Konsolun kayıt bilgisi bozuk. Konsolu kaldırıp yeniden ekle.')
   if (message === 'AUTHORIZATION_FAILED') return sessionExpired()
   if (message === 'PS_PLUS_SUBSCRIPTION_REQUIRED') return t('Bu oyun için PS Plus Premium aboneliği gerekiyor.')
   if (message === 'PING_TIMEOUT') return t('Veri merkezlerine ulaşılamadı. Bağlantını kontrol edip tekrar dene.')

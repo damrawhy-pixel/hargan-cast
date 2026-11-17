@@ -73,6 +73,7 @@
       titles: async () => games.slice(0, 400).map((g, i) => ({ titleId: 'T' + i, productId: g.productId, name: g.name, poster: g.imageUrl, categories: [], recent: i < 12 })),
       library: async () => [], info: async () => ({ screenshots: [] }), activeSessions: async () => [], signIn: async () => {},
       onStatus: () => () => {}, signOut: async () => {},
+      consoles: async () => [], startHomeStream: async () => '', achievements: async () => null, friends: async () => [],
     },
     ps: {
       status: async () => ({ state: 'signedIn' }),

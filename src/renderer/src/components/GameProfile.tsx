@@ -3,7 +3,8 @@ import { t } from '../../../shared/i18n'
 import type { HubItem } from '../lib/items'
 import { updateSettings, useSettings } from '../lib/useSettings'
 import { videoSurfaceSupported } from '../lib/videoSurface'
-import { RESOLUTIONS, psBitrates, videoFormats, xboxBitrates, xboxResolutions } from './SettingsPage'
+import { LayoutEditor, type LayoutValue } from './LayoutEditor'
+import { RESOLUTIONS, psBitrates, scalers, videoFormats, xboxBitrates, xboxResolutions } from './SettingsPage'
 
 type Field = (typeof PROFILE_FIELDS)[number]
 
@@ -36,6 +37,7 @@ function ProfileChoice<K extends Field>({ field, label, options, profile, onChan
 }
 
 const ON_OFF = (): [boolean, string][] => [[true, t('Açık')], [false, t('Kapalı')]]
+const SHARPNESS: [number, string][] = Array.from({ length: 11 }, (_, n) => [n, String(n)])
 
 /** Picture settings for this one game, on top of the general ones. */
 export function GameProfile({ item }: { item: HubItem }) {
@@ -43,16 +45,36 @@ export function GameProfile({ item }: { item: HubItem }) {
   const profile: Profile = settings.gameProfiles[item.key] ?? {}
   const custom = Object.keys(profile).length
 
-  const change = <K extends Field>(field: K, value: AppSettings[K] | undefined) => {
-    const next: Profile = { ...profile }
-    if (value === undefined) delete next[field]
-    else next[field] = value
+  const save = (next: Profile) => {
     const all = { ...settings.gameProfiles }
     if (Object.keys(next).length) all[item.key] = next
     else delete all[item.key]
     void updateSettings({ gameProfiles: all })
   }
+  const change = <K extends Field>(field: K, value: AppSettings[K] | undefined) => {
+    const next: Profile = { ...profile }
+    if (value === undefined) delete next[field]
+    else next[field] = value
+    save(next)
+  }
   const row = { profile, onChange: change }
+
+  // The controller layout goes as one piece: own layout or the general one.
+  const ownLayout = profile.buttonMap !== undefined || profile.swapSticks !== undefined || profile.invertY !== undefined
+  const layout: LayoutValue = {
+    buttonMap: profile.buttonMap ?? settings.buttonMap,
+    swapSticks: profile.swapSticks ?? settings.swapSticks,
+    invertY: profile.invertY ?? settings.invertY,
+  }
+  const toggleLayout = () => {
+    const next: Profile = { ...profile }
+    if (ownLayout) {
+      delete next.buttonMap
+      delete next.swapSticks
+      delete next.invertY
+    } else Object.assign(next, layout)
+    save(next)
+  }
 
   const ps = item.ps
   // The app's shaders only run when it does the scaling itself.
@@ -70,20 +92,33 @@ export function GameProfile({ item }: { item: HubItem }) {
           <>
             <ProfileChoice field={cloud ? 'psCloudResolution' : 'psNowResolution'} label={t('Çözünürlük')} options={RESOLUTIONS} {...row} />
             <ProfileChoice field={cloud ? 'psCloudBitrate' : 'psNowBitrate'} label={t('Bit hızı')} options={psBitrates()} {...row} />
-            {shaders && <ProfileChoice field="psFsr" label="FSR" options={ON_OFF()} {...row} />}
+            {shaders && <ProfileChoice field="psFsr" label={t('Büyütme ve keskinleştirme')} options={ON_OFF()} {...row} />}
+            {shaders && <ProfileChoice field="psScaler" label={t('Büyütme yöntemi')} options={scalers()} {...row} />}
+            {shaders && <ProfileChoice field="psFsrSharpness" label={t('Keskinlik')} options={SHARPNESS} {...row} />}
+            {shaders && <ProfileChoice field="psDenoise" label={t('Sıkıştırma izlerini azalt')} options={ON_OFF()} {...row} />}
             {shaders && <ProfileChoice field="psDeband" label={t('Bant giderme')} options={ON_OFF()} {...row} />}
           </>
         ) : (
           <>
             <ProfileChoice field="xboxResolution" label={t('Çözünürlük')} options={xboxResolutions()} {...row} />
             <ProfileChoice field="xboxBitrate" label={t('Bit hızı sınırı')} options={xboxBitrates()} {...row} />
-            {shaders && <ProfileChoice field="xboxFsr" label="FSR" options={ON_OFF()} {...row} />}
+            {shaders && <ProfileChoice field="xboxFsr" label={t('Büyütme ve keskinleştirme')} options={ON_OFF()} {...row} />}
+            {shaders && <ProfileChoice field="xboxScaler" label={t('Büyütme yöntemi')} options={scalers()} {...row} />}
+            {shaders && <ProfileChoice field="xboxFsrSharpness" label={t('Keskinlik')} options={SHARPNESS} {...row} />}
+            {shaders && <ProfileChoice field="xboxDenoise" label={t('Sıkıştırma izlerini azalt')} options={ON_OFF()} {...row} />}
             {shaders && <ProfileChoice field="xboxDeband" label={t('Bant giderme')} options={ON_OFF()} {...row} />}
           </>
         )}
         <ProfileChoice field="upscaler" label={t('Büyütme')} options={[['shader', t('Uygulama (FSR)')], ['system', t('Ekran kartı (RTX Video / VSR)')]]} {...row} />
         <ProfileChoice field="framePacing" label={t('Kare zamanlaması')} options={[['latency', t('En düşük gecikme')], ['smooth', t('En akıcı görüntü')]]} {...row} />
         <ProfileChoice field="videoFormat" label={t('Görüntü biçimi')} options={videoFormats()} {...row} />
+        <div className="profile-row">
+          <span>{t('Bu oyuna özel kol düzeni')}</span>
+          <button role="switch" aria-checked={ownLayout} aria-label={t('Bu oyuna özel kol düzeni')} className="switch" data-nav onClick={toggleLayout}>
+            <span />
+          </button>
+        </div>
+        {ownLayout && <LayoutEditor value={layout} onChange={(patch) => save({ ...profile, ...layout, ...patch })} />}
         {custom > 0 && (
           <button className="ghost" data-nav onClick={() => void updateSettings({ gameProfiles: Object.fromEntries(Object.entries(settings.gameProfiles).filter(([k]) => k !== item.key)) })}>
             {t('Genel ayarlara dön')}
