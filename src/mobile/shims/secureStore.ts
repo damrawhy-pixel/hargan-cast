@@ -99,6 +99,16 @@ export default class SecureStore {
     scheduleSave()
   }
 
+  /** Everything in this vault, for keeping another account's copy. */
+  snapshot(): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(this.data()))
+  }
+
+  replace(data: Record<string, unknown>) {
+    vaults[this.name] = JSON.parse(JSON.stringify(data))
+    scheduleSave()
+  }
+
   clear() {
     delete vaults[this.name]
     scheduleSave()

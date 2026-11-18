@@ -92,7 +92,9 @@ Tüm ayarlar **Ayarlar** sekmesindedir ve şifreli olarak `vault/settings.bin` d
 
 ## Sınırlar
 
-Kendi PS5/PS4'ünden Uzaktan Oynatma masaüstünde var (PlayStation alanı > Konsolların); telefonlarda henüz yok. PSN üzerinden ev dışından bağlantı yok; ev dışından oynamak için konsolun adresi elle girilebilir (port yönlendirme ya da VPN). Xbox ev akışı Microsoft'un aktarımıyla her yerden çalışır.
+Kendi PS5/PS4'ünden Uzaktan Oynatma masaüstünde ve telefonlarda var (PlayStation alanı > Konsolların): evde doğrudan, ev dışında "İnternet üzerinden oyna" ile PSN aracılığıyla. Kendi konsolunda mikrofon sesli sohbete gider. iPhone'da ağda arama Apple'ın çok noktaya yayın iznine bağlı; adresi elle girmek her zaman çalışır. Xbox ev akışı Microsoft'un aktarımıyla her yerden çalışır.
+
+Diğer: Xbox oyunlarında DualSense jiroskopla nişan (Ayarlar > Xbox kol ve giriş), kolla yazılabilen ekran klavyesi, her akışın ölçüm geçmişi (Ayarlar > Akış geçmişi), "Bu bilgisayara göre ayarla", hesap başına ayrı oturumlarla birden çok hesap (Ayarlar > Hesaplar) ve Android'de doğrudan görüntü (MediaCodec, deneysel). Android uygulaması her değişiklikte GitHub Actions'ta bir emülatörde Playwright ile denenir (tests/android).
 
 ## Sorun giderme
 

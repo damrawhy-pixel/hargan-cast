@@ -14,6 +14,7 @@ static JavaVM *java_vm;
 static jclass core_class;
 static jmethodID on_line;
 static jmethodID on_feedback;
+static jmethodID on_video;
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
@@ -80,6 +81,21 @@ static void feedback_to_java(int kind, const unsigned char *data, size_t size, v
 	java_done(env, attached);
 }
 
+static void video_to_java(const unsigned char *data, size_t size, bool key, void *user)
+{
+	bool attached;
+	JNIEnv *env = java_env(&attached);
+	if(!env)
+		return;
+	jbyteArray array = bytes(env, data, size);
+	if(array)
+	{
+		(*env)->CallStaticVoidMethod(env, core_class, on_video, array, (jboolean)key);
+		(*env)->DeleteLocalRef(env, array);
+	}
+	java_done(env, attached);
+}
+
 // Returns "port token", or null when the core could not start.
 JNIEXPORT jstring JNICALL Java_app_hargan_ps_PsCore_start(JNIEnv *env, jclass cls, jstring cache_dir, jstring ca_bundle)
 {
@@ -88,7 +104,8 @@ JNIEXPORT jstring JNICALL Java_app_hargan_ps_PsCore_start(JNIEnv *env, jclass cl
 		core_class = (*env)->NewGlobalRef(env, cls);
 		on_line = (*env)->GetStaticMethodID(env, cls, "onLine", "([B)V");
 		on_feedback = (*env)->GetStaticMethodID(env, cls, "onFeedback", "(I[B)V");
-		if(!on_line || !on_feedback)
+		on_video = (*env)->GetStaticMethodID(env, cls, "onVideo", "([BZ)V");
+		if(!on_line || !on_feedback || !on_video)
 			return NULL;
 	}
 	const char *cache = cache_dir ? (*env)->GetStringUTFChars(env, cache_dir, NULL) : NULL;
@@ -134,4 +151,14 @@ JNIEXPORT void JNICALL Java_app_hargan_ps_PsCore_motion(JNIEnv *env, jclass cls,
 JNIEXPORT void JNICALL Java_app_hargan_ps_PsCore_motionReset(JNIEnv *env, jclass cls)
 {
 	hc_core_motion_reset();
+}
+
+JNIEXPORT void JNICALL Java_app_hargan_ps_PsCore_nativeVideo(JNIEnv *env, jclass cls, jboolean on)
+{
+	hc_core_set_video(on ? video_to_java : NULL, NULL);
+}
+
+JNIEXPORT void JNICALL Java_app_hargan_ps_PsCore_requestKeyFrame(JNIEnv *env, jclass cls)
+{
+	hc_core_request_key_frame();
 }

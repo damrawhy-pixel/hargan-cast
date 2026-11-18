@@ -7,6 +7,8 @@ import { locale, t } from '../../shared/i18n'
 import Authentication from './authentication'
 import { clearStreamToken, saveStreamToken } from './helpers/streamTokenStore'
 import StreamManager from './helpers/streammanager'
+import SecureStore from './secureStore'
+import { AccountShelf } from '../accounts'
 import TitleManager from './helpers/titlemanager'
 import { clearWebToken } from './helpers/webTokenStore'
 import xCloudApi from './helpers/xcloudapi'
@@ -116,6 +118,50 @@ export default class XboxService {
   signInWindowClosed() {
     if (this._status.state === 'signingIn' && !this._authentication._isAuthenticating)
       this.setStatus({ state: 'signedOut' })
+  }
+
+  // --- more than one account ------------------------------------------------
+
+  private shelf = new AccountShelf(new SecureStore('accounts'), 'xbox', this._store)
+
+  accounts() {
+    return { current: this._status.gamertag ?? '', others: this.shelf.list() }
+  }
+
+  /** The signed-in account steps aside; sign-in starts over for another. */
+  async addAccount() {
+    this.shelf.park(this._status.gamertag ?? 'Xbox')
+    await this.forgetSession()
+    this._status = { state: 'signedOut', hasCloud: false }
+    this.notify(this._status)
+  }
+
+  async switchAccount(id: string) {
+    if (!this.shelf.swap(String(id), this._status.gamertag ?? 'Xbox')) return
+    await this.forgetSession()
+    // As at start: tokens from the vault, then a silent sign-in with them.
+    this._authentication._tokenStore.load()
+    this.setStatus({ state: 'restoring' })
+    if (!this._authentication.checkAuthentication()) this.setStatus({ state: 'signedOut' })
+  }
+
+  forgetAccount(id: string) {
+    this.shelf.forget(String(id))
+    return this.accounts()
+  }
+
+  // What the previous account left in memory and in the sign-in window's cookies.
+  private async forgetSession() {
+    const store = this._authentication._tokenStore as any
+    store._userToken = store._sisuToken = store._jwtKeys = undefined
+    const xal = this._authentication._xal as any
+    xal._webToken = xal._xhomeToken = xal._xcloudToken = undefined
+    this.streamingTokens = undefined
+    this.webToken = undefined
+    this._activeSession = undefined
+    this.titleIds.clear()
+    this.storeSettings()
+    await session.fromPartition('persist:xbox').clearStorageData()
   }
 
   async signOut() {

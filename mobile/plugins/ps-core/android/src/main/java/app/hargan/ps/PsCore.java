@@ -25,6 +25,8 @@ final class PsCore {
     private static Boolean loaded;
     static volatile Listener listener;
     static volatile Feedback feedback;
+    /** Takes the stream's video while the native picture path is on. */
+    static volatile NativeVideo video;
 
     private PsCore() {}
 
@@ -54,6 +56,18 @@ final class PsCore {
     static native void motion(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ, long timestampUs);
 
     static native void motionReset();
+
+    /** Routes the stream's video to onVideo (true) or back to the media socket. */
+    static native void nativeVideo(boolean on);
+
+    static native void requestKeyFrame();
+
+    /** One access unit, from the session's threads. */
+    @Keep
+    static void onVideo(byte[] data, boolean key) {
+        NativeVideo current = video;
+        if (current != null) current.feed(data, key);
+    }
 
     /** Called by the core from its own threads. */
     @Keep

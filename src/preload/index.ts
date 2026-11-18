@@ -46,6 +46,12 @@ const api: HarganApi = {
     info: invoke('xbox:info'),
     startStream: invoke('xbox:startStream'),
     consoles: invoke('xbox:consoles'),
+    accounts: {
+      list: invoke('xbox:accounts'),
+      add: invoke('xbox:addAccount'),
+      switch: invoke('xbox:switchAccount'),
+      forget: invoke('xbox:forgetAccount'),
+    },
     achievements: invoke('xbox:achievements'),
     friends: invoke('xbox:friends'),
     startHomeStream: invoke('xbox:startHomeStream'),
@@ -72,6 +78,13 @@ const api: HarganApi = {
     testHaptics: invoke('ps:testHaptics'),
     info: invoke('ps:info'),
     routeSpeaker: invoke('ps:routeSpeaker'),
+    accounts: {
+      list: invoke('ps:accounts'),
+      add: invoke('ps:addAccount'),
+      switch: invoke('ps:switchAccount'),
+      forget: invoke('ps:forgetAccount'),
+      rename: invoke('ps:renameAccount'),
+    },
     consoles: {
       list: invoke('ps:consoles'),
       discover: invoke('ps:discoverConsoles'),

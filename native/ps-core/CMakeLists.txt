@@ -137,7 +137,7 @@ target_link_libraries(chiaki PUBLIC
 	ws2_32 wsock32 bcrypt iphlpapi crypt32 secur32 winmm)
 
 # --- the sidecar
-set(CORE_SRC src/main.c src/console.c src/crash_dump.c src/display.c src/remap.c src/media_server.c src/controller_io.c src/dualsense.c src/dualsense_report.c src/haptics.c)
+set(CORE_SRC src/main.c src/console.c src/microphone.c src/crash_dump.c src/display.c src/remap.c src/media_server.c src/controller_io.c src/dualsense.c src/dualsense_report.c src/haptics.c)
 set(CORE_LIBS chiaki hid setupapi ole32 uuid dbghelp)
 add_executable(hargan-ps-core ${CORE_SRC})
 target_link_libraries(hargan-ps-core PRIVATE ${CORE_LIBS})

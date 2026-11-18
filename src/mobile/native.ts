@@ -1,6 +1,7 @@
 // The app's own native plugin (mobile/plugins/ps-core), registered once and
 // shared by the PlayStation service and the account vault.
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+import type { NativeVideoStats, NativeVideoTest } from '../shared/types'
 
 export interface PsCorePlugin {
   start(): Promise<{ port: number; token: string }>
@@ -16,6 +17,11 @@ export interface PsCorePlugin {
   vaultLoad(): Promise<{ data?: string }>
   vaultSave(options: { data: string }): Promise<void>
   addListener(event: 'line', listener: (e: { line: string }) => void): Promise<PluginListenerHandle>
+  /** Android: the stream's picture through MediaCodec onto a surface under the web view. */
+  nativeVideoStart(options: { hevc: boolean; width: number; height: number }): Promise<void>
+  nativeVideoStop(): Promise<void>
+  nativeVideoTest(options: { units: string[]; hevc: boolean; width: number; height: number }): Promise<NativeVideoTest>
+  addListener(event: 'nativeVideo', listener: (e: NativeVideoStats) => void): Promise<PluginListenerHandle>
 }
 
 export const PsCore = registerPlugin<PsCorePlugin>('PsCore')

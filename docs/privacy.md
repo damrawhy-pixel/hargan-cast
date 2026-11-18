@@ -19,6 +19,8 @@ Hargan Cast; Windows, Android ve iOS için bir bulut oyun istemcisidir. Kendi Xb
 | Uygulama ayarları | Seçtiğin görüntü, ses ve kontrol ayarlarını hatırlamak için | Yalnızca cihazında |
 | PlayStation katalog önbelleği | Kataloğu her seferinde baştan indirmemek için | Yalnızca cihazında |
 | Bağlı PlayStation konsollarının anahtarları ve PSN hesap kimliği | Kendi konsoluna yeniden PIN girmeden bağlanmak için | Windows'ta şifreli olarak kullanıcı klasöründe |
+| Diğer hesapların oturumları | Hesaplar arasında yeniden giriş yapmadan geçmek için | Windows'ta şifreli olarak kullanıcı klasöründe; telefonda uygulamanın korumalı alanında |
+| Akış geçmişi | Akışların kare hızı, bit hızı ve gecikme ölçümleri | Yalnızca cihazında, son 20 akış |
 | Ekran görüntüleri ve an kayıtları | Akış sırasında senin aldıkların | Resimler ve Videolar altındaki Hargan Cast klasörlerinde; an kaydı açıkken son saniyeler yalnızca bellekte tutulur |
 
 Bu bilgiler cihazından Hargan Cast'e ya da başka bir yere gönderilmez. Hesaptan çıkış yaptığında oturum anahtarları silinir; uygulamayı kaldırdığında hepsi silinir.
@@ -29,6 +31,8 @@ Bu bilgiler cihazından Hargan Cast'e ya da başka bir yere gönderilmez. Hesapt
 - **Sony (PlayStation):** Hesap girişi, oyun kataloğu, mağaza bilgileri ve bulut akışı. Bu bağlantılar Sony Interactive Entertainment'ın gizlilik politikasına tabidir: https://www.playstation.com/legal/privacy-policy/
 - **GitHub (yalnızca Windows sürümü):** Yeni sürüm olup olmadığını denetlemek ve güncellemeyi indirmek için. Bu sırada GitHub'a kimlik bilgisi gönderilmez.
 - **Kendi PlayStation konsolun (yerel ağ):** Konsolu bulmak, PIN ile bağlamak, uyandırmak ve akış için. Bağlarken PSN hesap kimliğin Sony'den (dms.api.playstation.com) bir kez alınır ve konsola verilir.
+- **Sony PSN (ev dışından kendi konsoluna bağlanırken):** Bağlantıyı Sony'nin sunucusu kurar; bunun için bu uygulamaya özel bir cihaz kimliği ve Sony oturum anahtarı kullanılır.
+- **Mikrofon (yalnızca açarsan):** Kendi konsolundan oynarken sesin yalnızca o konsola gider; kaydedilmez.
 - **Discord (yalnızca açarsan):** Ayarlar'da açarsan, oynadığın oyunun adı bilgisayarındaki Discord uygulamasına yerel olarak iletilir; Discord bunu arkadaşlarına gösterir.
 - **Cloudflare (yalnızca bağlantı testinde, Windows sürümü):** Ayarlar > Ağ > Bağlantı testi'ni başlattığında indirme hızını ölçmek için speed.cloudflare.com'dan birkaç saniye boyunca anlamsız veri indirilir. Hiçbir bilgi gönderilmez; test başlatılmadıkça bu bağlantı kurulmaz.
 
@@ -41,6 +45,7 @@ Oyun akışı sırasında görüntü, ses ve kumanda girdileri yalnızca cihazı
 - **İnternet, ağ ve Wi-Fi durumu:** Hesaplara ve akış sunucularına bağlanmak için.
 - **Uyanık tutma:** Akış sırasında ekranın ve Wi-Fi'ın uykuya geçmemesi için.
 - **Titreşim:** Ekran kontrollerine dokununca kısa titreşim vermek için.
+- **Mikrofon:** Yalnızca ayarlarda açarsan, kendi konsolunla sesli sohbet için.
 
 ## Çocuklar
 
@@ -84,6 +89,8 @@ None of this is sent to Hargan Cast or anywhere else. Signing out deletes the se
 - **Sony (PlayStation):** sign-in, game catalog, store details and cloud streaming, governed by https://www.playstation.com/legal/privacy-policy/
 - **GitHub (Windows version only):** checking for and downloading app updates. No account details are sent.
 - **Your own PlayStation console (local network):** finding, linking with its PIN, waking and streaming. Linking fetches your PSN account id from Sony (dms.api.playstation.com) once and hands it to the console.
+- **Sony PSN (when connecting to your own console from outside the home):** Sony's server sets up the connection, using a device id made for this app and your Sony session.
+- **Microphone (only if you turn it on):** while playing on your own console, your voice goes only to that console and is not recorded.
 - **Discord (only if you turn it on):** the name of the game you play goes to the Discord app on your PC, which shows it to your friends.
 - **Cloudflare (connection test only, Windows version):** when you run Settings > Network > Connection test, a few seconds of filler data are downloaded from speed.cloudflare.com to measure download speed. Nothing is sent, and no connection is made unless you start the test.
 
@@ -91,7 +98,7 @@ Sign-in happens on Microsoft's and Sony's own pages; your password never passes 
 
 ## Android permissions
 
-Internet, network and Wi-Fi state (to reach the services), wake lock (to keep the screen and Wi-Fi awake while streaming) and vibration (a short tap feedback on the on-screen controls).
+Internet, network and Wi-Fi state (to reach the services), wake lock (to keep the screen and Wi-Fi awake while streaming), vibration (a short tap feedback on the on-screen controls) and, only if you turn it on, the microphone (voice chat with your own console).
 
 ## Children
 

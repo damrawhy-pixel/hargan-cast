@@ -27,7 +27,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
-    files: ['src/renderer/public/pcm-worklet.js'],
+    files: ['src/renderer/public/*-worklet.js'],
     languageOptions: { globals: { ...globals.audioWorklet } },
   },
   {

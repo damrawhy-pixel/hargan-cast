@@ -10,6 +10,7 @@ import type { HarganApi, PsEvent, PsStatus, XboxStatus } from '../shared/types'
 import MobilePlayStation, { PsCore } from './playstation'
 import { getSettings, resetSettings, setSettings } from './settings'
 import { loadVaults } from './shims/secureStore'
+import { nativeVideo } from './nativeVideo'
 
 const SOURCE_URL = 'https://github.com/damrawhy-pixel/hargan-cast'
 
@@ -107,6 +108,12 @@ export async function installBridge() {
       info: (productId) => xbox.info(productId),
       startStream: (titleId) => xbox.startStream(titleId),
       consoles: () => xbox.consoles(),
+      accounts: {
+        list: async () => xbox.accounts(),
+        add: () => xbox.addAccount(),
+        switch: (id) => xbox.switchAccount(id),
+        forget: async (id) => xbox.forgetAccount(id),
+      },
       achievements: (productId, titleId) => xbox.achievements(productId, titleId),
       friends: () => xbox.friends(),
       startHomeStream: (serverId) => xbox.startHomeStream(serverId),
@@ -135,6 +142,27 @@ export async function installBridge() {
       // The desktop drives a DualSense itself; on a phone the OS owns the controller.
       testHaptics: async () => false,
       routeSpeaker: async () => false,
+      nativeVideo: nativeVideo(),
+      accounts: {
+        list: async () => ps.accounts(),
+        add: (label) => ps.addAccount(label ?? ''),
+        switch: (id, label) => ps.switchAccount(id, label ?? ''),
+        forget: async (id) => ps.forgetAccount(id),
+        rename: async (label) => ps.renameAccount(label),
+      },
+      consoles: {
+        list: async () => ps.consoles.list(),
+        discover: (host) => ps.consoles.discover(host),
+        register: (found, pin, accountId) => ps.consoles.register(found, pin, accountId),
+        forget: async (id) => ps.consoles.forget(id),
+        moved: async (id, address) => ps.consoles.moved(id, address),
+        wake: (id) => ps.consoles.wake(id),
+        stream: async (id, opts) => {
+          const started = await ps.consoles.stream(id, opts)
+          void PsCore.controllerMotion({ on: true }).catch(() => {})
+          return started
+        },
+      },
       info: (game) => ps.info(game),
       onStatus: psStatus.on,
       onEvent: psEvents.on,

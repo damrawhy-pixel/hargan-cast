@@ -6,6 +6,7 @@ import { GameDetail } from './components/GameDetail'
 import { Home } from './components/Home'
 import { SettingsPage } from './components/SettingsPage'
 import { Splash } from './components/Splash'
+import { PadKeyboard } from './components/PadKeyboard'
 import { SPACES, TopBar, type Space } from './components/TopBar'
 import { canStart, type HubItem } from './lib/items'
 import { reducedMotion, useMotionSetting } from './lib/motion'
@@ -211,6 +212,7 @@ export function App() {
       {splash !== 'gone' && <Splash onReveal={reveal} onDone={splashDone} />}
 
       {toast && <div className="toast glass" role="status">{toast}</div>}
+      {!playing && <PadKeyboard />}
       {about && <About onClose={() => setAbout(false)} />}
 
       {remote && (

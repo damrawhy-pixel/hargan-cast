@@ -14,6 +14,7 @@
 #include "dualsense.h"
 #include "haptics.h"
 #include "media_server.h"
+#include "microphone.h"
 #include "remap.h"
 
 #include <chiaki/cloudcatalog.h>
@@ -22,6 +23,8 @@
 #include <chiaki/log.h>
 #include <chiaki/opusdecoder.h>
 #include <chiaki/session.h>
+#include <chiaki/base64.h>
+#include <chiaki/remote/holepunch.h>
 
 #include <curl/curl.h>
 #include <json-c/json_object.h>
@@ -52,6 +55,8 @@ typedef struct
 	bool swap_sticks, invert_y;
 	// Remote Play to the user's own console.
 	char *host, *regist_key, *rp_key;
+	// Outside the home: PSN's token, the console's PSN id (hex) and the account id (base64).
+	char *psn_token, *psn_uid, *account_id;
 	bool ps5, hdr;
 	int fps;
 } StreamRequest;
@@ -85,6 +90,8 @@ static int trigger_intensity_bits, rumble_intensity_bits;
 static float user_haptic_gain = 1.0f;
 static bool user_triggers = true, user_vibration = true;
 static bool use_native_dualsense;
+// Remote Play takes the player's microphone; cloud streams do not.
+static volatile LONG remote_session;
 // The user's controller layout, for the DualSense read here; the page applies it to the others.
 static PadLayout pad_layout;
 static HANDLE quit_event;
@@ -446,6 +453,12 @@ static void on_input(const uint8_t *buf, size_t size, void *user)
 		InterlockedExchange(&key_frame_needed, 1);
 		return;
 	}
+	if(size > 1 && buf[0] == MIC_REPORT)
+	{
+		if(InterlockedCompareExchange(&session_live, 0, 0) && InterlockedCompareExchange(&remote_session, 0, 0))
+			mic_frame(&session, buf + 1, size - 1);
+		return;
+	}
 	ChiakiControllerState state;
 	if(!controller_report_decode(buf, size, &state))
 		return;
@@ -576,6 +589,9 @@ static void free_request(StreamRequest *r)
 	if(r->rp_key)
 		SecureZeroMemory(r->rp_key, strlen(r->rp_key));
 	free(r->host); free(r->regist_key); free(r->rp_key);
+	if(r->psn_token)
+		SecureZeroMemory(r->psn_token, strlen(r->psn_token));
+	free(r->psn_token); free(r->psn_uid); free(r->account_id);
 	free(r);
 }
 
@@ -676,6 +692,7 @@ static void run_session(StreamRequest *req, ChiakiConnectInfo *info, json_object
 		haptics_stop();
 	}
 	InterlockedExchange(&session_live, 0);
+	mic_close();
 	chiaki_session_stop(&session);
 	chiaki_session_join(&session);
 	chiaki_opus_decoder_fini(&opus);
@@ -706,9 +723,18 @@ static unsigned __stdcall stream_thread(void *arg)
 	cfg.bitrate_kbps = req->bitrate;
 	cfg.progress = on_progress;
 	cfg.is_cancelled = is_cancelled;
+	cfg.hdr = pscloud && req->hdr;
 
 	ChiakiCloudProvisionResult res;
 	ChiakiErrorCode err = chiaki_cloud_provision_session(&cfg, &res, &core_log);
+	// Sony may not take HDR for this game or account; SDR is asked for once more.
+	if(err != CHIAKI_ERR_SUCCESS && cfg.hdr && !is_cancelled(NULL))
+	{
+		CHIAKI_LOGW(&core_log, "cloud HDR refused (%s), trying SDR", res.error_message ? res.error_message : chiaki_error_string(err));
+		chiaki_cloud_provision_result_fini(&res);
+		cfg.hdr = false;
+		err = chiaki_cloud_provision_session(&cfg, &res, &core_log);
+	}
 
 	json_object *reply = json_object_new_object();
 	json_object_object_add(reply, "id", json_object_new_int(req->id));
@@ -780,8 +806,57 @@ static unsigned __stdcall remote_thread(void *arg)
 	info.enable_dualsense = true;
 	info.packet_loss_max = (double)req->packet_loss_max / 100.0;
 
-	emit_event("progress", "stage", "Connecting to console");
+	// Outside the home PSN brokers the connection: both sides open their NAT toward
+	// each other, and the session then runs over that path.
+	char ps_addr[64] = { 0 };
+	if(req->psn_uid && *req->psn_uid)
+	{
+		uint8_t uid[32];
+		size_t account_size = sizeof(info.psn_account_id);
+		if(!console_hex_decode(req->psn_uid, uid, sizeof(uid)) || !req->account_id
+			|| chiaki_base64_decode(req->account_id, strlen(req->account_id), info.psn_account_id, &account_size) != CHIAKI_ERR_SUCCESS)
+		{
+			json_object_object_add(reply, "ok", json_object_new_boolean(0));
+			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_PSN"));
+			emit(reply);
+			goto done;
+		}
+		emit_event("progress", "stage", "Connecting through PSN");
+		ChiakiHolepunchSession hp = chiaki_holepunch_session_init(req->psn_token, &core_log);
+		ChiakiErrorCode err = hp ? CHIAKI_ERR_SUCCESS : CHIAKI_ERR_UNKNOWN;
+		if(err == CHIAKI_ERR_SUCCESS)
+		{
+			chiaki_holepunch_upnp_discover(hp);
+			err = chiaki_holepunch_session_create(hp);
+		}
+		if(err == CHIAKI_ERR_SUCCESS)
+			err = chiaki_holepunch_session_start(hp, uid, req->ps5 ? CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS5 : CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS4);
+		if(err == CHIAKI_ERR_SUCCESS)
+			err = chiaki_holepunch_session_punch_hole(hp, CHIAKI_HOLEPUNCH_PORT_TYPE_CTRL);
+		if(err != CHIAKI_ERR_SUCCESS || is_cancelled(NULL))
+		{
+			char detail[256] = { 0 };
+			if(hp)
+			{
+				chiaki_holepunch_session_get_last_error(hp, detail, sizeof(detail));
+				chiaki_holepunch_session_fini(hp);
+			}
+			CHIAKI_LOGE(&core_log, "psn connect failed: %s %s", chiaki_error_string(err), detail);
+			json_object_object_add(reply, "ok", json_object_new_boolean(0));
+			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_PSN"));
+			emit(reply);
+			goto done;
+		}
+		chiaki_get_ps_selected_addr(hp, ps_addr);
+		info.host = ps_addr;
+		// The session owns it from here and ends it with itself.
+		info.holepunch_session = hp;
+	}
+	else
+		emit_event("progress", "stage", "Connecting to console");
+	InterlockedExchange(&remote_session, 1);
 	run_session(req, &info, reply, 0);
+	InterlockedExchange(&remote_session, 0);
 
 done:
 	SecureZeroMemory(regist_key, sizeof(regist_key));
@@ -820,6 +895,15 @@ static unsigned __stdcall console_thread(void *arg)
 			json_object_object_add(reply, "console", linked);
 		else
 			json_object_object_add(reply, "error", json_object_new_string(error && strcmp(error, "account") == 0 ? "CONSOLE_ACCOUNT" : "CONSOLE_REGIST"));
+	}
+	else if(strcmp(r->action, "psnDevices") == 0)
+	{
+		json_object *devices = console_psn_devices(&core_log, r->account);
+		json_object_object_add(reply, "ok", json_object_new_boolean(devices != NULL));
+		if(devices)
+			json_object_object_add(reply, "devices", devices);
+		else
+			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_PSN"));
 	}
 	else if(strcmp(r->action, "wake") == 0)
 	{
@@ -995,6 +1079,7 @@ static void handle_command(const char *line)
 			r->foreign = bool_field(cmd, "foreign");
 			r->attr_passed = bool_field(cmd, "attrPassed");
 			r->hevc = bool_field(cmd, "hevc");
+			r->hdr = bool_field(cmd, "hdr");
 			r->resolution = int_field(cmd, "resolution", 1080);
 			r->bitrate = int_field(cmd, "bitrate", 20000);
 			r->native_dualsense = bool_field(cmd, "nativeDualSense");
@@ -1035,6 +1120,9 @@ static void handle_command(const char *line)
 			r->host = dup_field(cmd, "host");
 			r->regist_key = dup_field(cmd, "registKey");
 			r->rp_key = dup_field(cmd, "rpKey");
+			r->psn_token = dup_field(cmd, "psnToken");
+			r->psn_uid = dup_field(cmd, "psnUid");
+			r->account_id = dup_field(cmd, "accountId");
 			r->ps5 = bool_field(cmd, "ps5");
 			r->hevc = bool_field(cmd, "hevc");
 			r->hdr = bool_field(cmd, "hdr");
@@ -1130,6 +1218,7 @@ int main(void)
 	remap_identity(&pad_layout);
 
 	chiaki_log_init(&core_log, CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR, on_log, NULL);
+	mic_init(&core_log);
 	if(chiaki_lib_init() != CHIAKI_ERR_SUCCESS)
 		return 1;
 	curl_global_init(CURL_GLOBAL_DEFAULT);

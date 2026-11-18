@@ -90,6 +90,8 @@ export function streamArgs(game: PsGame, opts: PsStreamOptions, settings: AppSet
     datacenter: cloud ? settings.psCloudDatacenter : settings.psNowDatacenter,
     priorDatacenters: memory.priorDatacenters,
     hevc: opts.hevc,
+    // PS5 games only, and only in HEVC; the core falls back to SDR if Sony refuses.
+    hdr: cloud && opts.hevc && Boolean(opts.hdr),
     resolution,
     bitrate: (cloud ? settings.psCloudBitrate : settings.psNowBitrate) || (AUTO_BITRATE[resolution] ?? AUTO_BITRATE[1080]),
     packetLossMax: settings.psPacketLossMax,
@@ -209,6 +211,7 @@ export function friendlyError(message: string) {
   if (message === 'CONSOLE_REGIST') return t('Konsol bağlanmadı. PIN doğru mu ve konsolda Uzaktan Oynatma açık mı? PIN birkaç dakikada yenilenir.')
   if (message === 'CONSOLE_ACCOUNT') return t('PSN hesap kimliği okunamadı.')
   if (message === 'CONSOLE_WAKE') return t('Konsol uyandırılamadı. Aynı ağda mı?')
+  if (message === 'CONSOLE_PSN') return t("PSN üzerinden bağlanılamadı. Konsolda Uzaktan Oynatma açık mı ve dinlenme modunda internete bağlı kalıyor mu?")
   if (message === 'CONSOLE_KEYS') return t('Konsolun kayıt bilgisi bozuk. Konsolu kaldırıp yeniden ekle.')
   if (message === 'AUTHORIZATION_FAILED') return sessionExpired()
   if (message === 'PS_PLUS_SUBSCRIPTION_REQUIRED') return t('Bu oyun için PS Plus Premium aboneliği gerekiyor.')

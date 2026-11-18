@@ -9,6 +9,8 @@
 
 #include "controller_io.h"
 #include "media_server.h"
+#include "console.h"
+#include "microphone.h"
 
 #include <chiaki/cloudcatalog.h>
 #include <chiaki/cloudsession.h>
@@ -17,6 +19,8 @@
 #include <chiaki/opusdecoder.h>
 #include <chiaki/orientation.h>
 #include <chiaki/session.h>
+#include <chiaki/base64.h>
+#include <chiaki/remote/holepunch.h>
 
 #include <curl/curl.h>
 #include <json-c/json_object.h>
@@ -48,6 +52,10 @@ typedef struct
 	char *datacenter, *prior_datacenters;
 	bool foreign, attr_passed, hevc, ps_chord, triggers, vibration;
 	int resolution, bitrate, packet_loss_max;
+	// Remote Play to the user's own console, at home or through PSN.
+	char *host, *regist_key, *rp_key, *psn_token, *psn_uid, *account_id;
+	bool ps5, hdr;
+	int fps;
 } StreamRequest;
 
 typedef struct
@@ -74,6 +82,8 @@ static atomic_int stream_busy;
 static atomic_int session_live;
 static atomic_int stop_requested;
 static atomic_int key_frame_needed;
+// Remote Play takes the player's microphone; cloud streams do not.
+static atomic_int remote_session;
 
 static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
 static ChiakiControllerState renderer_state;
@@ -84,6 +94,9 @@ static bool motion_live;
 
 static pthread_mutex_t feedback_lock = PTHREAD_MUTEX_INITIALIZER;
 static HcFeedbackFn feedback_fn;
+// Set while a native decoder takes the video; guarded by feedback_lock like the feedback callback.
+static HcVideoFn video_fn;
+static void *video_user;
 static void *feedback_user;
 // The player's settings, and whether the game itself switched triggers off.
 static bool user_triggers = true, user_vibration = true, game_triggers = true;
@@ -316,6 +329,27 @@ static bool on_video(uint8_t *buf, size_t size, int32_t frames_lost, bool recove
 	if(!nal.has_key && atomic_exchange(&key_frame_needed, 0))
 		return false;
 
+	pthread_mutex_lock(&feedback_lock);
+	HcVideoFn sink = video_fn;
+	void *sink_user = video_user;
+	pthread_mutex_unlock(&feedback_lock);
+	if(sink)
+	{
+		if(nal.has_key && !nal.has_params && video_header)
+		{
+			uint8_t *joined = malloc(video_header_size + size);
+			if(!joined)
+				return false;
+			memcpy(joined, video_header, video_header_size);
+			memcpy(joined + video_header_size, buf, size);
+			sink(joined, video_header_size + size, true, sink_user);
+			free(joined);
+		}
+		else
+			sink(buf, size, nal.has_key, sink_user);
+		return true;
+	}
+
 	uint8_t head[5] = { (uint8_t)(nal.has_key ? 1 : 0) };
 	memcpy(head + 1, &frames_lost, 4);
 
@@ -371,6 +405,12 @@ static void on_input(const uint8_t *buf, size_t size, void *user)
 		atomic_store(&key_frame_needed, 1);
 		return;
 	}
+	if(size > 1 && buf[0] == MIC_REPORT)
+	{
+		if(atomic_load(&session_live) && atomic_load(&remote_session))
+			mic_frame(&session, buf + 1, size - 1);
+		return;
+	}
 	ChiakiControllerState state;
 	if(!controller_report_decode(buf, size, &state))
 		return;
@@ -401,6 +441,22 @@ void hc_core_motion_reset(void)
 	motion_live = false;
 	publish_controller_state();
 	pthread_mutex_unlock(&input_lock);
+}
+
+void hc_core_set_video(HcVideoFn fn, void *user)
+{
+	pthread_mutex_lock(&feedback_lock);
+	video_fn = fn;
+	video_user = user;
+	pthread_mutex_unlock(&feedback_lock);
+	// A decoder that starts mid-stream needs a key frame to begin with.
+	if(fn)
+		atomic_store(&key_frame_needed, 1);
+}
+
+void hc_core_request_key_frame(void)
+{
+	atomic_store(&key_frame_needed, 1);
 }
 
 void hc_core_set_feedback(HcFeedbackFn fn, void *user)
@@ -500,10 +556,15 @@ static void free_request(StreamRequest *r)
 	free(r->service); free(r->game); free(r->npsso); free(r->country); free(r->lang);
 	free(r->game_lang); free(r->owned_ent); free(r->owned_platform);
 	free(r->datacenter); free(r->prior_datacenters);
+	if(r->rp_key)
+		wipe(r->rp_key);
+	if(r->psn_token)
+		wipe(r->psn_token);
+	free(r->host); free(r->regist_key); free(r->rp_key); free(r->psn_token); free(r->psn_uid); free(r->account_id);
 	free(r);
 }
 
-static void video_profile_for(ChiakiConnectVideoProfile *p, int resolution, int bitrate, bool hevc)
+static void video_profile_for(ChiakiConnectVideoProfile *p, int resolution, int bitrate, bool hevc, bool hdr, int fps)
 {
 	memset(p, 0, sizeof(*p));
 	switch(resolution)
@@ -514,8 +575,8 @@ static void video_profile_for(ChiakiConnectVideoProfile *p, int resolution, int 
 		default: p->width = 1920; p->height = 1080; break;
 	}
 	p->bitrate = (unsigned int)bitrate;
-	p->max_fps = 60;
-	p->codec = hevc ? CHIAKI_CODEC_H265 : CHIAKI_CODEC_H264;
+	p->max_fps = fps == 30 ? 30 : 60;
+	p->codec = hdr ? CHIAKI_CODEC_H265_HDR : hevc ? CHIAKI_CODEC_H265 : CHIAKI_CODEC_H264;
 }
 
 static void reply_failure(json_object *reply, const char *message)
@@ -523,6 +584,76 @@ static void reply_failure(json_object *reply, const char *message)
 	json_object_object_add(reply, "ok", json_object_new_boolean(0));
 	json_object_object_add(reply, "error", json_object_new_string(message));
 	emit(reply);
+}
+
+// Runs a connected session until it quits; shared by cloud streams and Remote
+// Play. Answers the stream request through `reply` either way.
+static void run_session(StreamRequest *req, ChiakiConnectInfo *info, json_object *reply, uint64_t rtt_us)
+{
+	ChiakiErrorCode err;
+	stream_codec = req->hevc ? CODEC_FAMILY_H265 : CODEC_FAMILY_H264;
+	free(video_header);
+	video_header = NULL;
+	video_header_size = 0;
+
+	err = chiaki_session_init(&session, info, &core_log);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		reply_failure(reply, chiaki_error_string(err));
+		return;
+	}
+
+	chiaki_session_set_ps_chord(&session, req->ps_chord, 0);
+
+	chiaki_opus_decoder_init(&opus, &core_log);
+	chiaki_opus_decoder_set_cb(&opus, on_audio_settings, on_audio_frame, NULL);
+	ChiakiAudioSink sink;
+	chiaki_opus_decoder_get_sink(&opus, &sink);
+	chiaki_session_set_audio_sink(&session, &sink);
+	chiaki_session_set_video_sample_cb(&session, on_video, NULL);
+	chiaki_session_set_event_cb(&session, on_event, NULL);
+
+	quit_reset();
+	err = chiaki_session_start(&session);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		reply_failure(reply, chiaki_error_string(err));
+		chiaki_opus_decoder_fini(&opus);
+		chiaki_session_fini(&session);
+		return;
+	}
+
+	user_triggers = req->triggers;
+	user_vibration = req->vibration;
+	game_triggers = true;
+	pthread_mutex_lock(&input_lock);
+	chiaki_controller_state_set_idle(&renderer_state);
+	motion_live = false;
+	atomic_store(&session_live, 1);
+	pthread_mutex_unlock(&input_lock);
+
+	json_object_object_add(reply, "ok", json_object_new_boolean(1));
+	json_object_object_add(reply, "codec", json_object_new_string(req->hevc ? "h265" : "h264"));
+	json_object_object_add(reply, "width", json_object_new_int((int)info->video_profile.width));
+	json_object_object_add(reply, "height", json_object_new_int((int)info->video_profile.height));
+	json_object_object_add(reply, "rttMs", json_object_new_int((int)(rtt_us / 1000)));
+	emit(reply);
+
+	// A stop that came in while the session was being set up still counts.
+	if(atomic_load(&stop_requested))
+		quit_signal();
+	quit_wait();
+
+	pthread_mutex_lock(&input_lock);
+	atomic_store(&session_live, 0);
+	pthread_mutex_unlock(&input_lock);
+	mic_close();
+	chiaki_session_stop(&session);
+	chiaki_session_join(&session);
+	chiaki_opus_decoder_fini(&opus);
+	chiaki_session_fini(&session);
+	media_server_send(MEDIA_RESET, NULL, 0, NULL, 0);
+	feedback(HC_FEEDBACK_RESET, NULL, 0);
 }
 
 static void *stream_thread(void *arg)
@@ -548,9 +679,17 @@ static void *stream_thread(void *arg)
 	cfg.bitrate_kbps = req->bitrate;
 	cfg.progress = on_progress;
 	cfg.is_cancelled = is_cancelled;
+	cfg.hdr = pscloud && req->hdr;
 
 	ChiakiCloudProvisionResult res;
 	ChiakiErrorCode err = chiaki_cloud_provision_session(&cfg, &res, &core_log);
+	// Sony may not take HDR for this game or account; SDR is asked for once more.
+	if(err != CHIAKI_ERR_SUCCESS && cfg.hdr && !is_cancelled(NULL))
+	{
+		chiaki_cloud_provision_result_fini(&res);
+		cfg.hdr = false;
+		err = chiaki_cloud_provision_session(&cfg, &res, &core_log);
+	}
 
 	json_object *reply = json_object_new_object();
 	json_object_object_add(reply, "id", json_object_new_int(req->id));
@@ -567,7 +706,7 @@ static void *stream_thread(void *arg)
 	memset(&info, 0, sizeof(info));
 	info.ps5 = pscloud;
 	info.host = res.server_ip;
-	video_profile_for(&info.video_profile, req->resolution, req->bitrate, req->hevc);
+	video_profile_for(&info.video_profile, req->resolution, req->bitrate, req->hevc, false, 60);
 	info.video_profile_auto_downgrade = true;
 	info.enable_dualsense = true;
 	info.packet_loss_max = (double)req->packet_loss_max / 100.0;
@@ -581,74 +720,147 @@ static void *stream_thread(void *arg)
 	info.cloud_mtu_out = res.mtu_out;
 	info.cloud_rtt_us = res.rtt_us;
 
-	stream_codec = req->hevc ? CODEC_FAMILY_H265 : CODEC_FAMILY_H264;
-	free(video_header);
-	video_header = NULL;
-	video_header_size = 0;
-
-	err = chiaki_session_init(&session, &info, &core_log);
-	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		reply_failure(reply, chiaki_error_string(err));
-		goto done;
-	}
-
-	chiaki_session_set_ps_chord(&session, req->ps_chord, 0);
-
-	chiaki_opus_decoder_init(&opus, &core_log);
-	chiaki_opus_decoder_set_cb(&opus, on_audio_settings, on_audio_frame, NULL);
-	ChiakiAudioSink sink;
-	chiaki_opus_decoder_get_sink(&opus, &sink);
-	chiaki_session_set_audio_sink(&session, &sink);
-	chiaki_session_set_video_sample_cb(&session, on_video, NULL);
-	chiaki_session_set_event_cb(&session, on_event, NULL);
-
-	quit_reset();
-	err = chiaki_session_start(&session);
-	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		reply_failure(reply, chiaki_error_string(err));
-		chiaki_opus_decoder_fini(&opus);
-		chiaki_session_fini(&session);
-		goto done;
-	}
-
-	user_triggers = req->triggers;
-	user_vibration = req->vibration;
-	game_triggers = true;
-	pthread_mutex_lock(&input_lock);
-	chiaki_controller_state_set_idle(&renderer_state);
-	motion_live = false;
-	atomic_store(&session_live, 1);
-	pthread_mutex_unlock(&input_lock);
-
-	json_object_object_add(reply, "ok", json_object_new_boolean(1));
-	json_object_object_add(reply, "codec", json_object_new_string(req->hevc ? "h265" : "h264"));
-	json_object_object_add(reply, "width", json_object_new_int((int)info.video_profile.width));
-	json_object_object_add(reply, "height", json_object_new_int((int)info.video_profile.height));
-	json_object_object_add(reply, "rttMs", json_object_new_int((int)(res.rtt_us / 1000)));
-	emit(reply);
-
-	// A stop that came in while the session was being set up still counts.
-	if(atomic_load(&stop_requested))
-		quit_signal();
-	quit_wait();
-
-	pthread_mutex_lock(&input_lock);
-	atomic_store(&session_live, 0);
-	pthread_mutex_unlock(&input_lock);
-	chiaki_session_stop(&session);
-	chiaki_session_join(&session);
-	chiaki_opus_decoder_fini(&opus);
-	chiaki_session_fini(&session);
-	media_server_send(MEDIA_RESET, NULL, 0, NULL, 0);
-	feedback(HC_FEEDBACK_RESET, NULL, 0);
+	run_session(req, &info, reply, res.rtt_us);
 
 done:
 	chiaki_cloud_provision_result_fini(&res);
 	free_request(req);
 	atomic_store(&stop_requested, 0);
 	atomic_store(&stream_busy, 0);
+	return NULL;
+}
+
+// --- Remote Play with the user's own console -------------------------------------
+
+static void *remote_thread(void *arg)
+{
+	StreamRequest *req = arg;
+	json_object *reply = json_object_new_object();
+	json_object_object_add(reply, "id", json_object_new_int(req->id));
+
+	ChiakiConnectInfo info;
+	memset(&info, 0, sizeof(info));
+	info.ps5 = req->ps5;
+	info.host = req->host;
+	info.service_type = CHIAKI_SERVICE_TYPE_REMOTE_PLAY;
+	uint8_t regist_key[CHIAKI_SESSION_AUTH_SIZE];
+	char ps_addr[64] = { 0 };
+	if(!console_hex_decode(req->regist_key, regist_key, sizeof(regist_key)) || !console_hex_decode(req->rp_key, info.morning, sizeof(info.morning)))
+	{
+		reply_failure(reply, "CONSOLE_KEYS");
+		goto done;
+	}
+	memcpy(info.regist_key, regist_key, sizeof(info.regist_key));
+	req->hevc = req->hevc || req->hdr;
+	video_profile_for(&info.video_profile, req->resolution, req->bitrate, req->hevc, req->hdr, req->fps);
+	info.video_profile_auto_downgrade = true;
+	info.enable_dualsense = true;
+	info.packet_loss_max = (double)req->packet_loss_max / 100.0;
+
+	if(req->psn_uid && *req->psn_uid)
+	{
+		uint8_t uid[32];
+		size_t account_size = sizeof(info.psn_account_id);
+		if(!console_hex_decode(req->psn_uid, uid, sizeof(uid)) || !req->account_id
+			|| chiaki_base64_decode(req->account_id, strlen(req->account_id), info.psn_account_id, &account_size) != CHIAKI_ERR_SUCCESS)
+		{
+			reply_failure(reply, "CONSOLE_PSN");
+			goto done;
+		}
+		emit_event("progress", "stage", "Connecting through PSN");
+		ChiakiHolepunchSession hp = chiaki_holepunch_session_init(req->psn_token, &core_log);
+		ChiakiErrorCode err = hp ? CHIAKI_ERR_SUCCESS : CHIAKI_ERR_UNKNOWN;
+		if(err == CHIAKI_ERR_SUCCESS)
+		{
+			chiaki_holepunch_upnp_discover(hp);
+			err = chiaki_holepunch_session_create(hp);
+		}
+		if(err == CHIAKI_ERR_SUCCESS)
+			err = chiaki_holepunch_session_start(hp, uid, req->ps5 ? CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS5 : CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS4);
+		if(err == CHIAKI_ERR_SUCCESS)
+			err = chiaki_holepunch_session_punch_hole(hp, CHIAKI_HOLEPUNCH_PORT_TYPE_CTRL);
+		if(err != CHIAKI_ERR_SUCCESS || atomic_load(&stop_requested))
+		{
+			if(hp)
+				chiaki_holepunch_session_fini(hp);
+			CHIAKI_LOGE(&core_log, "psn connect failed: %s", chiaki_error_string(err));
+			reply_failure(reply, "CONSOLE_PSN");
+			goto done;
+		}
+		chiaki_get_ps_selected_addr(hp, ps_addr);
+		info.host = ps_addr;
+		info.holepunch_session = hp;
+	}
+	else
+		emit_event("progress", "stage", "Connecting to console");
+	atomic_store(&remote_session, 1);
+	run_session(req, &info, reply, 0);
+	atomic_store(&remote_session, 0);
+
+done:
+	memset(regist_key, 0, sizeof(regist_key));
+	memset(info.morning, 0, sizeof(info.morning));
+	free_request(req);
+	atomic_store(&stop_requested, 0);
+	atomic_store(&stream_busy, 0);
+	return NULL;
+}
+
+typedef struct
+{
+	int id;
+	char *action, *host, *account, *regist_key;
+	bool ps5;
+	uint32_t pin;
+} ConsoleRequest;
+
+// Finding, linking and waking consoles each block for seconds, so each gets a thread.
+static void *console_thread(void *arg)
+{
+	ConsoleRequest *r = arg;
+	json_object *reply = json_object_new_object();
+	json_object_object_add(reply, "id", json_object_new_int(r->id));
+	if(strcmp(r->action, "discover") == 0)
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		json_object_object_add(reply, "consoles", console_discover(&core_log, r->host, 2500));
+	}
+	else if(strcmp(r->action, "register") == 0)
+	{
+		const char *error = NULL;
+		json_object *linked = console_register(&core_log, r->host, r->ps5, r->account, r->pin, &error);
+		json_object_object_add(reply, "ok", json_object_new_boolean(linked != NULL));
+		if(linked)
+			json_object_object_add(reply, "console", linked);
+		else
+			json_object_object_add(reply, "error", json_object_new_string(error && strcmp(error, "account") == 0 ? "CONSOLE_ACCOUNT" : "CONSOLE_REGIST"));
+	}
+	else if(strcmp(r->action, "psnDevices") == 0)
+	{
+		json_object *devices = console_psn_devices(&core_log, r->account);
+		json_object_object_add(reply, "ok", json_object_new_boolean(devices != NULL));
+		if(devices)
+			json_object_object_add(reply, "devices", devices);
+		else
+			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_PSN"));
+	}
+	else if(strcmp(r->action, "wake") == 0)
+	{
+		bool woke = console_wake(&core_log, r->host, r->regist_key, r->ps5);
+		json_object_object_add(reply, "ok", json_object_new_boolean(woke));
+		if(!woke)
+			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_WAKE"));
+	}
+	else
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(0));
+		json_object_object_add(reply, "error", json_object_new_string("CONSOLE_ACTION"));
+	}
+	emit(reply);
+	if(r->account)
+		wipe(r->account);
+	free(r->action); free(r->host); free(r->account); free(r->regist_key);
+	free(r);
 	return NULL;
 }
 
@@ -709,6 +921,7 @@ void hc_core_command(const char *line)
 			r->foreign = bool_field(cmd, "foreign");
 			r->attr_passed = bool_field(cmd, "attrPassed");
 			r->hevc = bool_field(cmd, "hevc");
+			r->hdr = bool_field(cmd, "hdr");
 			r->resolution = int_field(cmd, "resolution", 1080);
 			r->bitrate = int_field(cmd, "bitrate", 20000);
 			r->ps_chord = bool_field(cmd, "psChord");
@@ -717,6 +930,60 @@ void hc_core_command(const char *line)
 			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
 			atomic_store(&stop_requested, 0);
 			if(!spawn(stream_thread, r))
+			{
+				emit_reply_error(id, "Oturum başlatılamadı");
+				free_request(r);
+				atomic_store(&stream_busy, 0);
+			}
+		}
+	}
+	else if(strcmp(name, "console") == 0)
+	{
+		ConsoleRequest *r = calloc(1, sizeof(*r));
+		r->id = id;
+		r->action = dup_field(cmd, "action");
+		r->host = dup_field(cmd, "host");
+		r->account = dup_field(cmd, "accountId");
+		r->regist_key = dup_field(cmd, "registKey");
+		r->ps5 = bool_field(cmd, "ps5");
+		r->pin = (uint32_t)int_field(cmd, "pin", 0);
+		if(!spawn(console_thread, r))
+		{
+			emit_reply_error(id, "CONSOLE_ACTION");
+			free(r->action); free(r->host); free(r->account); free(r->regist_key);
+			free(r);
+		}
+	}
+	else if(strcmp(name, "remoteStream") == 0)
+	{
+		int idle = 0;
+		if(!atomic_compare_exchange_strong(&stream_busy, &idle, 1))
+			emit_reply_error(id, "Zaten aktif bir oturum var");
+		else
+		{
+			StreamRequest *r = calloc(1, sizeof(*r));
+			r->id = id;
+			// Unused by Remote Play, but every request owns real strings.
+			r->service = strdup(""); r->game = strdup(""); r->npsso = strdup(""); r->country = strdup(""); r->lang = strdup("");
+			r->game_lang = strdup(""); r->owned_ent = strdup(""); r->owned_platform = strdup(""); r->datacenter = strdup(""); r->prior_datacenters = strdup("");
+			r->host = dup_field(cmd, "host");
+			r->regist_key = dup_field(cmd, "registKey");
+			r->rp_key = dup_field(cmd, "rpKey");
+			r->psn_token = dup_field(cmd, "psnToken");
+			r->psn_uid = dup_field(cmd, "psnUid");
+			r->account_id = dup_field(cmd, "accountId");
+			r->ps5 = bool_field(cmd, "ps5");
+			r->hevc = bool_field(cmd, "hevc");
+			r->hdr = bool_field(cmd, "hdr");
+			r->fps = int_field(cmd, "fps", 60);
+			r->resolution = int_field(cmd, "resolution", 1080);
+			r->bitrate = int_field(cmd, "bitrate", 15000);
+			r->ps_chord = bool_field(cmd, "psChord");
+			r->triggers = bool_field(cmd, "triggers");
+			r->vibration = bool_field(cmd, "vibration");
+			r->packet_loss_max = int_field(cmd, "packetLossMax", 5);
+			atomic_store(&stop_requested, 0);
+			if(!spawn(remote_thread, r))
 			{
 				emit_reply_error(id, "Oturum başlatılamadı");
 				free_request(r);
@@ -760,6 +1027,7 @@ bool hc_core_start(HcEmitFn emit, void *user, const char *cache_dir, const char 
 			on_log(CHIAKI_LOG_WARNING, "catalog cache folder could not be created", NULL);
 
 		chiaki_log_init(&core_log, CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR, on_log, NULL);
+		mic_init(&core_log);
 		uint16_t port = 0;
 		if(chiaki_lib_init() == CHIAKI_ERR_SUCCESS
 			&& curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK

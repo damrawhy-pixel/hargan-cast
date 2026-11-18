@@ -50,6 +50,47 @@ jobs:
           name: HarganCast-android
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
+  # The APK on an Android emulator, driven through its WebView by Playwright
+  # (tests/android). KVM makes the x86_64 emulator fast on Linux runners.
+  android-test:
+    name: Android on an emulator
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v5
+        with:
+          name: HarganCast-android
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r app-debug.apk
+            mkdir -p test-results/android
+            npx playwright test -c playwright.android.config.ts
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: android-test-results
+          path: test-results/
+          if-no-files-found: ignore
+
   ios:
     name: iOS app
     runs-on: macos-latest

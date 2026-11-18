@@ -8,6 +8,8 @@ import { installLayout, parseButtonMap } from '../lib/remap'
 import { ReplayBuffer } from '../lib/capture'
 import { Achievements } from './Achievements'
 import { svgMatrix } from '../lib/colorAssist'
+import { saveRecord } from '../lib/history'
+import { startGyroAim } from '../lib/gyro'
 import { TouchControls, type TouchPlatform } from './TouchControls'
 import { t } from '../../../shared/i18n'
 
@@ -44,6 +46,8 @@ interface Props {
   queue?: StreamQueue
   controller?: string
   image?: string
+  /** The microphone in Remote Play, mutable from the menu. */
+  microphone?: { muted: boolean; toggle(): void }
   /** An Xbox game's ids, for its achievements in the menu. */
   achievements?: { productId: string; titleId: string }
   onExit(): void
@@ -119,6 +123,7 @@ function useTouchControls() {
 // latency), so "it stuttered yesterday" can be looked up afterwards.
 function useSessionReport(platform: string, title: string, live: boolean, stats?: StreamStats) {
   const started = useRef(Date.now())
+  const series = useRef({ fps: [] as number[], mbps: [] as number[], delay: [] as (number | null)[] })
   const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, total: 0, totalSamples: 0, decode: 0, decodeSamples: 0, jitter: 0, jitterSamples: 0, skipped: 0, lost: 0, size: '', liveAt: 0 })
 
   useEffect(() => {
@@ -137,6 +142,9 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
       t.rttSamples++
     }
     const total = totalLatency(stats)
+    series.current.fps.push(stats.fps)
+    series.current.mbps.push(Math.round(stats.mbps * 10) / 10)
+    series.current.delay.push(total ?? null)
     if (total !== undefined) {
       t.total += total
       t.totalSamples++
@@ -164,6 +172,22 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
         `stream ${platform} "${title}": ${seconds} s, picture after ${toPicture}, fps avg ${avg(t.fps, t.samples)} min ${t.samples ? t.minFps : '-'}, ` +
           `${avg(t.mbps, t.samples)} Mb/s, lost ${t.lost}, rtt ${avg(t.rtt, t.rttSamples)} ms, measured delay ${avg(t.total, t.totalSamples)} ms, decode ${avg(t.decode, t.decodeSamples)} ms, jitter ${avg(t.jitter, t.jitterSamples)} ms, skipped ${t.skipped}, ${t.size || '-'}`,
       )
+      if (t.liveAt && t.samples >= 10)
+        saveRecord({
+          at: new Date(started.current).toISOString(),
+          platform,
+          title,
+          seconds,
+          toPicture: (t.liveAt - started.current) / 1000,
+          avgFps: t.fps / t.samples,
+          minFps: t.minFps,
+          avgMbps: t.mbps / t.samples,
+          avgDelay: t.totalSamples ? t.total / t.totalSamples : undefined,
+          lost: t.lost,
+          skipped: t.skipped,
+          size: t.size,
+          ...series.current,
+        })
     },
     [platform, title],
   )
@@ -199,7 +223,7 @@ function useResolutionNotice(live: boolean, size?: string) {
   return notice
 }
 
-export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, achievements, onExit, children }: Props) {
+export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, achievements, microphone, onExit, children }: Props) {
   useSessionReport(platform, title, live, stats)
   const notice = useResolutionNotice(live, stats?.size)
   const touch = useTouchControls()
@@ -220,6 +244,22 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
   useEffect(() => installLayout(layout), [layout])
 
   const [menu, setMenu] = useState(false)
+  // Gyro aiming with a DualSense in Xbox games, on the desktop.
+  const [gyro] = useState(() => ({ mode: settings.xboxGyro, sensitivity: settings.xboxGyroSensitivity, invertX: settings.xboxGyroInvertX, invertY: settings.xboxGyroInvertY }))
+  useEffect(() => {
+    if (platform !== 'xbox' || MOBILE || gyro.mode === 'off') return
+    let cancelled = false
+    let stop: (() => void) | undefined
+    void startGyroAim({ ...gyro, mode: gyro.mode }).then((s) => {
+      if (cancelled) s?.()
+      else stop = s
+    })
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [gyro, platform])
+
   // Discord's "Playing" line, while the picture is up.
   useEffect(() => {
     if (!live) return
@@ -418,6 +458,7 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
           <h3>{title}</h3>
           <button className="primary" onClick={() => setMenu(false)}>{t('Oyuna dön')}</button>
           <button className="ghost" onClick={() => setShowStats((s) => !s)}>{showStats ? t('İstatistikleri gizle') : t('İstatistikleri göster')}</button>
+          {microphone && <button className="ghost" onClick={microphone.toggle}>{microphone.muted ? t('Mikrofonu aç') : t('Mikrofonu sustur')}</button>}
           {capture.shots && <button className="ghost" onClick={() => void screenshot()}>{t('Ekran görüntüsü al (F12)')}</button>}
           {achievements && <Achievements productId={achievements.productId} titleId={achievements.titleId} compact />}
           {replaying && <button className="ghost" onClick={() => void saveClip()}>{t('Son {n} saniyeyi kaydet (F10)', { n: capture.seconds })}</button>}

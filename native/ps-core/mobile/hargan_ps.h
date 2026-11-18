@@ -58,6 +58,18 @@ void hc_core_motion(float gyro_x, float gyro_y, float gyro_z, float accel_x, flo
 /** The motion source changed or went away; the next sample starts a fresh estimate. */
 void hc_core_motion_reset(void);
 
+/**
+ * Hands the stream's video to the app instead of the media socket, for a native
+ * decoder (Android MediaCodec onto a SurfaceView). Each call carries one access
+ * unit in Annex B form, with the parameter sets in front of every key frame.
+ * NULL goes back to the socket. Called from the session's threads.
+ */
+typedef void (*HcVideoFn)(const unsigned char *data, size_t size, bool key, void *user);
+void hc_core_set_video(HcVideoFn video, void *user);
+
+/** The native decoder lost sync; the next frame sent will be a key frame. */
+void hc_core_request_key_frame(void);
+
 #ifdef __cplusplus
 }
 #endif

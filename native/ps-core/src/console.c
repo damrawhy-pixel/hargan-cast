@@ -1,6 +1,7 @@
 // Remote Play with the user's own console: finding it, linking this app to it
 // with the PIN the console shows, and waking it from rest mode. Streaming from it
-// is the same session as a cloud stream (main.c, run_session).
+// is the same session as a cloud stream (main.c, run_session). Built for Windows
+// and, through native/ps-core/mobile, for the phones.
 
 #include "console.h"
 
@@ -8,9 +9,19 @@
 #include <chiaki/discovery.h>
 #include <chiaki/discoveryservice.h>
 #include <chiaki/regist.h>
+#include <chiaki/remote/holepunch.h>
 
+#include <chiaki/thread.h>
+
+#ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,11 +30,28 @@
 #define DISCOVERY_PING_MS 400
 #define REGIST_TIMEOUT_MS 15000
 
+static void sleep_ms(int ms)
+{
+#ifdef _WIN32
+	Sleep((DWORD)ms);
+#else
+	usleep((useconds_t)ms * 1000);
+#endif
+}
+
+// Secrets leave memory as soon as they are used.
+static void wipe_bytes(void *p, size_t size)
+{
+	volatile uint8_t *b = p;
+	while(size--)
+		*b++ = 0;
+}
+
 // --- discovery ---------------------------------------------------------------
 
 typedef struct
 {
-	CRITICAL_SECTION lock;
+	ChiakiMutex lock;
 	json_object *found;
 } Found;
 
@@ -50,16 +78,16 @@ static void on_hosts(ChiakiDiscoveryHost *hosts, size_t count, void *user)
 	json_object *list = json_object_new_array();
 	for(size_t i = 0; i < count; i++)
 		json_object_array_add(list, host_json(&hosts[i]));
-	EnterCriticalSection(&found->lock);
+	chiaki_mutex_lock(&found->lock);
 	json_object_put(found->found);
 	found->found = list;
-	LeaveCriticalSection(&found->lock);
+	chiaki_mutex_unlock(&found->lock);
 }
 
 json_object *console_discover(ChiakiLog *log, const char *host, int wait_ms)
 {
 	Found found = { .found = json_object_new_array() };
-	InitializeCriticalSection(&found.lock);
+	chiaki_mutex_init(&found.lock, false);
 
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(addr));
@@ -85,15 +113,15 @@ json_object *console_discover(ChiakiLog *log, const char *host, int wait_ms)
 	ChiakiDiscoveryService service;
 	if(chiaki_discovery_service_init(&service, &options, log) == CHIAKI_ERR_SUCCESS)
 	{
-		Sleep((DWORD)wait_ms);
+		sleep_ms(wait_ms);
 		chiaki_discovery_service_fini(&service);
 	}
 
-	EnterCriticalSection(&found.lock);
+	chiaki_mutex_lock(&found.lock);
 	json_object *list = found.found;
 	found.found = NULL;
-	LeaveCriticalSection(&found.lock);
-	DeleteCriticalSection(&found.lock);
+	chiaki_mutex_unlock(&found.lock);
+	chiaki_mutex_fini(&found.lock);
 	return list;
 }
 
@@ -101,7 +129,7 @@ json_object *console_discover(ChiakiLog *log, const char *host, int wait_ms)
 
 typedef struct
 {
-	HANDLE done;
+	ChiakiBoolPredCond done;
 	bool ok;
 	ChiakiRegisteredHost host;
 } RegistWait;
@@ -112,7 +140,7 @@ static void on_regist(ChiakiRegistEvent *event, void *user)
 	wait->ok = event->type == CHIAKI_REGIST_EVENT_TYPE_FINISHED_SUCCESS && event->registered_host;
 	if(wait->ok)
 		wait->host = *event->registered_host;
-	SetEvent(wait->done);
+	chiaki_bool_pred_cond_signal(&wait->done);
 }
 
 static void hex_encode(const uint8_t *data, size_t size, char *out)
@@ -157,19 +185,24 @@ json_object *console_register(ChiakiLog *log, const char *host, bool ps5, const 
 		return NULL;
 	}
 
-	RegistWait wait = { .done = CreateEvent(NULL, TRUE, FALSE, NULL) };
+	RegistWait wait;
+	memset(&wait, 0, sizeof(wait));
+	chiaki_bool_pred_cond_init(&wait.done);
 	ChiakiRegist regist;
 	if(chiaki_regist_start(&regist, log, &info, on_regist, &wait) != CHIAKI_ERR_SUCCESS)
 	{
-		CloseHandle(wait.done);
+		chiaki_bool_pred_cond_fini(&wait.done);
 		*error = "start";
 		return NULL;
 	}
-	if(WaitForSingleObject(wait.done, REGIST_TIMEOUT_MS) != WAIT_OBJECT_0)
+	chiaki_bool_pred_cond_lock(&wait.done);
+	ChiakiErrorCode waited = chiaki_bool_pred_cond_timedwait(&wait.done, REGIST_TIMEOUT_MS);
+	chiaki_bool_pred_cond_unlock(&wait.done);
+	if(waited != CHIAKI_ERR_SUCCESS)
 		chiaki_regist_stop(&regist);
 	chiaki_regist_fini(&regist);
-	CloseHandle(wait.done);
-	SecureZeroMemory(info.psn_account_id, sizeof(info.psn_account_id));
+	chiaki_bool_pred_cond_fini(&wait.done);
+	wipe_bytes(info.psn_account_id, sizeof(info.psn_account_id));
 	if(!wait.ok)
 	{
 		*error = "regist";
@@ -192,9 +225,47 @@ json_object *console_register(ChiakiLog *log, const char *host, bool ps5, const 
 	json_object_object_add(o, "registKey", json_object_new_string(regist_key));
 	json_object_object_add(o, "rpKey", json_object_new_string(rp_key));
 	json_object_object_add(o, "ps5", json_object_new_boolean(chiaki_target_is_ps5(wait.host.target)));
-	SecureZeroMemory(&wait.host, sizeof(wait.host));
-	SecureZeroMemory(rp_key, sizeof(rp_key));
+	wipe_bytes(&wait.host, sizeof(wait.host));
+	wipe_bytes(rp_key, sizeof(rp_key));
 	return o;
+}
+
+// --- PSN ---------------------------------------------------------------------------
+
+json_object *console_psn_devices(ChiakiLog *log, const char *token)
+{
+	json_object *list = json_object_new_array();
+	bool any = false;
+	const ChiakiHolepunchConsoleType types[] = { CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS5, CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS4 };
+	for(size_t t = 0; t < sizeof(types) / sizeof(types[0]); t++)
+	{
+		ChiakiHolepunchDeviceInfo *devices = NULL;
+		size_t count = 0;
+		if(chiaki_holepunch_list_devices(token, types[t], &devices, &count, false, log) != CHIAKI_ERR_SUCCESS)
+			continue;
+		any = true;
+		for(size_t i = 0; i < count; i++)
+		{
+			char uid[sizeof(devices[i].device_uid) * 2 + 1];
+			hex_encode(devices[i].device_uid, sizeof(devices[i].device_uid), uid);
+			char name[sizeof(devices[i].device_name) + 1];
+			memcpy(name, devices[i].device_name, sizeof(devices[i].device_name));
+			name[sizeof(devices[i].device_name)] = 0;
+			json_object *o = json_object_new_object();
+			json_object_object_add(o, "uid", json_object_new_string(uid));
+			json_object_object_add(o, "name", json_object_new_string(name));
+			json_object_object_add(o, "ps5", json_object_new_boolean(types[t] == CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS5));
+			json_object_object_add(o, "remotePlay", json_object_new_boolean(devices[i].remoteplay_enabled));
+			json_object_array_add(list, o);
+		}
+		chiaki_holepunch_free_device_list(&devices);
+	}
+	if(!any)
+	{
+		json_object_put(list);
+		return NULL;
+	}
+	return list;
 }
 
 // --- wake --------------------------------------------------------------------------
@@ -206,6 +277,6 @@ bool console_wake(ChiakiLog *log, const char *host, const char *regist_key_hex, 
 	if(!console_hex_decode(regist_key_hex, key, CHIAKI_SESSION_AUTH_SIZE))
 		return false;
 	key[CHIAKI_SESSION_AUTH_SIZE] = 0;
-	uint64_t credential = (uint64_t)_strtoui64((const char *)key, NULL, 16);
+	uint64_t credential = (uint64_t)strtoull((const char *)key, NULL, 16);
 	return chiaki_discovery_wakeup(log, NULL, host, credential, ps5) == CHIAKI_ERR_SUCCESS;
 }

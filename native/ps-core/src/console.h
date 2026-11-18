@@ -22,5 +22,12 @@ json_object *console_register(ChiakiLog *log, const char *host, bool ps5, const 
 /** Wakes a registered console from rest mode. */
 bool console_wake(ChiakiLog *log, const char *host, const char *regist_key_hex, bool ps5);
 
+/**
+ * The account's consoles as PSN knows them, for connecting from outside the home:
+ * a JSON array of {uid (hex), name, ps5, remotePlay}, or NULL when PSN refuses.
+ * `token` is a PSN OAuth token made with this app's device id.
+ */
+json_object *console_psn_devices(ChiakiLog *log, const char *token);
+
 /** Decodes `hex` into exactly `size` bytes; false if it does not fit. */
 bool console_hex_decode(const char *hex, uint8_t *out, size_t size);

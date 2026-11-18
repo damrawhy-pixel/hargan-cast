@@ -322,9 +322,10 @@ static struct json_object *gk_build_spec(GaikaiCtx *c, const char *entitlement_i
 		struct json_object *vprof = json_object_new_array();
 		json_object_array_add(vprof, json_object_new_string("hevc_hw4"));
 		json_object_object_add(vss, "supportedVideoEncoderProfiles", vprof);
-		json_object_object_add(vss, "supportedDynamicRange", json_object_new_string("sdr"));
+		// Hargan Cast: HDR is offered only when the player's screen and decoder can show it.
+		json_object_object_add(vss, "supportedDynamicRange", json_object_new_string(c->cfg->hdr ? "hdr" : "sdr"));
 		json_object_object_add(vss, "preferredMaxResolution", json_object_new_int(ch));
-		json_object_object_add(vss, "preferredDynamicRange", json_object_new_string("sdr"));
+		json_object_object_add(vss, "preferredDynamicRange", json_object_new_string(c->cfg->hdr ? "hdr" : "sdr"));
 		json_object_object_add(vss, "hqMode", json_object_new_int(1));
 		json_object_object_add(s, "videoStreamSettings", vss);
 		S_STR("audioChannels", "2");

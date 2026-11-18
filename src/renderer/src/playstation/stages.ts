@@ -19,6 +19,7 @@ const STAGES: [RegExp, Message][] = [
   [/^Checking License/, 'Lisans denetleniyor'],
   [/^Creating Session/, 'Oturum oluşturuluyor'],
   [/^Connecting to console/, 'Konsola bağlanılıyor'],
+  [/^Connecting through PSN/, 'PSN üzerinden konsola bağlanılıyor'],
 ]
 
 export function psStage(stage: string) {

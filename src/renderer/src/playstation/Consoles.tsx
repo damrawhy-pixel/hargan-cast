@@ -147,7 +147,11 @@ export function Consoles({ onPlay }: { onPlay(console: PsConsole): void }) {
               <strong>{c.name}</strong>
               <small>{kind(c.ps5)} · {c.address} · {stateText(here)}</small>
               <div className="console-actions">
-                <button className="primary" data-nav disabled={here?.state === 'standby'} onClick={() => onPlay(c)}>{t('Oyna')}</button>
+                {here ? (
+                  <button className="primary" data-nav disabled={here.state === 'standby'} onClick={() => onPlay(c)}>{t('Oyna')}</button>
+                ) : null}
+                {/* Not on this network: PSN can still reach it, even from another house. */}
+                <button className={here ? 'ghost' : 'primary'} data-nav onClick={() => onPlay({ ...c, outside: true })}>{t('İnternet üzerinden oyna')}</button>
                 {here?.state !== 'ready' && (
                   <button className="ghost" data-nav disabled={waking === c.id} onClick={() => void wake(c)}>{waking === c.id ? t('Uyandırılıyor') : t('Uyandır')}</button>
                 )}

@@ -76,6 +76,7 @@ function move(root: HTMLElement, direction: Direction) {
 }
 
 const activeRoot = () =>
+  document.querySelector<HTMLElement>('.pad-keyboard') ??
   document.querySelector<HTMLElement>('.viewer') ?? document.querySelector<HTMLElement>('.detail') ?? document.querySelector<HTMLElement>('.space:not([hidden])')
 
 const PAD_GUIDE = 16
@@ -151,7 +152,8 @@ export function useSpatialNavigation(enabled: boolean, onBumper: (step: 1 | -1) 
 
       const back = pad.buttons[1]?.pressed ?? false
       if (back && !backHeld) {
-        const close = document.querySelector<HTMLElement>('.detail-back')
+        // A layer on top (the pad keyboard) closes first.
+        const close = root.querySelector<HTMLElement>('[data-back]') ?? document.querySelector<HTMLElement>('.detail-back')
         sounds.back()
         close?.click()
       }

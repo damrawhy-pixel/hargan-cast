@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hargan Cast sends your voice to your PlayStation for chat during Remote Play, when you turn the microphone on.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Hargan Cast finds and connects to your PlayStation on the local network for Remote Play.</string>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>

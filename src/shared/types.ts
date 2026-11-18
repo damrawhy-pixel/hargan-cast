@@ -156,6 +156,8 @@ export interface PsStreamOptions {
   hevc: boolean
   /** Remote Play on a PS5 only: ask for 10-bit HDR. */
   hdr?: boolean
+  /** Remote Play from outside the home, brokered by PSN. */
+  outside?: boolean
 }
 
 export interface PsDatacenter {
@@ -180,6 +182,8 @@ export interface PsConsole {
   name: string
   address: string
   ps5: boolean
+  /** Set when a stream should go through PSN instead of the home network. */
+  outside?: boolean
 }
 
 export interface PsStreamStarted {
@@ -196,6 +200,47 @@ export type PsEvent =
   | { ev: 'connected' }
   | { ev: 'quit'; reason: string; detail: string; error: boolean }
   | { ev: 'dualsense'; transport?: 'usb' | 'bluetooth' }
+
+export interface NativeVideoStats {
+  fps: number
+  decodeMs: number
+  mbps: number
+  width: number
+  height: number
+  /** Sent once, when the first frame is on screen. */
+  first: boolean
+}
+
+export interface NativeVideoTest {
+  decoded: number
+  decoder: string
+  hardware?: boolean
+  error?: string
+}
+
+/** Android's native picture path for PlayStation streams. */
+export interface NativeVideoApi {
+  /** Decodes a short clip off screen: does this phone's decoder take the stream? */
+  test(): Promise<NativeVideoTest>
+  start(options: { hevc: boolean; width: number; height: number }): Promise<void>
+  stop(): Promise<void>
+  onStats(cb: (stats: NativeVideoStats) => void): () => void
+}
+
+export interface SavedAccounts {
+  /** The signed-in account's name ('' when it has none yet). */
+  current: string
+  others: { id: string; label: string }[]
+}
+
+/** Other accounts of a service, kept signed in on the side. */
+export interface AccountsApi {
+  list(): Promise<SavedAccounts>
+  /** Sets the signed-in account aside (PlayStation names it `label`) and starts over for another. */
+  add(label?: string): Promise<void>
+  switch(id: string, label?: string): Promise<void>
+  forget(id: string): Promise<SavedAccounts>
+}
 
 export interface HarganApi {
   platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined>; networkTest?(): Promise<NetworkReport>; screenshot?(title: string): Promise<string | undefined>; saveClip?(title: string, data: ArrayBuffer): Promise<string>; showCapture?(file: string): void; takeLaunch?(): Promise<string | undefined>; discord?: boolean; presence?(title: string, service: string): void; onLaunch?(cb: (target: string) => void): () => void; createShortcut?(key: string, name: string): Promise<string>; addToSteam?(key: string, name: string): Promise<number> }
@@ -214,6 +259,7 @@ export interface HarganApi {
     startStream(titleId: string): Promise<string>
     /** The user's own consoles that allow remote play. */
     consoles(): Promise<XboxConsole[]>
+    accounts?: AccountsApi
     /** The account's achievements in a game, or null when it has none or was never played. */
     achievements(productId: string, titleId: string): Promise<XboxAchievements | null>
     friends(): Promise<XboxFriend[]>
@@ -241,7 +287,9 @@ export interface HarganApi {
     testHaptics(): Promise<boolean>
     info(game: PsGame): Promise<GameInfo>
     routeSpeaker(): Promise<boolean>
-    /** Remote Play with the user's own console; desktop only. */
+    nativeVideo?: NativeVideoApi
+    accounts?: AccountsApi & { rename(label: string): Promise<void> }
+    /** Remote Play with the user's own console. */
     consoles?: {
       list(): Promise<PsConsole[]>
       discover(host?: string): Promise<PsFoundConsole[]>

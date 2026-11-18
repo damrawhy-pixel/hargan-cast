@@ -351,13 +351,22 @@ function registerIpc() {
     'ps:testHaptics': () => ps.testHaptics(),
     'ps:info': (game) => ps.info(game),
     'ps:routeSpeaker': () => ps.routeSpeaker(),
-    'ps:consoles': () => ps.consoles(),
-    'ps:discoverConsoles': (host) => ps.discoverConsoles(host),
-    'ps:registerConsole': (found, pin, accountId) => ps.registerConsole(found, pin, accountId),
-    'ps:forgetConsole': (id) => ps.forgetConsole(id),
-    'ps:consoleMoved': (id, address) => ps.updateConsoleAddress(id, address),
-    'ps:wakeConsole': (id) => ps.wakeConsole(id),
-    'ps:remoteStream': (id, opts) => ps.remoteStream(id, opts),
+    'ps:accounts': () => ps.accounts(),
+    'ps:addAccount': (label) => ps.addAccount(label),
+    'ps:switchAccount': (id, label) => ps.switchAccount(id, label),
+    'ps:forgetAccount': (id) => ps.forgetAccount(id),
+    'ps:renameAccount': (label) => ps.renameAccount(label),
+    'xbox:accounts': () => xbox.accounts(),
+    'xbox:addAccount': () => xbox.addAccount(),
+    'xbox:switchAccount': (id) => xbox.switchAccount(id),
+    'xbox:forgetAccount': (id) => xbox.forgetAccount(id),
+    'ps:consoles': () => ps.consoles.list(),
+    'ps:discoverConsoles': (host) => ps.consoles.discover(host),
+    'ps:registerConsole': (found, pin, accountId) => ps.consoles.register(found, pin, accountId),
+    'ps:forgetConsole': (id) => ps.consoles.forget(id),
+    'ps:consoleMoved': (id, address) => ps.consoles.moved(id, address),
+    'ps:wakeConsole': (id) => ps.consoles.wake(id),
+    'ps:remoteStream': (id, opts) => ps.consoles.stream(id, opts),
   }
   for (const [channel, handler] of Object.entries(routes)) handle(channel, handler)
 }
@@ -381,6 +390,13 @@ function restrictPermissions() {
   for (const ses of [session.defaultSession, session.fromPartition('persist:xbox'), session.fromPartition('persist:playstation')]) {
     ses.setPermissionRequestHandler((contents, permission, callback) => callback(allow(contents, permission)))
   }
+  // The app reads a DualSense's motion itself (gyro aiming); no other HID device, no picker.
+  const isDualSense = (d: { vendorId?: number; productId?: number }) => d.vendorId === 0x054c && (d.productId === 0x0ce6 || d.productId === 0x0df2)
+  session.defaultSession.setDevicePermissionHandler((details) => details.deviceType === 'hid' && fromApp(`${details.origin}/`) && isDualSense(details.device as { vendorId?: number; productId?: number }))
+  session.defaultSession.on('select-hid-device', (event, details, callback) => {
+    event.preventDefault()
+    callback(details.deviceList.find(isDualSense)?.deviceId)
+  })
   // The replay buffer may capture this window and the system's sound, and only when it is on.
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     if (!win || !fromApp(request.frame?.url ?? '') || !settings.get().replayBuffer) return callback({})

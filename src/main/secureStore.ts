@@ -74,6 +74,17 @@ export default class SecureStore {
     persist(vault)
   }
 
+  /** Everything in this vault, for keeping another account's copy. */
+  snapshot(): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(open(this.name).data))
+  }
+
+  replace(data: Record<string, unknown>) {
+    const vault = open(this.name)
+    vault.data = JSON.parse(JSON.stringify(data))
+    persist(vault)
+  }
+
   clear() {
     const vault = open(this.name)
     vault.data = {}

@@ -49,12 +49,16 @@ export function PsStream({ game, console: target, onExit }: Props) {
   const key = target ? `console:${target.id}` : `ps:${game!.productId}`
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const nativeRef = useRef<HTMLDivElement>(null)
   // Chosen once: the surface element cannot change during a stream.
   // HDR reaches the screen only on the graphics card's video path, so it takes that path.
   const [system] = useState(() => {
     const s = settingsFor(getSettings(), key)
-    return videoSurfaceSupported && (s.upscaler === 'system' || Boolean(target?.ps5 && s.psHdr && hdrScreen()))
+    const wantsHdr = target ? target.ps5 && s.psHdr : game?.streamServiceType === 'pscloud' && s.psCloudHdr
+    return videoSurfaceSupported && (s.upscaler === 'system' || Boolean(wantsHdr && hdrScreen()))
   })
+  // Android can decode with the phone's own MediaCodec straight to the screen.
+  const [native] = useState(() => (MOBILE && settingsFor(getSettings(), key).psNativeVideo ? window.hc.ps.nativeVideo : undefined))
   // A canvas hands itself to a worker only once, so each new session gets a new one.
   const [surfaceKey, setSurfaceKey] = useState(0)
   const [stage, setStage] = useState(() => t('Oturum hazırlanıyor'))
@@ -63,6 +67,10 @@ export function PsStream({ game, console: target, onExit }: Props) {
   const [queue, setQueue] = useState<StreamQueue>()
   const [controller, setController] = useState<string>()
   const dualsense = useRef<string>()
+  // Remote Play's microphone: on once the stream has it, muted from the menu.
+  const [micOn, setMicOn] = useState(false)
+  const [micMuted, setMicMuted] = useState(false)
+  const micMutedRef = useRef(false)
   const exiting = useRef(false)
 
   useEffect(() => {
@@ -72,6 +80,8 @@ export function PsStream({ game, console: target, onExit }: Props) {
     let audio: AudioContext | undefined
     let resizer: ResizeObserver | undefined
     let surface: ReturnType<typeof startVideoSurface> | undefined
+    let stopNative: (() => void) | undefined
+    let stopMic: (() => void) | undefined
     let disposed = false
     let wasLive = false
     let attempts = 0
@@ -92,7 +102,14 @@ export function PsStream({ game, console: target, onExit }: Props) {
       setTimeout(() => old?.terminate(), 200)
       surface?.dispose()
       void audio?.close()
-      worker = stopInput = audio = resizer = surface = undefined
+      stopNative?.()
+      stopMic?.()
+      stopMic = undefined
+      if (native) {
+        void native.stop().catch(() => {})
+        document.documentElement.classList.remove('native-video')
+      }
+      worker = stopInput = audio = resizer = surface = stopNative = undefined
     }
 
     const reconnect = (why: string) => {
@@ -147,18 +164,32 @@ export function PsStream({ game, console: target, onExit }: Props) {
       const { psCodec, psVibration } = settings
       const wantsHevc = psCodec === 'h265' || (psCodec === 'auto' && (target ? target.ps5 : game!.streamServiceType === 'pscloud'))
       const hevc = wantsHevc && (await playable(HEVC))
-      const hdr = Boolean(target?.ps5) && system && hevc && settings.psHdr && hdrScreen() && (await playable(HEVC_10))
-      const started = target ? await window.hc.ps.consoles!.stream(target.id, { hevc, hdr }) : await window.hc.ps.stream(game!, { hevc })
+      const wantsHdr = target ? target.ps5 && settings.psHdr : game!.streamServiceType === 'pscloud' && settings.psCloudHdr
+      const hdr = wantsHdr && system && hevc && hdrScreen() && (await playable(HEVC_10))
+      const started = target ? await window.hc.ps.consoles!.stream(target.id, { hevc, hdr, outside: target.outside }) : await window.hc.ps.stream(game!, { hevc, hdr })
       if (disposed) return void window.hc.ps.stop()
 
-      const element: HTMLElement = system ? videoRef.current! : canvasRef.current!
+      if (native) {
+        // The picture comes up under the page, which turns transparent over it.
+        document.documentElement.classList.add('native-video')
+        stopNative = native.onStats((s) => {
+          if (s.first) {
+            setLive(true)
+            wasLive = true
+            attempts = 0
+          } else setStats({ fps: s.fps, mbps: s.mbps, lost: 0, rttMs: started.rttMs, decodeMs: s.decodeMs, size: `${s.width}×${s.height} · ${t('doğrudan görüntü')}` })
+        })
+        await native.start({ hevc: started.codec === 'h265', width: started.width, height: started.height })
+      }
+
+      const element: HTMLElement = native ? nativeRef.current! : system ? videoRef.current! : canvasRef.current!
       const fit = fitFor(settings.videoFormat)
       const box = element.getBoundingClientRect()
       const view: View = { width: Math.round(box.width * devicePixelRatio), height: Math.round(box.height * devicePixelRatio), fit }
       // The app's shaders run only on its own canvas; on the video path the graphics card scales.
       const options = pictureOptionsFor(settings, 'ps')
-      const picture = !system && pictureActive(options) ? options : undefined
-      const offscreen = system ? undefined : canvasRef.current!.transferControlToOffscreen()
+      const picture = !system && !native && pictureActive(options) ? options : undefined
+      const offscreen = system || native ? undefined : canvasRef.current!.transferControlToOffscreen()
       if (system) surface = startVideoSurface(videoRef.current!, settings.framePacing)
 
       audio = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 })
@@ -184,6 +215,8 @@ export function PsStream({ game, console: target, onExit }: Props) {
           return
         }
         if (msg.type === 'frame') surface ? surface.push(msg.frame) : msg.frame.close()
+        // With the native picture the worker carries sound and input only; the picture's news comes from Android.
+        else if (native && (msg.type === 'firstFrame' || msg.type === 'stats')) return
         else if (msg.type === 'firstFrame') {
           setLive(true)
           wasLive = true
@@ -206,6 +239,32 @@ export function PsStream({ game, console: target, onExit }: Props) {
         { type: 'init', url: started.url, canvas: offscreen, pacing: settings.framePacing, codec: started.codec, audio: channel.port2, decoder: settings.videoDecoder, view, picture },
         offscreen ? [offscreen, channel.port2] : [channel.port2],
       )
+      // The microphone goes to the console in 10 ms frames over the same socket as the controller.
+      if (target && settings.psMicrophone && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+          await audio.audioWorklet.addModule('./mic-worklet.js')
+          const source = audio.createMediaStreamSource(mic)
+          const capture = new AudioWorkletNode(audio, 'mic-capture', { numberOfOutputs: 1, outputChannelCount: [1] })
+          // Pulled through a silent gain: a node nobody listens to is not run.
+          const silent = audio.createGain()
+          silent.gain.value = 0
+          source.connect(capture).connect(silent).connect(audio.destination)
+          capture.port.onmessage = (e: MessageEvent<ArrayBuffer>) => {
+            if (!micMutedRef.current) command({ type: 'input', report: e.data }, [e.data])
+          }
+          stopMic = () => {
+            capture.port.onmessage = null
+            source.disconnect()
+            for (const track of mic.getTracks()) track.stop()
+            setMicOn(false)
+          }
+          setMicOn(true)
+        } catch {
+          // No microphone, or permission refused: the stream goes on without one.
+        }
+      }
+
       resizer = new ResizeObserver(([entry]) => {
         // Safari reports CSS pixels only; scale those to the screen's own.
         const exact = entry.devicePixelContentBoxSize?.[0]
@@ -239,8 +298,11 @@ export function PsStream({ game, console: target, onExit }: Props) {
   }, [])
 
   return (
-    <StreamShell platform="playstation" profileKey={key} title={target ? target.name : game!.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={target ? undefined : game!.imageUrl || game!.landscapeImageUrl} onExit={() => onExit()}>
-      {system ? <video ref={videoRef} className="stream-surface" muted playsInline /> : <canvas key={surfaceKey} ref={canvasRef} className="stream-surface" />}
+    <StreamShell
+      platform="playstation"
+      microphone={micOn ? { muted: micMuted, toggle: () => setMicMuted((micMutedRef.current = !micMutedRef.current)) } : undefined}
+      profileKey={key} title={target ? target.name : game!.name} stage={stage} live={live} stats={stats} queue={queue} controller={controller} image={target ? undefined : game!.imageUrl || game!.landscapeImageUrl} onExit={() => onExit()}>
+      {native ? <div ref={nativeRef} className="stream-surface stream-native" /> : system ? <video ref={videoRef} className="stream-surface" muted playsInline /> : <canvas key={surfaceKey} ref={canvasRef} className="stream-surface" />}
     </StreamShell>
   )
 }

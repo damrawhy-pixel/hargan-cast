@@ -173,7 +173,7 @@ endif()
 # --- the core: commands and media, as on the desktop, without the desktop's own
 # controller and HTTP plumbing. media_server.c is the desktop file, compiled
 # against a small POSIX stand-in for the Win32 calls it makes.
-add_library(hargan_ps_media OBJECT "${CORE}/src/media_server.c" "${CORE}/src/controller_io.c")
+add_library(hargan_ps_media OBJECT "${CORE}/src/media_server.c" "${CORE}/src/controller_io.c" "${CORE}/src/console.c" "${CORE}/src/microphone.c")
 target_include_directories(hargan_ps_media BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compat")
 target_link_libraries(hargan_ps_media PRIVATE chiaki)
 target_compile_options(hargan_ps_media PRIVATE -Wno-pointer-sign -Wno-incompatible-pointer-types -Wno-int-conversion)

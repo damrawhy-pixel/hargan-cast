@@ -8,6 +8,7 @@ import { locale, t } from '../../../shared/i18n'
 import { GameTile } from './GameTile'
 import { ShotViewer } from './ShotViewer'
 import type { Space } from './TopBar'
+import { AutoTune } from './AutoTune'
 
 const LAUNCHER_SIZE = 12
 const ROW_SIZE = 18
@@ -198,6 +199,8 @@ export function Home({ onOpen, onPlay, onGo, onResume }: Props) {
             </div>
           </div>
         )}
+
+        <AutoTune card />
 
         <div className={`hub ${shown ? 'hub--in' : ''}`} aria-hidden={!shown}>
           {shown && selected && (

@@ -6,7 +6,6 @@ import { loadPlayStation, useStore } from '../lib/store'
 import { useSettings } from '../lib/useSettings'
 import { t } from '../../../shared/i18n'
 import type { PsConsole } from '../../../shared/types'
-import { MOBILE } from '../lib/platform'
 import { Consoles } from './Consoles'
 
 const TOKEN_PAGE = 'https://ca.account.sony.com/api/v1/ssocookie'
@@ -64,7 +63,7 @@ export function PlayStationSpace({ onOpen, onPlayConsole }: Props) {
               window.hc.ps.signInWithToken(token).catch((err: Error) => setTokenError(clean(err)))
             }}
           >
-            <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="NPSSO" />
+            <input type="password" autoComplete="off" data-nav value={token} onChange={(e) => setToken(e.target.value)} placeholder="NPSSO" />
             <button className="ghost" disabled={!token}>{t('Bağlan')}</button>
           </form>
           {tokenError && <p className="error" role="alert">{tokenError}</p>}
@@ -76,7 +75,7 @@ export function PlayStationSpace({ onOpen, onPlayConsole }: Props) {
   return (
     <div className="space-body">
       {(catalog?.warning || error) && <p className="banner" role="alert">{error ?? catalog?.warning}</p>}
-      {!MOBILE && <Consoles onPlay={onPlayConsole} />}
+      <Consoles onPlay={onPlayConsole} />
       {!catalog && loading && items.length === 0 ? (
         <SkeletonGrid />
       ) : (

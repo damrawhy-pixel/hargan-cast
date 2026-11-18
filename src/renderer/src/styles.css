@@ -672,3 +672,43 @@ button { cursor: pointer; }
 .friend small { font-size: 0.72rem; color: var(--ink-soft); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .stream-filters { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* The controller's on-screen keyboard */
+.pad-keyboard { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: grid; gap: 8px; padding: 16px; border-radius: 20px; width: min(760px, calc(100vw - 32px)); background: rgba(10, 12, 18, 0.97); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6); }
+.pad-keyboard-text { display: block; min-height: 2.2em; padding: 8px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.35); font-size: 1.1rem; overflow-wrap: anywhere; }
+.pad-keyboard-text span { color: var(--ink-soft); }
+.pad-keyboard-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.pad-keyboard-row button { min-width: 44px; height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--glass-line); background: #1a1d26; color: var(--ink); font-size: 1rem; }
+.pad-keyboard-row button:focus-visible, .pad-keyboard-row button:focus { outline: 3px solid var(--brand); outline-offset: 1px; }
+.pad-keyboard-row button[aria-pressed='true'] { background: var(--brand); }
+.pad-keyboard-space { flex: 1 1 160px; }
+
+/* Stream history */
+.history { display: grid; gap: 14px; }
+.history > .ghost { justify-self: start; }
+.history-item { display: grid; gap: 12px; padding: 16px; border-radius: 16px; }
+.history-item header { display: grid; gap: 2px; }
+.history-item header small { color: var(--ink-soft); }
+.history-facts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; }
+.history-facts div { display: grid; }
+.history-facts dt { font-size: 0.75rem; color: var(--ink-soft); }
+.history-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.history-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.spark { margin: 0; display: grid; gap: 4px; }
+.spark figcaption { display: flex; justify-content: space-between; gap: 8px; font-size: 0.8rem; color: var(--ink-soft); }
+.spark figcaption b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.spark svg { width: 100%; height: 56px; display: block; overflow: visible; touch-action: none; }
+.spark-base { stroke: var(--line); stroke-width: 1; }
+.spark-line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.spark-cross { stroke: var(--ink-soft); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+.spark-dot { fill: var(--brand); stroke: var(--surface, #0b0d12); stroke-width: 2; }
+
+/* Fit-this-computer step */
+.autotune { display: grid; gap: 10px; margin-bottom: 18px; }
+.autotune p { margin: 0; color: var(--ink-soft); }
+.autotune--card { position: relative; z-index: 2; max-width: 560px; padding: 16px 18px; border-radius: 16px; margin: 0 0 18px; }
+.autotune-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.autotune-reasons { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+/* Android's native picture lies under the page: everything over it turns see-through. */
+html.native-video, html.native-video body, html.native-video .app, html.native-video .stream, html.native-video .stream-picture, html.native-video .stream-native { background: transparent !important; }

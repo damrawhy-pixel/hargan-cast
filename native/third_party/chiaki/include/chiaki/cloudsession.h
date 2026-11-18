@@ -54,6 +54,7 @@ typedef struct chiaki_cloud_provision_config_t
 	const char *game_language;        /**< streaming-language locale (e.g. "de-DE"); bare code derived */
 	int  resolution;                  /**< 720|1080|1440|2160 (platform picks the per-service value) */
 	int  bitrate_kbps;                /**< cloud stream bitrate (platform picks the per-service value) */
+	bool hdr;                         /**< PS5 games: offer HDR (Hargan Cast; the caller retries in SDR if refused) */
 
 	/** Progress callback: @p stage is a UI-ready string shown verbatim. May be NULL. */
 	void (*progress)(const char *stage, void *user);

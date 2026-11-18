@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { XBOX_REGIONS, type AppSettings } from '../../../shared/settings'
-import type { NetworkProbe, NetworkReport, PsDatacenter, PsStatus, XboxStatus } from '../../../shared/types'
+import type { NetworkProbe, NetworkReport, PsDatacenter, PsStatus, SavedAccounts, XboxStatus } from '../../../shared/types'
 import { MOBILE } from '../lib/platform'
 import { videoSurfaceSupported } from '../lib/videoSurface'
 import { suggestedPsBitrate } from '../lib/bitrate'
 import { LayoutEditor } from './LayoutEditor'
+import { StreamHistory } from './StreamHistory'
+import { AutoTune } from './AutoTune'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
 import { t, type Message } from '../../../shared/i18n'
@@ -34,7 +36,7 @@ const POLL_RATES: [number, string][] = [250, 83.33, 62.5, 50, 41.67, 35.71, 31.2
 
 const SECTIONS = [
   ['general', 'Genel'], ['picture', 'Görüntü'], ['sound', 'Ses'], ['touch', 'Dokunmatik'], ['playstation', 'PlayStation'],
-  ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['layout', 'Kol düzeni'], ['network', 'Ağ'], ['accounts', 'Hesaplar'],
+  ['dualsense', 'DualSense'], ['xbox', 'Xbox'], ['xboxInput', 'Xbox kol ve giriş'], ['layout', 'Kol düzeni'], ['history', 'Akış geçmişi'], ['network', 'Ağ'], ['accounts', 'Hesaplar'],
 ] as const satisfies readonly (readonly [string, Message])[]
 type Section = (typeof SECTIONS)[number][0]
 
@@ -115,6 +117,27 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
       </div>
       <div className="setting-control">{children}</div>
     </div>
+  )
+}
+
+// Android: whether the phone's own decoder takes the stream, tried on a short clip.
+function NativeVideoTest() {
+  const [note, setNote] = useState(() => t('Bu telefonun kod çözücüsünü kısa bir kayıtla dener.'))
+  const [running, setRunning] = useState(false)
+  const run = async () => {
+    setRunning(true)
+    try {
+      const r = await window.hc.ps.nativeVideo!.test()
+      setNote(r.decoded > 0 && !r.error ? t('Çalışıyor: {decoder}, {kind}.', { decoder: r.decoder, kind: r.hardware === false ? t('yazılımla') : t('donanımla') }) : t('Bu telefonda çalışmadı ({error}).', { error: r.error ?? r.decoder }))
+    } catch (e) {
+      setNote(clean(e as Error))
+    }
+    setRunning(false)
+  }
+  return (
+    <Row label={t('Doğrudan görüntüyü dene')} hint={note}>
+      <button className="ghost" data-nav disabled={running} onClick={() => void run()}>{running ? t('Deneniyor') : t('Dene')}</button>
+    </Row>
   )
 }
 
@@ -282,6 +305,57 @@ function Diagnostics() {
   )
 }
 
+// Other accounts of one service, kept on the side: switch to one, add one, forget one.
+function OtherAccounts({ service, signedIn, currentName }: { service: 'ps' | 'xbox'; signedIn: boolean; currentName?: string }) {
+  const api = window.hc[service].accounts
+  const [saved, setSaved] = useState<SavedAccounts>()
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    void api?.list().then((list) => {
+      setSaved(list)
+      setName(list.current)
+    })
+  }, [api, signedIn, currentName])
+  if (!api || !saved) return null
+  const ps = service === 'ps'
+  const label = name.trim() || currentName || (ps ? 'PlayStation' : 'Xbox')
+  const act = async (work: () => Promise<unknown>) => {
+    setBusy(true)
+    await work().catch(() => {})
+    setSaved(await api.list())
+    setBusy(false)
+  }
+  return (
+    <>
+      {ps && signedIn && (
+        <Row label={t('Bu hesabın adı')} hint={t('Hesaplar arasında geçerken görünen ad.')}>
+          <input
+            data-nav
+            value={name}
+            maxLength={40}
+            placeholder="PlayStation"
+            aria-label={t('Bu hesabın adı')}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => void window.hc.ps.accounts?.rename(name.trim())}
+          />
+        </Row>
+      )}
+      {saved.others.map((a) => (
+        <Row key={a.id} label={a.label} hint={t('Kayıtlı diğer hesap')}>
+          <button className="ghost" data-nav disabled={busy} onClick={() => void act(() => api.switch(a.id, label))}>{t('Bu hesaba geç')}</button>
+          <button className="ghost danger" data-nav disabled={busy} onClick={() => void act(() => api.forget(a.id))}>{t('Kaldır')}</button>
+        </Row>
+      ))}
+      {signedIn && (
+        <Row label={t('Başka hesap ekle')} hint={t('Bu hesap çıkış yapmadan kenara alınır; tek dokunuşla geri dönülür.')}>
+          <button className="ghost" data-nav disabled={busy} onClick={() => void act(() => api.add(label))}>{t('Ekle')}</button>
+        </Row>
+      )}
+    </>
+  )
+}
+
 function Accounts({ onAbout }: { onAbout(): void }) {
   const [xbox, setXbox] = useState<XboxStatus>()
   const [ps, setPs] = useState<PsStatus>()
@@ -300,9 +374,11 @@ function Accounts({ onAbout }: { onAbout(): void }) {
       <Row label={t('PlayStation')} hint={ps?.state === 'signedIn' ? t('Bağlı') : t('Bağlı değil')}>
         {ps?.state === 'signedIn' && <button className="ghost" data-nav onClick={() => void window.hc.ps.signOut()}>{t('Çıkış yap')}</button>}
       </Row>
+      <OtherAccounts service="ps" signedIn={ps?.state === 'signedIn'} />
       <Row label={t('Xbox')} hint={xbox?.state === 'signedIn' ? xbox.gamertag ?? t('Bağlı') : t('Bağlı değil')}>
         {xbox?.state === 'signedIn' && <button className="ghost" data-nav onClick={() => void window.hc.xbox.signOut()}>{t('Çıkış yap')}</button>}
       </Row>
+      <OtherAccounts service="xbox" signedIn={xbox?.state === 'signedIn'} currentName={xbox?.gamertag} />
       <Row label={t('Hakkında')} hint={t('Sürüm, lisanslar ve yasal bildirimler')}><button className="ghost" data-nav onClick={onAbout}>{t('Aç')}</button></Row>
       <Row label={t('Varsayılanlara dön')} hint={t('Hesaplarına dokunmaz.')}><button className="ghost" data-nav onClick={() => void resetSettings()}>{t('Sıfırla')}</button></Row>
       {window.hc.platform.exportDiagnostics && <Diagnostics />}
@@ -348,6 +424,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
         {section === 'general' && (
           <section>
             <h2>{t('Genel')}</h2>
+            <AutoTune />
             <Choice field="language" label={t('Dil')} options={[['', t('Sistem diline göre')], ['tr', 'Türkçe'], ['en', 'English']]} />
             <Slider field="fontSize" label={t('Yazı boyutu')} min={12} max={20} step={1} unit=" px" />
             <Choice field="motion" label={t('Animasyonlar')} hint={t("Windows'ta animasyon efektleri kapalı olsa da uygulamadakiler çalışır; istersen Windows'a uydurabilirsin.")} options={[['on', t('Açık')], ['system', "Windows'a göre"], ['off', t('Kapalı')]]} />
@@ -424,6 +501,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <h3>{t('PS5 oyunları')}</h3>
             <Choice field="psCloudResolution" label={t('Çözünürlük')} options={RESOLUTIONS} />
             <Choice field="psCloudBitrate" label={t('Bit hızı')} hint={psBitrateHint()} options={psBitrates()} />
+            <Toggle field="psCloudHdr" label={t('HDR (deneysel)')} hint={t("Windows'ta HDR açıkken Sony'den HDR ister. Sony bu oyun ya da hesap için kabul etmezse akış SDR olarak başlar; açılış birkaç saniye uzayabilir.")} />
             <Choice field="psCloudDatacenter" label={t('Veri merkezi')} hint={dcHint(datacenters.cloud)} options={datacenterOptions(datacenters.cloud)} />
             <h3>{t('PS3 ve PS4 oyunları')}</h3>
             <Choice field="psNowResolution" label={t('Çözünürlük')} options={RESOLUTIONS} />
@@ -435,10 +513,17 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
                 <Choice field="psRemoteResolution" label={t('Çözünürlük')} hint={t('PS4 en fazla 1080p gönderir; 1080p yalnızca PS4 Pro’da.')} options={RESOLUTIONS} />
                 <Choice field="psRemoteBitrate" label={t('Bit hızı')} hint={t('Otomatik, çözünürlüğe göre seçer: 1080p için 15, 4K için 40 Mb/sn.')} options={psBitrates()} />
                 <Choice field="psRemoteFps" label={t('Kare hızı')} options={[[60, t('60 kare/sn')], [30, t('30 kare/sn')]]} />
+                <Toggle field="psMicrophone" label={t('Mikrofon')} hint={t('Kendi konsolundan oynarken sesli sohbet için mikrofonun konsola gider. İlk akışta mikrofon izni istenir; akış menüsünden susturulabilir.')} />
                 <Toggle field="psHdr" label={t('HDR')} hint={t("PS5'te, Windows'ta HDR açıkken ve ekran kartı HEVC 10 bit çözebiliyorsa çalışır. HDR akışı ekran kartının video yolundan gösterilir.")} />
               </>
             )}
             <h3>{t('Akış')}</h3>
+            {window.hc.ps.nativeVideo && (
+              <>
+                <Toggle field="psNativeVideo" label={t('Doğrudan görüntü')} hint={t('Görüntüyü telefonun kendi kod çözücüsü doğrudan ekrana çizer; gecikme ve pil tüketimi düşer. Uygulamanın görüntü süzgeçleri bu yolda çalışmaz. Sonraki akışta geçerli olur.')} />
+                <NativeVideoTest />
+              </>
+            )}
             <Choice field="psCodec" label={t('Kodek')} hint={t('Otomatik, ekran kartının desteğine göre seçer.')} options={[['auto', t('Otomatik')], ['h265', t('H.265')], ['h264', t('H.264')]]} />
             {settings.upscaler === 'shader' || !videoSurfaceSupported ? (<>
             <Toggle field="psFsr" label={t('Büyütme ve keskinleştirme')} hint={fsrHint()} />
@@ -503,6 +588,13 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
           </section>
         )}
 
+        {section === 'history' && (
+          <section>
+            <h2>{t('Akış geçmişi')}</h2>
+            <StreamHistory />
+          </section>
+        )}
+
         {section === 'layout' && (
           <section>
             <h2>{t('Kol düzeni')}</h2>
@@ -523,6 +615,18 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <Choice field="xboxTriggerRumble" label={t('Tetik titreşimi')} options={[['', t('Kapalı')], ['all', t('İki tetik')], ['left', t('Sol tetik')], ['right', t('Sağ tetik')]]} />
             <Toggle field="xboxSwapTriggerRumble" label={t('Tetik titreşimini değiştir')} />
             <h3>{t('Fare ve klavye')}</h3>
+            {!MOBILE && (
+              <>
+                <Choice field="xboxGyro" label={t('DualSense jiroskopla nişan')} hint={t('Kolu çevirmek sağ çubuğu hareket ettirir. "Nişan alırken" yalnızca LT basılıyken çalışır. Kol USB ya da Bluetooth ile bağlı olmalı.')} options={[['off', t('Kapalı')], ['aim', t('Nişan alırken (LT)')], ['always', t('Her zaman')]]} />
+                {settings.xboxGyro !== 'off' && (
+                  <>
+                    <Slider field="xboxGyroSensitivity" label={t('Jiroskop hassasiyeti')} min={0.2} max={4} step={0.1} unit="" />
+                    <Toggle field="xboxGyroInvertX" label={t('Jiroskop yatayını ters çevir')} />
+                    <Toggle field="xboxGyroInvertY" label={t('Jiroskop dikeyini ters çevir')} />
+                  </>
+                )}
+              </>
+            )}
             <Toggle field="xboxMouseKeyboard" label={t('Yerel fare ve klavye')} hint={t('Yalnızca destekleyen oyunlarda çalışır.')} />
             <Slider field="xboxMouseSensitivity" label={t('Fare hassasiyeti')} min={0.1} max={5} step={0.1} unit="" />
           </section>

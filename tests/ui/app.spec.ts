@@ -116,5 +116,50 @@ test('the upscaling method shows only while upscaling is on', async () => {
   await page.getByRole('switch', { name: 'Büyütme ve keskinleştirme' }).click()
   await expect(method).toBeHidden()
   await expect(page.getByRole('switch', { name: 'Sıkıştırma izlerini azalt' })).toBeVisible()
-  await expect(page.getByText('Kendi konsolun')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Kendi konsolun' })).toBeVisible()
+})
+
+test('a controller opens the on-screen keyboard on a text field', async () => {
+  await page.getByRole('tab', { name: 'PlayStation' }).click()
+  await page.getByText('Pencere çalışmıyor mu? Tarayıcıyla bağlan').click()
+  // As the pad's A button does: the app marks pad use, then clicks the focused field.
+  // (A mouse click clears that mark, as it should, so it cannot stand in here.)
+  await page.evaluate(() => {
+    const field = document.querySelector<HTMLInputElement>('input[placeholder="NPSSO"]')!
+    field.focus()
+    document.documentElement.dataset.input = 'pad'
+    field.click()
+  })
+  const keyboard = page.getByRole('dialog', { name: 'Ekran klavyesi' })
+  await expect(keyboard).toBeVisible()
+  await keyboard.getByRole('button', { name: 'a', exact: true }).click()
+  await keyboard.getByRole('button', { name: 'b', exact: true }).click()
+  await keyboard.getByRole('button', { name: /^Sil/ }).click()
+  await expect(page.getByPlaceholder('NPSSO')).toHaveValue('a')
+  await shot('pad-keyboard')
+  await keyboard.getByRole('button', { name: /^Kapat/ }).click()
+  await expect(keyboard).toBeHidden()
+})
+
+test('the home screen offers to fit this computer, once', async () => {
+  const card = page.getByText('Bu bilgisayara göre ayarlayalım mı?')
+  await expect(card).toBeVisible()
+  await page.getByRole('button', { name: 'Şimdi değil' }).click()
+  await expect(card).toBeHidden()
+})
+
+test('fitting this computer applies settings and says why', async () => {
+  test.setTimeout(90_000)
+  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  await page.locator('.settings-body').getByRole('button', { name: 'Bu bilgisayara göre ayarla' }).click()
+  await expect(page.locator('.settings-body .autotune-reasons li').first()).toBeVisible({ timeout: 60_000 })
+  await shot('autotune')
+})
+
+test('stream history starts empty and the accounts page offers nothing to switch to', async () => {
+  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  await page.locator('.settings-nav button', { hasText: 'Akış geçmişi' }).click()
+  await expect(page.getByText('Henüz akış yok.', { exact: false })).toBeVisible()
+  await page.locator('.settings-nav button', { hasText: 'Hesaplar' }).click()
+  await expect(page.getByText('Kayıtlı diğer hesap')).toHaveCount(0)
 })

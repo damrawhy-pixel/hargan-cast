@@ -25,6 +25,8 @@ import {
 import { settingsFor, type AppSettings } from '../shared/settings'
 import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../shared/types'
 import SecureStore from './shims/secureStore'
+import { Consoles } from '../main/playstation/consoles'
+import { AccountShelf } from '../main/accounts'
 
 export { PsCore }
 
@@ -144,6 +146,57 @@ export default class MobilePlayStation {
       })
     })
   }
+
+  // --- more than one account ------------------------------------------------
+
+  private shelf = new AccountShelf(new SecureStore('accounts'), 'playstation', this.vault)
+
+  accounts() {
+    return { current: this.vault.get<string>('label', ''), others: this.shelf.list() }
+  }
+
+  async addAccount(label: string) {
+    this.shelf.park(String(label || this.vault.get('label', '') || 'PlayStation').slice(0, 40))
+    this.afterSwitch()
+  }
+
+  async switchAccount(id: string, label: string) {
+    if (this.shelf.swap(String(id), String(label || this.vault.get('label', '') || 'PlayStation').slice(0, 40))) this.afterSwitch()
+  }
+
+  forgetAccount(id: string) {
+    this.shelf.forget(String(id))
+    return this.accounts()
+  }
+
+  renameAccount(label: string) {
+    this.vault.set('label', String(label).slice(0, 40))
+  }
+
+  private afterSwitch() {
+    this.infoCache.clear()
+    this.context = DEFAULT_CONTEXT
+    this.setStatus({ state: 'restoring' })
+    this.setStatus({ state: this.npsso() ? 'signedIn' : 'signedOut' })
+  }
+
+  // --- Remote Play with the user's own console --------------------------------
+
+  /** As on the desktop (consoles.ts); fetch goes through the native HTTP stack, so the cookie can be sent by hand. */
+  readonly consoles = new Consoles({
+    vault: this.vault,
+    npsso: () => this.npsso(),
+    settings: () => this.settings(),
+    ensureCore: () => this.ensureCore(),
+    call: (cmd, args) => this.call(cmd, args),
+    mediaUrl: () => (this.media ? `ws://127.0.0.1:${this.media.port}/${this.media.token}` : undefined),
+    sonyFetch: async (npsso) => ({
+      fetch: (url, init) => fetch(url, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), Cookie: `npsso=${npsso}` } }),
+      done: () => {},
+    }),
+    log: () => {},
+    randomHex: (bytes) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, '0')).join(''),
+  })
 
   // --- catalog and streaming -----------------------------------------------
 

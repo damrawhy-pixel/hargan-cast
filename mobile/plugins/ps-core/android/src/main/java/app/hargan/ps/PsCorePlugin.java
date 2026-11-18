@@ -6,6 +6,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.util.Base64;
 import android.view.WindowManager;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -34,6 +35,7 @@ public class PsCorePlugin extends Plugin {
     private WifiManager.WifiLock wifiLock;
     private PsSignIn activeSignIn;
     private GamepadFeedback gamepad;
+    private NativeVideo nativeVideo;
 
     @Override
     public void load() {
@@ -158,6 +160,61 @@ public class PsCorePlugin extends Plugin {
         });
     }
 
+    /** The stream's picture through MediaCodec onto a surface under the web view. */
+    @PluginMethod
+    public void nativeVideoStart(PluginCall call) {
+        stopNativeVideo();
+        boolean hevc = Boolean.TRUE.equals(call.getBoolean("hevc", false));
+        int width = call.getInt("width", 1920);
+        int height = call.getInt("height", 1080);
+        nativeVideo = new NativeVideo(getActivity(), getBridge().getWebView(), hevc, width, height, (fps, decodeMs, bytes, w, h, first) -> {
+            JSObject data = new JSObject();
+            data.put("fps", fps);
+            data.put("decodeMs", decodeMs);
+            data.put("mbps", bytes * 8 / 1e6);
+            data.put("width", w);
+            data.put("height", h);
+            data.put("first", first);
+            notifyListeners("nativeVideo", data);
+        });
+        PsCore.video = nativeVideo;
+        PsCore.nativeVideo(true);
+        nativeVideo.show();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void nativeVideoStop(PluginCall call) {
+        stopNativeVideo();
+        call.resolve();
+    }
+
+    private void stopNativeVideo() {
+        if (nativeVideo == null) return;
+        PsCore.nativeVideo(false);
+        PsCore.video = null;
+        nativeVideo.hide();
+        nativeVideo = null;
+    }
+
+    /** Decodes a short clip (base64 access units) to learn whether this phone's decoder takes it. */
+    @PluginMethod
+    public void nativeVideoTest(PluginCall call) {
+        JSArray list = call.getArray("units");
+        boolean hevc = Boolean.TRUE.equals(call.getBoolean("hevc", false));
+        int width = call.getInt("width", 640);
+        int height = call.getInt("height", 360);
+        worker.execute(() -> {
+            try {
+                byte[][] units = new byte[list.length()][];
+                for (int i = 0; i < units.length; i++) units[i] = Base64.decode(list.getString(i), Base64.NO_WRAP);
+                call.resolve(new JSObject(NativeVideo.selfTest(units, hevc, width, height)));
+            } catch (Exception e) {
+                call.reject(e.getMessage());
+            }
+        });
+    }
+
     /** A stream is watched, not touched: keep the screen on and Wi-Fi out of power saving. */
     @PluginMethod
     public void streaming(PluginCall call) {
@@ -172,6 +229,7 @@ public class PsCorePlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        stopNativeVideo();
         setWifiLock(false);
         PsCore.listener = null;
         PsCore.feedback = null;

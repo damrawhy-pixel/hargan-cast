@@ -52,6 +52,8 @@ export interface AppSettings {
   upscaler: 'shader' | 'system'
   /** 'latency' shows each frame as it arrives; 'smooth' holds a frame or two to show them evenly. */
   framePacing: 'latency' | 'smooth'
+  /** The "fit this computer" step has been run or declined. */
+  autoTuned: boolean
   /** Desktop: while streaming, switch the monitor to a multiple of 60 Hz (144 to 120). */
   matchRefreshRate: boolean
   /** Desktop: keep the last replaySeconds of a stream, to save as a clip. */
@@ -72,6 +74,8 @@ export interface AppSettings {
   psNowBitrate: number
   psNowDatacenter: string
   psCodec: 'auto' | 'h264' | 'h265'
+  /** PS5 cloud games: offer HDR to Sony (experimental; SDR if refused). */
+  psCloudHdr: boolean
   // Remote Play with the user's own console
   psRemoteResolution: number
   /** kb/s; 0 picks by resolution. */
@@ -79,6 +83,10 @@ export interface AppSettings {
   psRemoteFps: number
   /** PS5 only: HDR when the screen and the decoder can show it. */
   psHdr: boolean
+  /** Remote Play: send the microphone to the console, for party and game chat. */
+  psMicrophone: boolean
+  /** Android: decode PlayStation streams with MediaCodec straight to the screen. */
+  psNativeVideo: boolean
   /** The app's own upscaling and sharpening, with psScaler choosing how. */
   psFsr: boolean
   psScaler: 'fsr' | 'lanczos'
@@ -135,6 +143,11 @@ export interface AppSettings {
   xboxAudioRumbleThreshold: number
   xboxMouseKeyboard: boolean
   xboxMouseSensitivity: number
+  /** Desktop: a DualSense's gyro moves the right stick, always or while LT is held. */
+  xboxGyro: 'off' | 'always' | 'aim'
+  xboxGyroSensitivity: number
+  xboxGyroInvertX: boolean
+  xboxGyroInvertY: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -170,6 +183,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   videoDecoder: 'prefer-hardware',
   upscaler: 'shader',
   framePacing: 'latency',
+  autoTuned: false,
   matchRefreshRate: false,
   replayBuffer: false,
   replaySeconds: 30,
@@ -185,10 +199,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   psNowBitrate: 0,
   psNowDatacenter: 'Auto',
   psCodec: 'auto',
+  psCloudHdr: false,
   psRemoteResolution: 1080,
   psRemoteBitrate: 0,
   psRemoteFps: 60,
   psHdr: true,
+  psNativeVideo: false,
+  psMicrophone: false,
   psFsr: true,
   psScaler: 'fsr',
   psFsrSharpness: 4,
@@ -239,6 +256,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   xboxAudioRumbleThreshold: 0.15,
   xboxMouseKeyboard: false,
   xboxMouseSensitivity: 0.5,
+  xboxGyro: 'off',
+  xboxGyroSensitivity: 1,
+  xboxGyroInvertX: false,
+  xboxGyroInvertY: false,
 }
 
 // Addresses Microsoft associates with each region.
@@ -283,6 +304,8 @@ export const PROFILE_FIELDS = [
   'buttonMap',
   'swapSticks',
   'invertY',
+  'xboxGyro',
+  'xboxGyroSensitivity',
 ] as const satisfies readonly (keyof AppSettings)[]
 
 export type GameProfile = Partial<Pick<AppSettings, (typeof PROFILE_FIELDS)[number]>>
@@ -324,6 +347,7 @@ const CHOICES: { [K in keyof AppSettings]?: readonly AppSettings[K][] } = {
   xboxScaler: ['fsr', 'lanczos'],
   xboxCodec: ['', 'high', 'main', 'baseline'],
   xboxTriggerRumble: ['', 'all', 'left', 'right'],
+  xboxGyro: ['off', 'always', 'aim'],
 }
 
 // Numeric fields and the range the settings page offers. Anything else numeric
@@ -346,6 +370,7 @@ const RANGES: { [K in keyof AppSettings]?: [number, number] } = {
   xboxGamepadIndex: [-1, 3],
   xboxAudioRumbleThreshold: [0.01, 0.5],
   xboxMouseSensitivity: [0.1, 5],
+  xboxGyroSensitivity: [0.2, 4],
 }
 const NUMBER_SPAN = 1_000_000
 // Eighteen button indexes, 0 to 17.
