@@ -86,7 +86,9 @@
         fire({ ev: 'progress', stage: 'Test kaydı hazırlanıyor' })
         const capture = await makeCapture()
         const hello = await (await fetch('/__hello')).json()
-        setTimeout(() => fetch('/__capture?hevc=0', { method: 'POST', body: capture }), 400)
+        // A test can ask for a bad network: window.__hcImpair = { loss, jitter }.
+        const impair = window.__hcImpair ?? {}
+        setTimeout(() => fetch(`/__capture?hevc=0&loss=${impair.loss ?? 0}&jitter=${impair.jitter ?? 0}`, { method: 'POST', body: capture }), 400)
         return { url: `ws://127.0.0.1:${hello.port}/${hello.token}`, codec: 'h264', width: 1280, height: 720 }
       },
     },

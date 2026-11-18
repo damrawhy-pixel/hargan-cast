@@ -92,6 +92,55 @@ jobs:
           path: test-results/
           retention-days: 14
 
+  # The Mac app: the phone apps' PlayStation core behind the desktop's sidecar
+  # contract (native/ps-core/mobile/sidecar.c), the interface tests, and an
+  # ad-hoc signed DMG for Apple silicon.
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: PlayStation core
+        run: node scripts/build-native.mjs
+      # It has to start and greet: the first line names the media socket.
+      - name: The core says hello
+        run: |
+          node -e '
+            const { spawn } = require("node:child_process")
+            const core = spawn("native/bin/hargan-ps-core", [], { stdio: ["pipe", "pipe", "inherit"] })
+            const timer = setTimeout(() => { console.error("no hello in 20 s"); core.kill(); process.exit(1) }, 20000)
+            core.stdout.once("data", (data) => {
+              clearTimeout(timer)
+              const line = String(data).split("\n")[0]
+              console.log(line)
+              const hello = JSON.parse(line)
+              core.stdin.end()
+              core.once("exit", (code) => process.exit(hello.ev === "hello" && hello.port > 0 && code === 0 ? 0 : 1))
+            })'
+      - run: npx electron-vite build
+      - name: Interface tests
+        run: npx playwright test
+      - name: Package
+        run: npx electron-builder --mac dmg --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v5
+        with:
+          name: HarganCast-mac
+          path: dist/*.dmg
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ui-test-results-mac
+          path: test-results/
+          retention-days: 14
+
   fuzz:
     name: Fuzz the core's input parsers
     runs-on: ubuntu-latest

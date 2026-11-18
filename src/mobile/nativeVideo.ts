@@ -1,5 +1,6 @@
-// window.hc.ps.nativeVideo on Android: the stream's picture through the phone's
-// own MediaCodec onto a surface under the web view (see NativeVideo.java).
+// window.hc.ps.nativeVideo: the stream's picture through the phone's own decoder
+// onto a surface under the web view; MediaCodec on Android (NativeVideo.java),
+// VideoToolbox on iPhone and iPad (NativeVideo.swift).
 import { Capacitor } from '@capacitor/core'
 import type { NativeVideoApi, NativeVideoStats, NativeVideoTest } from '../shared/types'
 import { PsCore } from './native'
@@ -37,9 +38,12 @@ async function testClip(width: number, height: number) {
 }
 
 export function nativeVideo(): NativeVideoApi | undefined {
-  if (Capacitor.getPlatform() !== 'android') return undefined
+  const platform = Capacitor.getPlatform()
+  if (platform !== 'android' && platform !== 'ios') return undefined
   return {
     async test(): Promise<NativeVideoTest> {
+      // The clip is made with WebCodecs, which older iPhones' web views lack.
+      if (typeof VideoEncoder === 'undefined') return { decoded: 0, decoder: 'WebCodecs' }
       const units = await testClip(640, 360)
       return PsCore.nativeVideoTest({ units, hevc: false, width: 640, height: 360 })
     },

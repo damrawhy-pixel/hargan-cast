@@ -6,6 +6,7 @@ import { canStart, psFacts, serviceLabel, type HubItem } from '../lib/items'
 import { setSpotlight, toggleFavorite, useStore } from '../lib/store'
 import { GameProfile } from './GameProfile'
 import { Achievements } from './Achievements'
+import { QualityAdvice } from './QualityAdvice'
 import { useSettings } from '../lib/useSettings'
 
 const YEAR = (date?: string) => (date ? new Date(date).getFullYear() || undefined : undefined)
@@ -120,6 +121,7 @@ export function GameDetail({ item, onClose, onPlay, onOpenSettings }: Props) {
             </div>
             {item.action === 'play' && <LaunchShortcuts item={item} />}
             {item.xbox && <Achievements productId={item.xbox.productId} titleId={item.xbox.titleId} compact />}
+            {item.action === 'play' && <QualityAdvice gameKey={item.key} />}
             {item.action === 'play' && <GameProfile item={item} />}
           </div>
         </div>

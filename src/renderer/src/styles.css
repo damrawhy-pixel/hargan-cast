@@ -135,7 +135,7 @@ button { cursor: pointer; }
 .tabs button:hover { color: rgba(255, 255, 255, 0.85); }
 .tabs button[aria-selected='true'] { color: #fff; font-weight: 600; }
 
-.topbar-tools { margin-left: auto; display: flex; align-items: center; gap: 16px; -webkit-app-region: no-drag; }
+.topbar-tools { margin-inline-start: auto; display: flex; align-items: center; gap: 16px; -webkit-app-region: no-drag; }
 .round-button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: #fff; transition: background 160ms, transform 240ms var(--spring), box-shadow 180ms; }
 .round-button svg { width: 22px; height: 22px; fill: currentColor; }
 .round-button:hover, .round-button[aria-selected='true'] { background: rgba(255, 255, 255, 0.22); }
@@ -161,12 +161,12 @@ button { cursor: pointer; }
 
 /* Tiles never change size in the layout. The picked one grows with a transform and
    the ones after it slide over by the same amount, so a move costs no reflow. */
-.launcher { display: flex; align-items: flex-start; gap: 16px; height: calc(var(--launch-big) + 74px); padding: 16px var(--gutter) 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-padding-left: var(--gutter); scroll-snap-type: x mandatory; }
+.launcher { display: flex; align-items: flex-start; gap: 16px; height: calc(var(--launch-big) + 74px); padding: 16px var(--gutter) 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-padding-inline-start: var(--gutter); scroll-snap-type: x mandatory; }
 .launcher::-webkit-scrollbar { display: none; }
 /* Room after the last tile, so even it can scroll to the start of the row. */
 .launcher::after { content: ''; flex: none; width: calc(100vw - var(--gutter) * 2 - var(--launch-big) - 16px); }
 /* Snapping keeps the chosen game pinned at the start. */
-.launch-tile { position: relative; flex: none; width: var(--launch); padding: 0; border: 0; background: none; color: #fff; text-align: left; scroll-snap-align: start; outline: none !important; transition: translate 420ms var(--spring); }
+.launch-tile { position: relative; flex: none; width: var(--launch); padding: 0; border: 0; background: none; color: #fff; text-align: start; scroll-snap-align: start; outline: none !important; transition: translate 420ms var(--spring); }
 .launch-tile[aria-selected='true'] ~ .launch-tile,
 .launch-tile--library:focus ~ .launch-tile { translate: calc(var(--launch-big) - var(--launch)) 0; }
 .launch-icon { position: relative; display: grid; place-items: center; width: var(--launch); height: var(--launch); overflow: hidden; border-radius: 14px; background: rgba(255, 255, 255, 0.08); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); transform-origin: top left; transition: scale 420ms var(--spring), box-shadow 200ms; }
@@ -176,7 +176,7 @@ button { cursor: pointer; }
 .launch-tile:focus .launch-icon { box-shadow: 0 0 0 2px #fff, 0 0 22px rgba(255, 255, 255, 0.35), 0 14px 30px rgba(0, 0, 0, 0.55); }
 .launch-tile:hover .launch-icon { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.7), 0 14px 30px rgba(0, 0, 0, 0.55); }
 /* The name sits under the grown picture and takes no room in the row. */
-.launch-name { position: absolute; left: 0; top: calc(var(--launch-big) + 10px); width: max-content; max-width: calc(var(--launch-big) * 2); overflow: hidden; font-size: 17px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.75); opacity: 0; translate: 0 -8px; pointer-events: none; transition: opacity 220ms, translate 380ms var(--spring); }
+.launch-name { position: absolute; inset-inline-start: 0; top: calc(var(--launch-big) + 10px); width: max-content; max-width: calc(var(--launch-big) * 2); overflow: hidden; font-size: 17px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.75); opacity: 0; translate: 0 -8px; pointer-events: none; transition: opacity 220ms, translate 380ms var(--spring); }
 .launch-name small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: rgba(255, 255, 255, 0.7); }
 .launch-tile[aria-selected='true'] .launch-name,
 .launch-tile--library:focus .launch-name { opacity: 1; translate: 0 0; transition-delay: 120ms; }
@@ -217,9 +217,9 @@ button { cursor: pointer; }
 /* --- What sits under the selected game, once the eye settles --------------- */
 .hub { height: 196px; padding: 0 0 26px; opacity: 0; transform: translate3d(0, 24px, 0); transition: opacity 420ms var(--ease), transform 520ms var(--ease); pointer-events: none; }
 .hub--in { opacity: 1; transform: none; pointer-events: auto; }
-.hub-row { display: flex; gap: 16px; height: 100%; padding: 10px var(--gutter); overflow-x: auto; scrollbar-width: none; scroll-padding-left: var(--gutter); }
+.hub-row { display: flex; gap: 16px; height: 100%; padding: 10px var(--gutter); overflow-x: auto; scrollbar-width: none; scroll-padding-inline-start: var(--gutter); }
 .hub-row::-webkit-scrollbar { display: none; }
-.hub-card { flex: none; position: relative; height: 100%; padding: 0; border: 0; border-radius: 14px; overflow: hidden; background: rgba(12, 14, 20, 0.8); color: #fff; text-align: left; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); outline: none !important; animation: hub-in 560ms var(--spring) both; transition: transform 260ms var(--spring), box-shadow 200ms; }
+.hub-card { flex: none; position: relative; height: 100%; padding: 0; border: 0; border-radius: 14px; overflow: hidden; background: rgba(12, 14, 20, 0.8); color: #fff; text-align: start; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); outline: none !important; animation: hub-in 560ms var(--spring) both; transition: transform 260ms var(--spring), box-shadow 200ms; }
 .hub-card:nth-child(2) { animation-delay: 70ms; } .hub-card:nth-child(3) { animation-delay: 140ms; } .hub-card:nth-child(4) { animation-delay: 210ms; }
 .hub-card:nth-child(n + 5) { animation-delay: 280ms; }
 @keyframes hub-in { from { opacity: 0; transform: translate3d(0, 26px, 0) scale(0.96); } to { opacity: 1; transform: none; } }
@@ -239,7 +239,7 @@ button { cursor: pointer; }
 .viewer-head { position: relative; display: flex; align-items: center; gap: 18px; padding: 18px 150px 18px var(--gutter); background: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent); font-size: 16px; }
 .viewer-head span:first-child { font-weight: 600; }
 .viewer-head span:nth-child(2) { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
-.viewer-head .ghost { margin-left: auto; }
+.viewer-head .ghost { margin-inline-start: auto; }
 .viewer-strip { position: relative; display: flex; gap: 12px; padding: 22px var(--gutter) 28px; overflow-x: auto; scrollbar-width: none; background: linear-gradient(0deg, rgba(0, 0, 0, 0.8), transparent); }
 .viewer-strip::-webkit-scrollbar { display: none; }
 .viewer-thumb { flex: none; width: 180px; aspect-ratio: 16 / 9; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: #111; opacity: 0.55; outline: none !important; transition: opacity 200ms, transform 240ms var(--spring), box-shadow 200ms; }
@@ -267,7 +267,7 @@ button { cursor: pointer; }
 @keyframes skeleton { from { opacity: 0.5; } to { opacity: 1; } }
 
 /* --- Tiles: square, with the name under the art --------------------------- */
-.tile { position: relative; display: block; padding: 0; border: 0; background: none; text-align: left; border-radius: 12px; animation: tile-in 420ms var(--ease) both; }
+.tile { position: relative; display: block; padding: 0; border: 0; background: none; text-align: start; border-radius: 12px; animation: tile-in 420ms var(--ease) both; }
 @keyframes tile-in { from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.97); } to { opacity: 1; transform: none; } }
 /* Only the first screenful staggers; later cards simply appear */
 .tile:nth-child(2) { animation-delay: 30ms; } .tile:nth-child(3) { animation-delay: 60ms; } .tile:nth-child(4) { animation-delay: 90ms; }
@@ -288,9 +288,9 @@ button { cursor: pointer; }
 [data-input='pad'] .tile:focus { outline: none; z-index: 2; }
 [data-input='pad'] .tile:focus .tile-art { transform: scale(1.06); box-shadow: 0 0 0 3px #fff, 0 0 28px rgba(255, 255, 255, 0.3), 0 18px 38px rgba(0, 0, 0, 0.6); }
 .tile:hover, .tile:focus-visible { z-index: 2; }
-.tile-badge { position: absolute; top: 8px; left: 8px; z-index: 2; padding: 2px 8px; border-radius: 7px; background: rgba(6, 8, 12, 0.72); font-size: 11px; font-weight: 700; letter-spacing: 0.02em; transition: transform 280ms var(--spring); pointer-events: none; }
+.tile-badge { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 2; padding: 2px 8px; border-radius: 7px; background: rgba(6, 8, 12, 0.72); font-size: 11px; font-weight: 700; letter-spacing: 0.02em; transition: transform 280ms var(--spring); pointer-events: none; }
 .tile:hover .tile-badge, .tile:focus-visible .tile-badge { transform: translate(-3px, -3px); }
-.tile-dot { position: absolute; top: 10px; right: 10px; z-index: 2; width: 10px; height: 10px; border-radius: 50%; background: #1f8fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); pointer-events: none; }
+.tile-dot { position: absolute; top: 10px; inset-inline-end: 10px; z-index: 2; width: 10px; height: 10px; border-radius: 50%; background: #1f8fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); pointer-events: none; }
 .tile[data-service='xbox'] .tile-dot { background: #22b322; }
 .tile-name { display: -webkit-box; margin-top: 10px; font-size: 13px; line-height: 1.3; color: rgba(255, 255, 255, 0.7); overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; transition: color 180ms; }
 .tile:hover .tile-name, .tile:focus-visible .tile-name, [data-input='pad'] .tile:focus .tile-name { color: #fff; }
@@ -299,14 +299,14 @@ button { cursor: pointer; }
 .library { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .library-head { display: flex; align-items: center; gap: 20px; padding: 8px var(--gutter) 2px; }
 .library-head h1 { margin: 0; font-family: var(--display); font-size: 30px; font-weight: 500; }
-.library-tools { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.library-tools { margin-inline-start: auto; display: flex; gap: 12px; align-items: center; }
 .search { display: flex; align-items: center; gap: 8px; width: 260px; height: 40px; padding: 0 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); border: 1px solid transparent; transition: width 280ms var(--ease), border-color 180ms, background 180ms; }
 .search svg { flex: none; width: 18px; height: 18px; fill: var(--ink-soft); }
 .search input { flex: 1; min-width: 0; padding: 0; border: 0; background: none; outline: none !important; user-select: text; }
 .search:focus-within { width: 320px; background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.55); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px 30px; margin: 0 var(--gutter); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
 .chip { position: relative; padding: 14px 0; border: 0; background: none; color: rgba(255, 255, 255, 0.55); font-size: 17px; font-weight: 500; transition: color 200ms; }
-.chip span { margin-left: 4px; font-size: 13px; color: rgba(255, 255, 255, 0.38); font-variant-numeric: tabular-nums; }
+.chip span { margin-inline-start: 4px; font-size: 13px; color: rgba(255, 255, 255, 0.38); font-variant-numeric: tabular-nums; }
 .chip:hover, .chip[aria-selected='true'] { color: #fff; }
 .chip::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; border-radius: 3px; background: #fff; transform: scaleX(0); transition: transform 320ms var(--spring); }
 .chip[aria-selected='true']::after { transform: scaleX(1); }
@@ -343,9 +343,9 @@ button { cursor: pointer; }
 .signin-card h1 { margin: 0 0 10px; font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; font-size: 34px; font-weight: 300; }
 .signin-card p { margin: 0 0 8px; color: var(--ink-soft); line-height: 1.5; }
 .signin-card .primary { margin-top: 16px; width: 100%; }
-.fallback { margin-top: 18px; color: var(--ink-soft); font-size: 13px; text-align: left; }
+.fallback { margin-top: 18px; color: var(--ink-soft); font-size: 13px; text-align: start; }
 .fallback summary { cursor: pointer; }
-.fallback ol { padding-left: 18px; line-height: 1.7; }
+.fallback ol { padding-inline-start: 18px; line-height: 1.7; }
 .fallback form { display: flex; gap: 8px; }
 .fallback input { flex: 1; min-width: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); user-select: text; }
 
@@ -359,7 +359,7 @@ button { cursor: pointer; }
 /* --- Settings ------------------------------------------------------------- */
 .settings { flex: 1; min-height: 0; display: flex; }
 .settings-nav { flex: none; width: 220px; padding: 12px; display: flex; flex-direction: column; gap: 3px; }
-.settings-nav button { padding: 10px 14px; border: 0; border-radius: 12px; background: none; color: var(--ink-soft); text-align: left; transition: background 160ms, color 160ms, transform 240ms var(--spring); }
+.settings-nav button { padding: 10px 14px; border: 0; border-radius: 12px; background: none; color: var(--ink-soft); text-align: start; transition: background 160ms, color 160ms, transform 240ms var(--spring); }
 .settings-nav button:hover { background: var(--raised); color: #fff; transform: translateX(3px); }
 .settings-nav button[aria-current='true'] { background: var(--brand); color: #fff; font-weight: 600; }
 .settings-body { flex: 1; min-width: 0; overflow-y: auto; padding: 12px 28px 40px; display: flex; justify-content: center; align-items: flex-start; }
@@ -373,7 +373,7 @@ button { cursor: pointer; }
 .setting-control { flex: none; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; max-width: 55%; }
 .setting-control select, .setting-inline input { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: #10131b; max-width: 240px; }
 .setting-control input[type='range'] { width: 150px; accent-color: var(--brand); }
-.setting-control output { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.setting-control output { min-width: 44px; text-align: end; unicode-bidi: plaintext; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
 .setting-control .error { flex-basis: 100%; margin: 0; font-size: 13px; }
 .setting-inline { display: flex; gap: 6px; }
 .setting-inline input { width: 160px; user-select: text; }
@@ -482,7 +482,7 @@ button { cursor: pointer; }
 [data-platform='mobile'] body { -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
 [data-platform='mobile'] .topbar { height: calc(64px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) calc(18px + env(safe-area-inset-right)) 0 calc(18px + env(safe-area-inset-left)); }
 [data-platform='mobile'] .launch { min-height: calc(100vh - 64px - env(safe-area-inset-top)); }
-[data-platform='mobile'] .viewer-head { padding-right: var(--gutter); padding-top: calc(18px + env(safe-area-inset-top)); }
+[data-platform='mobile'] .viewer-head { padding-inline-end: var(--gutter); padding-top: calc(18px + env(safe-area-inset-top)); }
 [data-platform='mobile'] .home, [data-platform='mobile'] .library-scroll { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
 /* Out of the thumbs' way: just above the middle row of the touch controls. */
 [data-platform='mobile'] .stream-stats { pointer-events: none; top: auto; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 16vh); transform: translateX(-50%); white-space: nowrap; }
@@ -496,7 +496,7 @@ button { cursor: pointer; }
 }
 .crash h1 { margin: 0; font-size: 24px; }
 .crash p { margin: 0; max-width: 640px; color: #b4bccb; line-height: 1.5; }
-.crash pre { max-width: 100%; margin: 0; padding: 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: #ffb4a8; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.crash pre { max-width: 100%; margin: 0; direction: ltr; text-align: left; padding: 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); color: #ffb4a8; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 
 /* --- On-screen controls (phones and tablets) ------------------------------- */
 .touch {
@@ -630,7 +630,7 @@ button { cursor: pointer; }
 /* Remote Play: the user's own consoles */
 .consoles { margin-bottom: 28px; }
 .consoles .shelf-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.consoles .shelf-head h2 { margin-right: auto; }
+.consoles .shelf-head h2 { margin-inline-end: auto; }
 .consoles .hint { color: var(--ink-soft); margin: 6px 0 0; }
 .console-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
 .console-card { display: grid; gap: 6px; padding: 16px; border-radius: 16px; }
@@ -640,7 +640,7 @@ button { cursor: pointer; }
 .console-add > .ghost { justify-self: start; }
 .console-address { display: flex; gap: 8px; flex-wrap: wrap; }
 .console-address input { flex: 1 1 200px; }
-.console-link ol { margin: 0; padding-left: 20px; color: var(--ink-soft); }
+.console-link ol { margin: 0; padding-inline-start: 20px; color: var(--ink-soft); }
 .console-link input[inputmode='numeric'] { font-size: 1.4rem; letter-spacing: 0.2em; max-width: 220px; }
 
 /* A screenshot leaves the app's own overlays out. */
@@ -654,7 +654,7 @@ button { cursor: pointer; }
 /* Xbox achievements */
 .achievements { display: grid; gap: 8px; margin-top: 14px; max-width: 560px; }
 .achievements-note { color: var(--ink-soft); margin-top: 12px; }
-.achievements-summary { display: grid; grid-template-columns: auto auto auto 1fr; gap: 12px; align-items: center; text-align: left; }
+.achievements-summary { display: grid; grid-template-columns: auto auto auto 1fr; gap: 12px; align-items: center; text-align: start; }
 .achievements-bar { display: block; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; min-width: 60px; }
 .achievements-bar span { display: block; height: 100%; background: var(--brand); }
 .achievements-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
@@ -715,7 +715,38 @@ button { cursor: pointer; }
 .autotune p { margin: 0; color: var(--ink-soft); }
 .autotune--card { position: relative; z-index: 2; max-width: 560px; padding: 16px 18px; border-radius: 16px; margin: 0 0 18px; }
 .autotune-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.autotune-reasons { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.autotune-reasons { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
 
 /* Android's native picture lies under the page: everything over it turns see-through. */
 html.native-video, html.native-video body, html.native-video .app, html.native-video .stream, html.native-video .stream-picture, html.native-video .stream-native { background: transparent !important; }
+
+.quality-advice { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 14px; margin-top: 14px; max-width: 560px; }
+.quality-advice span { flex: 1 1 260px; }
+
+.whats-new { max-width: 520px; text-align: start; }
+.whats-new ul { margin: 6px 0 14px; padding-inline-start: 20px; display: grid; gap: 6px; }
+.whats-new h3 { margin: 10px 0 0; color: var(--ink-soft); font-size: 0.95rem; }
+
+/* On-screen control editor */
+.touch-editor { position: fixed; inset: 0; z-index: 70; background: #05070b; }
+.touch-editor .touch { position: absolute; inset: 0; }
+.touch--editing .tc-editable { outline: 2px dashed rgba(255, 255, 255, 0.35); outline-offset: 4px; cursor: grab; touch-action: none; }
+.touch--editing .tc-selected { outline: 2px solid var(--brand); }
+.touch--editing .tc-stick { opacity: 0.35; pointer-events: none; }
+.tc-middle.tc-editable { pointer-events: auto; }
+.touch-editor-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 16px; width: min(760px, calc(100vw - 24px)); }
+.touch-editor-bar label { display: flex; gap: 8px; align-items: center; }
+.touch-editor-bar small { color: var(--ink-soft); flex: 1 1 160px; }
+.touch-editor-tabs { display: flex; gap: 6px; }
+
+/* Living-room view: the controller's focus has to read from across the room. */
+[data-living-room] [data-nav]:focus-visible, [data-living-room][data-input='pad'] [data-nav]:focus { outline: 4px solid var(--brand); outline-offset: 4px; }
+[data-living-room] .clock { display: none; }
+
+/* Right-to-left languages mirror the app, but not the game: the stream and the
+   touch controls keep the controller's own left and right. Their text still reads
+   in the page's direction. */
+.stream, .touch-editor { direction: ltr; }
+[dir='rtl'] .stream-menu, [dir='rtl'] .stream-notice, [dir='rtl'] .touch-editor-bar { direction: rtl; }
+[dir='rtl'] .switch span { left: auto; right: 3px; }
+[dir='rtl'] .switch[aria-checked='true'] span { transform: translateX(-20px); }

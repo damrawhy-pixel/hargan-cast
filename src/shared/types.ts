@@ -218,13 +218,20 @@ export interface NativeVideoTest {
   error?: string
 }
 
-/** Android's native picture path for PlayStation streams. */
+/** The phones' native picture path for PlayStation streams (Android and iOS). */
 export interface NativeVideoApi {
   /** Decodes a short clip off screen: does this phone's decoder take the stream? */
   test(): Promise<NativeVideoTest>
   start(options: { hevc: boolean; width: number; height: number }): Promise<void>
   stop(): Promise<void>
   onStats(cb: (stats: NativeVideoStats) => void): () => void
+}
+
+/** What PSN's connection broker will meet on this network. */
+export interface NatReport {
+  nat: 'cone' | 'symmetric' | 'blocked' | 'unknown'
+  publicAddress?: string
+  upnp: boolean
 }
 
 export interface SavedAccounts {
@@ -243,7 +250,7 @@ export interface AccountsApi {
 }
 
 export interface HarganApi {
-  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined>; networkTest?(): Promise<NetworkReport>; screenshot?(title: string): Promise<string | undefined>; saveClip?(title: string, data: ArrayBuffer): Promise<string>; showCapture?(file: string): void; takeLaunch?(): Promise<string | undefined>; discord?: boolean; presence?(title: string, service: string): void; onLaunch?(cb: (target: string) => void): () => void; createShortcut?(key: string, name: string): Promise<string>; addToSteam?(key: string, name: string): Promise<number> }
+  platform: { fullscreen(on: boolean): void; toggleFullscreen(): void; streaming(on: boolean): void; openExternal(url: string): void; openLicenses(): void; windows?: boolean; log?(text: string): void; reportError?(text: string): void; exportDiagnostics?(): Promise<string | undefined>; networkTest?(): Promise<NetworkReport>; screenshot?(title: string): Promise<string | undefined>; saveClip?(title: string, data: ArrayBuffer): Promise<string>; showCapture?(file: string): void; takeLaunch?(): Promise<string | undefined>; dualSenseTriggers?(left: number, right: number): void; discord?: boolean; gameMode?: boolean; presence?(title: string, service: string): void; onLaunch?(cb: (target: string) => void): () => void; createShortcut?(key: string, name: string): Promise<string>; addToSteam?(key: string, name: string): Promise<number> }
   settings: {
     get(): Promise<AppSettings>
     set(patch: Partial<AppSettings>): Promise<AppSettings>
@@ -288,6 +295,8 @@ export interface HarganApi {
     info(game: PsGame): Promise<GameInfo>
     routeSpeaker(): Promise<boolean>
     nativeVideo?: NativeVideoApi
+    /** Desktop: can a console be reached through PSN from outside this network? */
+    natTest?(): Promise<NatReport>
     accounts?: AccountsApi & { rename(label: string): Promise<void> }
     /** Remote Play with the user's own console. */
     consoles?: {

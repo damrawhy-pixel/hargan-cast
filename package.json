@@ -20,6 +20,7 @@
         "check": "npm run typecheck && npm run lint && npm test",
         "native": "node scripts/build-native.mjs",
         "dist": "electron-vite build && electron-builder --win dir",
+        "dist:mac": "electron-vite build && electron-builder --mac --publish never",
         "build:mobile": "vite build --config vite.mobile.config.ts",
         "mobile:sync": "npm run build:mobile && cap sync",
         "dist:installer": "electron-vite build && electron-builder --win nsis --publish never"
@@ -80,10 +81,6 @@
         ],
         "extraResources": [
             {
-                "from": "native/bin/hargan-ps-core.exe",
-                "to": "hargan-ps-core.exe"
-            },
-            {
                 "from": "LICENSE",
                 "to": "LICENSE"
             },
@@ -112,7 +109,31 @@
         },
         "win": {
             "target": "dir",
-            "signAndEditExecutable": false
+            "signAndEditExecutable": false,
+            "extraResources": [
+                {
+                    "from": "native/bin/hargan-ps-core.exe",
+                    "to": "hargan-ps-core.exe"
+                }
+            ]
+        },
+        "mac": {
+            "target": "dmg",
+            "category": "public.app-category.games",
+            "icon": "Hargan Cast Logo.png",
+            "identity": "-",
+            "hardenedRuntime": false,
+            "artifactName": "HarganCast-${version}-${arch}.${ext}",
+            "extraResources": [
+                {
+                    "from": "native/bin/hargan-ps-core",
+                    "to": "hargan-ps-core"
+                }
+            ],
+            "extendInfo": {
+                "NSMicrophoneUsageDescription": "Voice chat while playing on your own PlayStation.",
+                "NSBluetoothAlwaysUsageDescription": "Controllers connected over Bluetooth."
+            }
         },
         "publish": {
             "provider": "github",

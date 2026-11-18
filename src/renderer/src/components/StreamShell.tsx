@@ -10,8 +10,9 @@ import { Achievements } from './Achievements'
 import { svgMatrix } from '../lib/colorAssist'
 import { saveRecord } from '../lib/history'
 import { startGyroAim } from '../lib/gyro'
+import { installTriggerBridge } from '../lib/dsTriggers'
 import { TouchControls, type TouchPlatform } from './TouchControls'
-import { t } from '../../../shared/i18n'
+import { t, type Message } from '../../../shared/i18n'
 
 export interface StreamStats {
   fps: number
@@ -24,6 +25,10 @@ export interface StreamStats {
   bufferMs?: number
   /** Time a decoded frame waits for its screen refresh, ms. */
   waitMs?: number
+  /** The app's picture filters on the graphics card, per frame, ms. */
+  gpuMs?: number
+  /** A filter just turned off because the graphics card could not keep up. */
+  lightened?: Message
   /** Variation in frame arrival, ms. */
   jitterMs?: number
   /** Frames dropped to catch up, since the start. */
@@ -121,7 +126,7 @@ function useTouchControls() {
 
 // One line per stream in the log (time to picture, frame rate, bit rate, loss,
 // latency), so "it stuttered yesterday" can be looked up afterwards.
-function useSessionReport(platform: string, title: string, live: boolean, stats?: StreamStats) {
+function useSessionReport(platform: string, key: string, title: string, live: boolean, stats?: StreamStats) {
   const started = useRef(Date.now())
   const series = useRef({ fps: [] as number[], mbps: [] as number[], delay: [] as (number | null)[] })
   const totals = useRef({ samples: 0, fps: 0, minFps: Infinity, mbps: 0, rtt: 0, rttSamples: 0, total: 0, totalSamples: 0, decode: 0, decodeSamples: 0, jitter: 0, jitterSamples: 0, skipped: 0, lost: 0, size: '', liveAt: 0 })
@@ -176,6 +181,7 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
         saveRecord({
           at: new Date(started.current).toISOString(),
           platform,
+          key,
           title,
           seconds,
           toPicture: (t.liveAt - started.current) / 1000,
@@ -189,7 +195,7 @@ function useSessionReport(platform: string, title: string, live: boolean, stats?
           ...series.current,
         })
     },
-    [platform, title],
+    [platform, key, title],
   )
 }
 
@@ -224,7 +230,7 @@ function useResolutionNotice(live: boolean, size?: string) {
 }
 
 export function StreamShell({ platform, profileKey, title, stage, live, stats, queue, controller, image, achievements, microphone, onExit, children }: Props) {
-  useSessionReport(platform, title, live, stats)
+  useSessionReport(platform, profileKey, title, live, stats)
   const notice = useResolutionNotice(live, stats?.size)
   const touch = useTouchControls()
   const settings = settingsFor(getSettings(), profileKey)
@@ -244,6 +250,15 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
   useEffect(() => installLayout(layout), [layout])
 
   const [menu, setMenu] = useState(false)
+  // The picture's filters lightened for a slow graphics card: said once, briefly.
+  const [lightNotice, setLightNotice] = useState<string>()
+  const lightened = stats?.lightened
+  useEffect(() => {
+    if (!lightened) return
+    setLightNotice(t('Ekran kartı yetişemediği için {what} kapatıldı.', { what: t(lightened) }))
+    const timer = setTimeout(() => setLightNotice(undefined), NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [lightened])
   // Gyro aiming with a DualSense in Xbox games, on the desktop.
   const [gyro] = useState(() => ({ mode: settings.xboxGyro, sensitivity: settings.xboxGyroSensitivity, invertX: settings.xboxGyroInvertX, invertY: settings.xboxGyroInvertY }))
   useEffect(() => {
@@ -259,6 +274,10 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
       stop?.()
     }
   }, [gyro, platform])
+
+  // Xbox trigger rumble on a DualSense's triggers, through the PlayStation core.
+  const [triggers] = useState(() => platform === 'xbox' && !MOBILE && settings.xboxDualSenseTriggers && Boolean(window.hc.platform.dualSenseTriggers))
+  useEffect(() => (triggers ? installTriggerBridge((l, r) => window.hc.platform.dualSenseTriggers!(l, r)) : undefined), [triggers])
 
   // Discord's "Playing" line, while the picture is up.
   useEffect(() => {
@@ -437,6 +456,7 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
           {stats.bufferMs !== undefined && <> · {t('tampon')} <b>{stats.bufferMs.toFixed(0)}</b> ms</>}
           {stats.decodeMs !== undefined && <> · {t('çözme')} <b>{stats.decodeMs.toFixed(1)}</b> ms</>}
           {stats.waitMs !== undefined && <> · {t('ekran sırası')} <b>{stats.waitMs.toFixed(1)}</b> ms</>}
+          {stats.gpuMs !== undefined && <> · {t('süzgeçler')} <b>{stats.gpuMs.toFixed(1)}</b> ms</>}
           {totalLatency(stats) !== undefined && <> · {t('toplam')} ≈ <b>{totalLatency(stats)}</b> ms</>}
           {stats.jitterMs !== undefined && <> · {t('dalgalanma')} <b>{stats.jitterMs.toFixed(1)}</b> ms</>}
           {stats.skipped ? <> · {t('atlanan')} <b>{stats.skipped}</b></> : null}
@@ -445,7 +465,7 @@ export function StreamShell({ platform, profileKey, title, stage, live, stats, q
         </div>
       )}
 
-      {notice && !menu && !toast && <div className="stream-notice" role="status">{notice}</div>}
+      {(lightNotice ?? notice) && !menu && !toast && <div className="stream-notice" role="status">{lightNotice ?? notice}</div>}
       {toast && !clean && (
         <div className="stream-notice stream-toast" role="status">
           {toast.text}

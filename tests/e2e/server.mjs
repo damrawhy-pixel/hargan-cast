@@ -24,11 +24,13 @@ http.createServer(async (req, res) => {
   if (req.url === '/__hello') return res.end(JSON.stringify(hello))
   if (req.url === '/__events') return res.end(JSON.stringify(events))
   if (req.url.startsWith('/__capture')) {
-    const hevc = req.url.includes('hevc=1')
+    const query = new URL(req.url, 'http://harness').searchParams
+    const hevc = query.get('hevc') === '1'
     const body = []
     for await (const c of req) body.push(c)
     fs.writeFileSync(capture, Buffer.concat(body))
-    core.stdin.write(JSON.stringify({ cmd: 'diag', file: capture, hevc }) + '\n')
+    // loss (% of frames) and jitter (ms) play a bad network into the replay.
+    core.stdin.write(JSON.stringify({ cmd: 'diag', file: capture, hevc, loss: Number(query.get('loss') ?? 0), jitter: Number(query.get('jitter') ?? 0) }) + '\n')
     return res.end('ok')
   }
   const rel = req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]).slice(1)

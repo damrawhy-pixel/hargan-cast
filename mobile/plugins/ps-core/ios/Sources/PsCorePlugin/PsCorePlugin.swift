@@ -19,11 +19,15 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "rumble", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "controllerMotion", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultLoad", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "vaultSave", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "vaultSave", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "nativeVideoStart", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "nativeVideoStop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "nativeVideoTest", returnType: CAPPluginReturnPromise)
     ]
 
     private let queue = DispatchQueue(label: "app.hargan.ps")
     private var activeSignIn: PsSignInController?
+    private var nativeVideo: NativeVideo?
 
     private static var cacheDirectory: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -129,6 +133,38 @@ public class PsCorePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func controllerMotion(_ call: CAPPluginCall) {
         GamepadFeedback.shared.motion(call.getBool("on") ?? false)
         call.resolve()
+    }
+
+    /// The stream's picture through VideoToolbox onto a layer under the web view.
+    @objc func nativeVideoStart(_ call: CAPPluginCall) {
+        nativeVideo?.stop()
+        let video = NativeVideo(webView: bridge?.webView, hevc: call.getBool("hevc") ?? false,
+                                width: call.getInt("width") ?? 1920, height: call.getInt("height") ?? 1080) { [weak self] fps, decodeMs, bytes, width, height, first in
+            DispatchQueue.main.async {
+                self?.notifyListeners("nativeVideo", data: [
+                    "fps": fps, "decodeMs": decodeMs, "mbps": Double(bytes) * 8 / 1e6,
+                    "width": width, "height": height, "first": first
+                ])
+            }
+        }
+        nativeVideo = video
+        video.start()
+        call.resolve()
+    }
+
+    @objc func nativeVideoStop(_ call: CAPPluginCall) {
+        nativeVideo?.stop()
+        nativeVideo = nil
+        call.resolve()
+    }
+
+    /// Decodes a short clip (base64 access units) to learn whether this device's decoder takes it.
+    @objc func nativeVideoTest(_ call: CAPPluginCall) {
+        let units = (call.getArray("units") as? [String] ?? []).compactMap { Data(base64Encoded: $0).map { [UInt8]($0) } }
+        let hevc = call.getBool("hevc") ?? false
+        queue.async {
+            call.resolve(NativeVideo.selfTest(units, hevc: hevc))
+        }
     }
 
     /// A stream is watched, not touched: keep the screen from going to sleep.

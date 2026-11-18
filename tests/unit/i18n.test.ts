@@ -1,18 +1,28 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getLanguage, resolveLanguage, setLanguage, t, tryT, type Message } from '../../src/shared/i18n'
+import { contentLanguage, direction, getLanguage, locale, resolveLanguage, setLanguage, t, tryT, type Message } from '../../src/shared/i18n'
+import { ar } from '../../src/shared/i18n/ar'
+import { de } from '../../src/shared/i18n/de'
 import { en } from '../../src/shared/i18n/en'
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
 
 afterEach(() => setLanguage('tr'))
 
-describe('dictionaries', () => {
-  it('keep every placeholder of the Turkish text', () => {
-    for (const [tr, english] of Object.entries(en)) expect(placeholders(english), tr).toEqual(placeholders(tr))
+describe.each([
+  ['en', en],
+  ['de', de],
+  ['ar', ar],
+])('the %s dictionary', (_, dictionary: Record<string, string>) => {
+  it('keeps every placeholder of the Turkish text', () => {
+    for (const [tr, text] of Object.entries(dictionary)) expect(placeholders(text), tr).toEqual(placeholders(tr))
   })
 
-  it('have no empty translations', () => {
-    for (const [tr, english] of Object.entries(en)) expect(english.trim(), tr).not.toBe('')
+  it('has no empty translations', () => {
+    for (const [tr, text] of Object.entries(dictionary)) expect(text.trim(), tr).not.toBe('')
+  })
+
+  it('covers every message the English one does', () => {
+    expect(Object.keys(dictionary).sort()).toEqual(Object.keys(en).sort())
   })
 })
 
@@ -32,6 +42,13 @@ describe('t', () => {
     expect(t('{n} oyun' as Message)).toBe('{n} oyun')
   })
 
+  it('gives German and Arabic text', () => {
+    setLanguage('de')
+    expect(t('{n} oyun', { n: 3 })).toBe('3 Spiele')
+    setLanguage('ar')
+    expect(t('Oyna')).toBe('العب')
+  })
+
   it('translates runtime text only when it is known', () => {
     setLanguage('en')
     expect(tryT('Komut boş')).toBe('Empty command')
@@ -42,12 +59,24 @@ describe('t', () => {
 describe('resolveLanguage', () => {
   it('follows the system when unset', () => {
     expect(resolveLanguage('', 'tr-TR')).toBe('tr')
-    expect(resolveLanguage('', 'de-DE')).toBe('en')
+    expect(resolveLanguage('', 'de-DE')).toBe('de')
+    expect(resolveLanguage('', 'ar-EG')).toBe('ar')
+    expect(resolveLanguage('', 'fr-FR')).toBe('en')
   })
 
   it('obeys an explicit choice', () => {
     expect(resolveLanguage('en', 'tr-TR')).toBe('en')
     expect(resolveLanguage('tr', 'en-US')).toBe('tr')
     expect(getLanguage()).toBe('tr')
+  })
+})
+
+describe('direction and locale', () => {
+  it('reads Arabic right to left, with Western digits', () => {
+    expect(direction('ar')).toBe('rtl')
+    expect(direction('de')).toBe('ltr')
+    setLanguage('ar')
+    expect((1234).toLocaleString(locale())).toMatch(/^1.?234$/)
+    expect(contentLanguage()).toBe('ar-SA')
   })
 })

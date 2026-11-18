@@ -85,7 +85,7 @@ export function Library({ title, items, filters, onOpen, toolbar }: Props) {
       <div className="chips" role="tablist">
         {filters.map((f) => (
           <button key={f.id} role="tab" aria-selected={f.id === filterId} className="chip" data-nav onClick={() => setPicked(f.id)}>
-            {f.label} <span>{(counts.get(f.id) ?? 0).toLocaleString('tr')}</span>
+            {f.label} <span>{(counts.get(f.id) ?? 0).toLocaleString(locale())}</span>
           </button>
         ))}
       </div>

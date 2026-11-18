@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { XboxTitle } from '../../../shared/types'
 import { StreamShell, type StreamQueue, type StreamStats } from '../components/StreamShell'
-import { Picture, fitFor, outputSize, pictureActive, pictureLabel, pictureOptionsFor, type Fit, type PictureOptions, type Size } from '../lib/picture'
+import { PICTURE_BUDGET_MS, Picture, fitFor, outputSize, pictureActive, pictureLabel, pictureOptionsFor, type Fit, type PictureOptions, type Size } from '../lib/picture'
 import { routeDualSenseSpeaker } from '../lib/speaker'
 import { MOBILE } from '../lib/platform'
 import { getSettings } from '../lib/useSettings'
@@ -55,11 +55,14 @@ function startPicture(video: HTMLVideoElement, options: PictureOptions, fit: Fit
   }
   handle = video.requestVideoFrameCallback(paint)
 
-  return () => {
-    video.cancelVideoFrameCallback(handle)
-    observer.disconnect()
-    picture.dispose()
-    canvas.remove()
+  return {
+    picture,
+    stop() {
+      video.cancelVideoFrameCallback(handle)
+      observer.disconnect()
+      picture.dispose()
+      canvas.remove()
+    },
   }
 }
 
@@ -88,7 +91,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
     let poll: ReturnType<typeof setInterval> | undefined
     let keepalive: ReturnType<typeof setInterval> | undefined
     let meter: ReturnType<typeof setInterval> | undefined
-    let stopPicture: (() => void) | undefined
+    let shown: ReturnType<typeof startPicture>
     let filters = ''
 
     const leave = (error?: string) => {
@@ -105,7 +108,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       if (disposed || !machine.send('dropped')) return
       clearInterval(keepalive)
       clearInterval(meter)
-      stopPicture?.()
+      shown?.stop()
       if (attempts >= RECONNECT_ATTEMPTS) return leave(t('Bağlantı koptu ve yeniden kurulamadı'))
       attempts++
       setLive(false)
@@ -159,8 +162,13 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       const state = await player?.getStreamState()
       const bufferMs = await bufferDelay()
       if (!state || disposed) return
+      // The filters on a slow graphics card: measured, and lightened when they fall behind.
+      const lightened = shown?.picture.adapt(PICTURE_BUDGET_MS)
+      if (shown) filters = pictureLabel(shown.picture.options)
       setStats({
         bufferMs,
+        gpuMs: shown?.picture.gpuMs,
+        lightened,
         fps: state.fps,
         mbps: parseFloat(state.br) || 0,
         lost: parseInt(state.pl) || 0,
@@ -223,13 +231,13 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
         }
         if (video && !video.videoWidth) video.addEventListener('loadeddata', showPicture, { once: true })
         else showPicture()
-        stopPicture?.()
+        shown?.stop()
         const options = pictureOptionsFor(settings, 'xbox')
         // With the graphics card scaling, the <video> stays on screen untouched so its
         // driver upscaler and the hardware overlay can work on it.
         const shaders = settings.upscaler === 'shader' && pictureActive(options)
-        stopPicture = shaders && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
-        filters = stopPicture ? pictureLabel(options) : settings.upscaler === 'system' ? t('ekran kartı büyütmesi') : ''
+        shown = shaders && video ? startPicture(video, options, fitFor(settings.videoFormat)) : undefined
+        filters = shown ? pictureLabel(options) : settings.upscaler === 'system' ? t('ekran kartı büyütmesi') : ''
         applyPacing(settings.framePacing)
         applyAudio()
         // 'connected' can come more than once per link; one keepalive is enough.
@@ -302,7 +310,7 @@ export function XboxStream({ title, resumeId, onExit }: Props) {
       clearInterval(poll)
       clearInterval(keepalive)
       clearInterval(meter)
-      stopPicture?.()
+      shown?.stop()
       player?.close()
       if (sessionId) void xbox.stopStream(sessionId)
       window.hc.platform.streaming(false)

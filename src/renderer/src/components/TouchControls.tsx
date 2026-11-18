@@ -3,11 +3,62 @@
 // streamed. It drives the virtual pad (lib/virtualPad), which both services read.
 // Presses update the DOM directly; nothing here re-renders while a finger moves.
 import { t } from '../../../shared/i18n'
-import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { getSettings } from '../lib/useSettings'
 import { PAD, setButton, setStick, setVirtualPad } from '../lib/virtualPad'
 
 export type TouchPlatform = 'playstation' | 'xbox'
+
+/** The groups a player can move and resize; x and y in % of the screen, s a scale. */
+export type TouchGroup = 'l2' | 'l1' | 'r2' | 'r1' | 'dpad' | 'face' | 'middle' | 'touchpad'
+export type TouchLayout = Partial<Record<TouchGroup, { x: number; y: number; s: number }>>
+
+/** The saved layouts, by platform; anything unreadable is the default layout. */
+export function readTouchLayout(text: string, platform: TouchPlatform): TouchLayout {
+  try {
+    const all = JSON.parse(text || '{}') as Partial<Record<TouchPlatform, TouchLayout>>
+    return all[platform] ?? {}
+  } catch {
+    return {}
+  }
+}
+
+interface Arrange {
+  layout: TouchLayout
+  editing: boolean
+  selected?: TouchGroup
+  onSelect?(group: TouchGroup): void
+  onMove?(group: TouchGroup, x: number, y: number): void
+}
+const ArrangeContext = createContext<Arrange>({ layout: {}, editing: false })
+
+// Where a group sits: its default place, then the player's own offset and size.
+function placed(group: TouchGroup | undefined, arrange: Arrange): CSSProperties | undefined {
+  const at = group && arrange.layout[group]
+  if (!at) return undefined
+  return { transform: `translate(${at.x}vw, ${at.y}vh) scale(${at.s})` }
+}
+
+// While editing, a group follows the finger instead of pressing anything.
+function dragHandlers(group: TouchGroup | undefined, arrange: Arrange) {
+  if (!group || !arrange.editing) return undefined
+  let start: { px: number; py: number; x: number; y: number } | undefined
+  return {
+    onPointerDown(e: ReactPointerEvent<HTMLElement>) {
+      e.currentTarget.setPointerCapture(e.pointerId)
+      const at = arrange.layout[group] ?? { x: 0, y: 0, s: 1 }
+      start = { px: e.clientX, py: e.clientY, x: at.x, y: at.y }
+      arrange.onSelect?.(group)
+    },
+    onPointerMove(e: ReactPointerEvent<HTMLElement>) {
+      if (!start) return
+      arrange.onMove?.(group, start.x + ((e.clientX - start.px) / innerWidth) * 100, start.y + ((e.clientY - start.py) / innerHeight) * 100)
+    },
+    onPointerUp() {
+      start = undefined
+    },
+  }
+}
 
 type Point = { x: number; y: number }
 type Points = Map<number, Point>
@@ -80,11 +131,19 @@ function useHeldButtons() {
   }
 }
 
-function Key({ button, className, label, children }: { button: number; className: string; label: string; children: ReactNode }) {
+function Key({ button, className, label, group, children }: { button: number; className: string; label: string; group?: TouchGroup; children: ReactNode }) {
   const points = useRef<Points>(new Map()).current
   const apply = useHeldButtons()
+  const arrange = useContext(ArrangeContext)
+  const editing = arrange.editing && group
   return (
-    <div className={`tc-zone ${className}`} aria-label={label} role="button" {...pointerHandlers(points, (el) => apply(el, new Set(points.size ? [button] : [])))}>
+    <div
+      className={`tc-zone ${className} ${editing ? 'tc-editable' : ''} ${editing && arrange.selected === group ? 'tc-selected' : ''}`}
+      aria-label={label}
+      role="button"
+      style={placed(group, arrange)}
+      {...(dragHandlers(group, arrange) ?? pointerHandlers(points, (el) => apply(el, new Set(points.size ? [button] : []))))}
+    >
       <span className="tc-key" data-b={button}>{children}</span>
     </div>
   )
@@ -123,8 +182,14 @@ function FaceButtons({ platform }: { platform: TouchPlatform }) {
     for (const p of points.values()) for (const f of FACE) if (Math.hypot(p.x - f.x * size, p.y - f.y * size) <= reach) next.add(f.button)
     apply(el, next)
   }
+  const arrange = useContext(ArrangeContext)
   return (
-    <div className="tc-zone tc-face" aria-label={t('Yüz düğmeleri')} {...pointerHandlers(points, onChange)}>
+    <div
+      className={`tc-zone tc-face ${arrange.editing ? 'tc-editable' : ''} ${arrange.selected === 'face' ? 'tc-selected' : ''}`}
+      aria-label={t('Yüz düğmeleri')}
+      style={placed('face', arrange)}
+      {...(dragHandlers('face', arrange) ?? pointerHandlers(points, onChange))}
+    >
       {FACE.map((f) => (
         <span key={f.slot} className={`tc-key tc-face-${f.slot}`} data-b={f.button}>
           {platform === 'playstation' ? <PsSymbol slot={f.slot} /> : letters[f.slot]}
@@ -152,8 +217,14 @@ function DPad() {
     }
     apply(el, next)
   }
+  const arrange = useContext(ArrangeContext)
   return (
-    <div className="tc-zone tc-dpad" aria-label={t('Yön tuşları')} {...pointerHandlers(points, onChange)}>
+    <div
+      className={`tc-zone tc-dpad ${arrange.editing ? 'tc-editable' : ''} ${arrange.selected === 'dpad' ? 'tc-selected' : ''}`}
+      aria-label={t('Yön tuşları')}
+      style={placed('dpad', arrange)}
+      {...(dragHandlers('dpad', arrange) ?? pointerHandlers(points, onChange))}
+    >
       <span className="tc-key tc-arrow tc-arrow-up" data-b={PAD.UP} />
       <span className="tc-key tc-arrow tc-arrow-right" data-b={PAD.RIGHT} />
       <span className="tc-key tc-arrow tc-arrow-down" data-b={PAD.DOWN} />
@@ -275,27 +346,32 @@ const ICON = {
   ),
 }
 
-export function TouchControls({ platform, onMenu }: { platform: TouchPlatform; onMenu(): void }) {
+export function TouchControls({ platform, onMenu, arrange }: { platform: TouchPlatform; onMenu(): void; arrange?: Omit<Arrange, 'layout'> & { layout?: TouchLayout } }) {
+  const editing = Boolean(arrange?.editing)
   useEffect(() => {
+    // The editor shows the controls without them pressing anything.
+    if (editing) return
     setVirtualPad(true)
     return () => setVirtualPad(false)
-  }, [])
+  }, [editing])
 
-  const { touchOpacity, touchSize } = getSettings()
+  const { touchOpacity, touchSize, touchLayout } = getSettings()
   const ps = platform === 'playstation'
-  const style = { '--tc-opacity': touchOpacity / 100, '--tc-scale': touchSize / 100 } as CSSProperties
+  const style = { '--tc-opacity': editing ? 1 : touchOpacity / 100, '--tc-scale': touchSize / 100 } as CSSProperties
+  const context: Arrange = { ...arrange, editing, layout: arrange?.layout ?? readTouchLayout(touchLayout, platform) }
 
   return (
-    <div className={`touch touch--${platform}`} style={style}>
-      <Key button={PAD.L2} className="tc-l2" label={ps ? 'L2' : 'LT'}>{ps ? 'L2' : 'LT'}</Key>
-      <Key button={PAD.L1} className="tc-l1" label={ps ? 'L1' : 'LB'}>{ps ? 'L1' : 'LB'}</Key>
-      <Key button={PAD.R2} className="tc-r2" label={ps ? 'R2' : 'RT'}>{ps ? 'R2' : 'RT'}</Key>
-      <Key button={PAD.R1} className="tc-r1" label={ps ? 'R1' : 'RB'}>{ps ? 'R1' : 'RB'}</Key>
+    <ArrangeContext.Provider value={context}>
+    <div className={`touch touch--${platform} ${editing ? 'touch--editing' : ''}`} style={style}>
+      <Key button={PAD.L2} group="l2" className="tc-l2" label={ps ? 'L2' : 'LT'}>{ps ? 'L2' : 'LT'}</Key>
+      <Key button={PAD.L1} group="l1" className="tc-l1" label={ps ? 'L1' : 'LB'}>{ps ? 'L1' : 'LB'}</Key>
+      <Key button={PAD.R2} group="r2" className="tc-r2" label={ps ? 'R2' : 'RT'}>{ps ? 'R2' : 'RT'}</Key>
+      <Key button={PAD.R1} group="r1" className="tc-r1" label={ps ? 'R1' : 'RB'}>{ps ? 'R1' : 'RB'}</Key>
 
       <div className="tc-top">
         <button className="tc-pause" aria-label={t('Akış menüsü')} onClick={onMenu}>{ICON.pause}</button>
         {ps && (
-          <Key button={PAD.TOUCHPAD} className="tc-touchpad" label={t('Dokunmatik yüzey')}>
+          <Key button={PAD.TOUCHPAD} group="touchpad" className="tc-touchpad" label={t('Dokunmatik yüzey')}>
             {t('Dokunmatik yüzey')}
           </Key>
         )}
@@ -306,7 +382,11 @@ export function TouchControls({ platform, onMenu }: { platform: TouchPlatform; o
       <Stick side="left" />
       <Stick side="right" />
 
-      <div className="tc-middle">
+      <div
+        className={`tc-middle ${editing ? 'tc-editable' : ''} ${context.selected === 'middle' ? 'tc-selected' : ''}`}
+        style={placed('middle', context)}
+        {...dragHandlers('middle', context)}
+      >
         <Key button={PAD.L3} className="tc-small" label={ps ? 'L3' : t('Sol çubuk tıklaması')}>{ps ? 'L3' : 'LS'}</Key>
         <Key button={PAD.VIEW} className="tc-small" label={ps ? t('Oluştur') : t('Görünüm')}>{ICON.view}</Key>
         <Key button={PAD.HOME} className="tc-small tc-home" label={ps ? t('PS düğmesi') : t('Xbox düğmesi')}>{ICON.home}</Key>
@@ -314,5 +394,6 @@ export function TouchControls({ platform, onMenu }: { platform: TouchPlatform; o
         <Key button={PAD.R3} className="tc-small" label={ps ? 'R3' : t('Sağ çubuk tıklaması')}>{ps ? 'R3' : 'RS'}</Key>
       </div>
     </div>
+    </ArrangeContext.Provider>
   )
 }

@@ -1,15 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { XBOX_REGIONS, type AppSettings } from '../../../shared/settings'
-import type { NetworkProbe, NetworkReport, PsDatacenter, PsStatus, SavedAccounts, XboxStatus } from '../../../shared/types'
-import { MOBILE } from '../lib/platform'
+import type { NatReport, NetworkProbe, NetworkReport, PsDatacenter, PsStatus, SavedAccounts, XboxStatus } from '../../../shared/types'
+import { MOBILE, WINDOWS } from '../lib/platform'
 import { videoSurfaceSupported } from '../lib/videoSurface'
 import { suggestedPsBitrate } from '../lib/bitrate'
 import { LayoutEditor } from './LayoutEditor'
 import { StreamHistory } from './StreamHistory'
 import { AutoTune } from './AutoTune'
+import { TouchEditor } from './TouchEditor'
 import { testDualSenseSpeaker } from '../lib/speaker'
 import { resetSettings, updateSettings, useSettings } from '../lib/useSettings'
-import { t, type Message } from '../../../shared/i18n'
+import { LANGUAGE_NAMES, LANGUAGES as INTERFACE_LANGUAGES, t, type LanguageSetting, type Message } from '../../../shared/i18n'
 
 const LANGUAGES: [string, string][] = [
   ['tr-TR', 'Türkçe'], ['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['de-DE', 'Deutsch'], ['fr-FR', 'Français'],
@@ -55,6 +56,50 @@ function verdict(probe: NetworkProbe) {
   if (probe.rttMs <= 40 && steady) return t('İyi')
   if (probe.rttMs <= 80 && steady) return t('Orta')
   return steady ? t('Yüksek gecikme') : t('Dalgalı')
+}
+
+// Whether PSN's broker can join this network to a console outside it, and what to do if not.
+function NatTest() {
+  const [report, setReport] = useState<NatReport>()
+  const [running, setRunning] = useState(false)
+  if (!window.hc.ps.natTest) return null
+  const run = async () => {
+    setRunning(true)
+    setReport(await window.hc.ps.natTest!().catch(() => undefined))
+    setRunning(false)
+  }
+  const verdict = !report
+    ? t('Ev dışından kendi konsoluna PSN üzerinden bağlanıp bağlanamayacağını ölçer.')
+    : report.nat === 'cone'
+      ? t('Uygun: ağın dışarıdan bağlantıya izin veriyor; PSN üzerinden oynama büyük olasılıkla çalışır.')
+      : report.nat === 'symmetric'
+        ? report.upnp
+          ? t("Olabilir: modem her bağlantıda port değiştiriyor ama UPnP açık; çoğu durumda çalışır.")
+          : t("Zor: modem her bağlantıda port değiştiriyor ve UPnP kapalı. Modemde UPnP'yi aç ya da evden oyna.")
+        : report.nat === 'blocked'
+          ? t('UDP engellenmiş görünüyor (kurumsal ağ ya da güvenlik duvarı); PSN üzerinden oynama çalışmaz.')
+          : t('Kesin sonuç alınamadı; yine de denenebilir.')
+  return (
+    <Row label={t('Ev dışından bağlantı testi')} hint={verdict}>
+      <button className="ghost" data-nav disabled={running} onClick={() => void run()}>{running ? t('Ölçülüyor') : t('Testi başlat')}</button>
+    </Row>
+  )
+}
+
+function TouchLayoutRow() {
+  const [editing, setEditing] = useState(false)
+  return (
+    <>
+      <Row label={t('Düğmelerin yeri ve boyutu')} hint={t('Her konsol için ayrı: grupları sürükleyip boyutlarını değiştir.')}>
+        <button className="ghost" data-nav onClick={() => setEditing(true)}>{t('Düzenle')}</button>
+      </Row>
+      {editing && <TouchEditor onClose={() => setEditing(false)} />}
+    </>
+  )
+}
+
+function QuietWifi() {
+  return !WINDOWS ? null : <Toggle field="quietWifi" label={t('Akışta Wi-Fi taramasını durdur')} hint={t("Windows bağlıyken de birkaç saniyede bir çevredeki ağları tarar; her tarama Wi-Fi'da kısa bir takılma yapar. Akış sürerken taramalar durur, akış bitince Windows kendi ayarına döner.")} />
 }
 
 function NetworkTest() {
@@ -120,7 +165,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   )
 }
 
-// Android: whether the phone's own decoder takes the stream, tried on a short clip.
+// Phones: whether the device's own decoder takes the stream, tried on a short clip.
 function NativeVideoTest() {
   const [note, setNote] = useState(() => t('Bu telefonun kod çözücüsünü kısa bir kayıtla dener.'))
   const [running, setRunning] = useState(false)
@@ -425,8 +470,9 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
           <section>
             <h2>{t('Genel')}</h2>
             <AutoTune />
-            <Choice field="language" label={t('Dil')} options={[['', t('Sistem diline göre')], ['tr', 'Türkçe'], ['en', 'English']]} />
+            <Choice field="language" label={t('Dil')} options={[['', t('Sistem diline göre')], ...INTERFACE_LANGUAGES.map((l): [LanguageSetting, string] => [l, LANGUAGE_NAMES[l]])]} />
             <Slider field="fontSize" label={t('Yazı boyutu')} min={12} max={20} step={1} unit=" px" />
+            <Choice field="livingRoom" label={t('Oturma odası görünümü')} hint={t("Uzaktan, kolla kullanmak için her şey daha büyük ve odak daha belirgin. Otomatik: TV'de ve Steam Deck oyun modunda açılır.")} options={[['auto', t('Otomatik')], ['on', t('Açık')], ['off', t('Kapalı')]]} />
             <Choice field="motion" label={t('Animasyonlar')} hint={t("Windows'ta animasyon efektleri kapalı olsa da uygulamadakiler çalışır; istersen Windows'a uydurabilirsin.")} options={[['on', t('Açık')], ['system', "Windows'a göre"], ['off', t('Kapalı')]]} />
             {!MOBILE && (
               <>
@@ -441,8 +487,9 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
               <>
                 <Toggle field="backgroundKeepalive" label={t('Arka planda canlı tut')} hint={t('Pencere arkadayken de akış yavaşlatılmaz.')} />
                 <Toggle field="useVulkan" label={t('Vulkan')} hint={t('Sorun yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.')} />
-                <Toggle field="launchAtLogin" label={t('Windows açılışında başlat')} hint={t("Tam ekran başlatma ile birlikte, bilgisayarı kolla açıp doğrudan oyunlara geçebilirsin.")} />
+                <Toggle field="launchAtLogin" label={WINDOWS ? t('Windows açılışında başlat') : t('Oturum açılınca başlat')} hint={t("Tam ekran başlatma ile birlikte, bilgisayarı kolla açıp doğrudan oyunlara geçebilirsin.")} />
                 <Toggle field="betaUpdates" label={t('Beta sürümleri al')} hint={t('Yeni sürümleri herkesten önce alırsın; arada hata çıkabilir. Kapatınca bir sonraki kararlı sürüme kadar beta sürümde kalırsın.')} />
+                {WINDOWS && <Toggle field="highPerformanceGpu" label={t('Güçlü ekran kartını kullan')} hint={t('İki ekran kartlı dizüstülerde akış güçlü karttan geçer. Windows grafik ayarlarında bu uygulama için kendi seçimin varsa ona dokunulmaz. Uygulama yeniden açılınca geçerli olur.')} />}
                 <Toggle field="ignoreGpuBlocklist" label={t('Ekran kartı kara listesini yok say')} hint={t("Chromium'un sorunlu saydığı sürücülerde de donanım hızlandırmayı zorlar. Çökme yaşarsan kapat. Uygulama yeniden başlayınca geçerli olur.")} />
               </>
             )}
@@ -466,7 +513,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             {window.hc.platform.discord && <Toggle field="discordPresence" label={t("Discord'da oynadığını göster")} hint={t("Akış sırasında Discord'daki durumuna oyunun adı yazılır.")} />}
             {!MOBILE && <Toggle field="replayBuffer" label={t('An kaydı')} hint={t('Akışın son saniyelerini ekran kartıyla kodlayıp bellekte tutar; F10 ya da akış menüsü bunları Videolar > Hargan Cast klasörüne MP4 olarak kaydeder. Ekran görüntüsü (F12) her zaman açıktır.')} />}
             {!MOBILE && settings.replayBuffer && <Choice field="replaySeconds" label={t('Kayıt uzunluğu')} options={[[15, t('{n} saniye', { n: 15 })], [30, t('{n} saniye', { n: 30 })], [60, t('1 dakika')], [120, t('2 dakika')]]} />}
-            {!MOBILE && <Toggle field="matchRefreshRate" label={t('Ekran yenileme hızını akışa uydur')} hint={t("Akış sırasında ekranı 60'ın katı bir hıza geçirir (örneğin 144 Hz yerine 120 Hz); her kare ekranda eşit süre kalır, takılma hissi kaybolur. Akış bitince eski hıza döner. G-Sync veya FreeSync açıksa gerekmez.")} />}
+            {WINDOWS && <Toggle field="matchRefreshRate" label={t('Ekran yenileme hızını akışa uydur')} hint={t("Akış sırasında ekranı 60'ın katı bir hıza geçirir (örneğin 144 Hz yerine 120 Hz); her kare ekranda eşit süre kalır, takılma hissi kaybolur. Akış bitince eski hıza döner. G-Sync veya FreeSync açıksa gerekmez.")} />}
             <Choice field="framePacing" label={t('Kare zamanlaması')} hint={t('Akıcı: kareler ekranın yenilenmesine hizalanır, ağdaki dalgalanma takılma olarak görünmez; bir iki kare gecikme ekler.')} options={[['latency', t('En düşük gecikme')], ['smooth', t('En akıcı görüntü')]]} />
           </section>
         )}
@@ -488,6 +535,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <h2>{t('Dokunmatik kontroller')}</h2>
             <Choice field="touchControls" label={t('Ekran kontrolleri')} hint={t('Otomatik: bir kol kullanmaya başlayınca kendiliğinden gizlenir.')} options={[['auto', t('Otomatik')], ['on', t('Her zaman göster')], ['off', t('Kapalı')]]} />
             <Slider field="touchOpacity" label={t('Görünürlük')} min={15} max={100} step={5} unit="%" />
+            <TouchLayoutRow />
             <Slider field="touchSize" label={t('Boyut')} min={70} max={140} step={5} unit="%" />
             <Toggle field="touchVibrate" label={t('Dokununca titret')} hint={t("Düğmeye basınca telefon kısaca titrer. iPhone'da bu özellik yok.")} />
             <small className="setting-note">{t('Çubuklar parmağın değdiği yerde belirir. Çubuğa hızlıca iki kez dokunup basılı tutmak L3/R3 düğmesine basar.')}</small>
@@ -617,6 +665,7 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
             <h3>{t('Fare ve klavye')}</h3>
             {!MOBILE && (
               <>
+                {window.hc.platform.dualSenseTriggers && <Toggle field="xboxDualSenseTriggers" label={t('DualSense tetiklerinde Xbox tetik titreşimi')} hint={t("Xbox oyunlarının tetik titreşimi DualSense'in tetiklerinde hissedilir. Kol USB ya da Bluetooth ile bağlı olmalı.")} />}
                 <Choice field="xboxGyro" label={t('DualSense jiroskopla nişan')} hint={t('Kolu çevirmek sağ çubuğu hareket ettirir. "Nişan alırken" yalnızca LT basılıyken çalışır. Kol USB ya da Bluetooth ile bağlı olmalı.')} options={[['off', t('Kapalı')], ['aim', t('Nişan alırken (LT)')], ['always', t('Her zaman')]]} />
                 {settings.xboxGyro !== 'off' && (
                   <>
@@ -636,6 +685,8 @@ export function SettingsPage({ active, onAbout }: { active: boolean; onAbout(): 
           <section>
             <h2>{t('Ağ')}</h2>
             <NetworkTest />
+            <QuietWifi />
+            <NatTest />
           </section>
         )}
 

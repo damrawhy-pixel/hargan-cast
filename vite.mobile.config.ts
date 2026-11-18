@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
@@ -45,7 +46,7 @@ export default defineConfig({
   publicDir: resolve('src/renderer/public'),
   plugins: [desktopModules(), react()],
   // The ported Xbox code tags its log lines with these.
-  define: { __filename: JSON.stringify('xbox'), __dirname: JSON.stringify('') },
+  define: { __filename: JSON.stringify('xbox'), __dirname: JSON.stringify(''), __APP_VERSION__: JSON.stringify(JSON.parse(readFileSync('package.json', 'utf8')).version) },
   esbuild: {
     drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
     // The ported token classes redeclare `data`, set by their base constructor.

@@ -111,6 +111,8 @@ jobs:
           xcodebuild -version
       - name: Build the PlayStation core
         run: bash mobile/plugins/ps-core/ios/build-core.sh
+        env:
+          HC_IOS_SLICES: device
       # Unsigned until an Apple developer account is connected; it can be sideloaded
       # with AltStore or Sideloadly, which sign it with the user's own Apple ID.
       - name: Build
@@ -127,3 +129,77 @@ jobs:
         with:
           name: HarganCast-ios
           path: HarganCast-unsigned.ipa
+
+  # The app on an iOS Simulator: it has to start and show its interface without an
+  # uncaught error. Capacitor writes the web view's console to the app's output,
+  # which this reads; src/mobile/main.ts logs the lines it waits for.
+  ios-test:
+    name: iOS on a simulator
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:mobile
+      - run: npx cap sync ios
+      # Console logging on in this build only; the shipped app keeps Capacitor's default.
+      - name: Log the web view's console
+        run: |
+          node -e '
+            const p = "mobile/ios/App/App/capacitor.config.json"
+            const c = JSON.parse(require("fs").readFileSync(p, "utf8"))
+            c.loggingBehavior = "production"
+            require("fs").writeFileSync(p, JSON.stringify(c, null, 2))'
+      - name: Use the newest Xcode on the runner
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Build the PlayStation core for the simulator
+        run: bash mobile/plugins/ps-core/ios/build-core.sh
+        env:
+          HC_IOS_SLICES: simulator
+      - name: Build
+        run: |
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      - name: Start a simulator
+        run: |
+          udid=$(xcrun simctl list devices available -j | node -e '
+            const all = JSON.parse(require("fs").readFileSync(0, "utf8")).devices
+            const runtimes = Object.keys(all).filter((r) => r.includes("iOS")).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+            for (const r of runtimes) {
+              const phone = all[r].find((d) => d.name.startsWith("iPhone"))
+              if (phone) { console.log(phone.udid); break }
+            }')
+          test -n "$udid"
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+      - name: Test
+        run: |
+          mkdir -p test-results/ios
+          log=test-results/ios/console.log
+          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch --console --terminate-running-process "$UDID" app.hargan.cast > "$log" 2>&1 &
+          for i in $(seq 1 90); do
+            grep -q 'hargan: interface ready' "$log" && break
+            sleep 2
+          done
+          # A moment more, for errors right after start.
+          sleep 5
+          xcrun simctl io "$UDID" screenshot test-results/ios/home.png
+          xcrun simctl terminate "$UDID" app.hargan.cast || true
+          cat "$log"
+          grep -q 'hargan: interface ready' "$log" || { echo "::error::The interface did not come up"; exit 1; }
+          if grep 'hargan: uncaught' "$log"; then echo "::error::Uncaught errors in the web view"; exit 1; fi
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ios-test-results
+          path: test-results/
+          if-no-files-found: ignore

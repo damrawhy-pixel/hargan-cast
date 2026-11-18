@@ -31,10 +31,19 @@ function showStartupError(error: unknown) {
   document.body.append(panel)
 }
 
+// The iOS simulator test (.github/workflows/mobile.yml) reads the app's console:
+// a line for every uncaught error, and one once the interface is on screen.
+addEventListener('error', (e) => console.error(`hargan: uncaught ${e.message}`))
+function reportReady(tries = 0) {
+  if (document.querySelector('.topbar')) console.info('hargan: interface ready')
+  else if (tries < 240) setTimeout(() => reportReady(tries + 1), 250)
+}
+
 try {
   const { installBridge } = await import('./bridge')
   await installBridge()
   await import('../renderer/src/main')
+  reportReady()
 } catch (error) {
   showStartupError(error)
 }

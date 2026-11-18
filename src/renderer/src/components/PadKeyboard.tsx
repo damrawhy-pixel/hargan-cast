@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getLanguage, locale, t } from '../../../shared/i18n'
+import { getLanguage, locale, t, type Language } from '../../../shared/i18n'
 import { connectedPads } from '../lib/gamepads'
 
 // A keyboard for the controller: pressing A on a text field while steering with a
@@ -7,9 +7,13 @@ import { connectedPads } from '../lib/gamepads'
 // a TV or a Steam Deck. The keys are ordinary focusable buttons, so the app's own
 // pad navigation moves between them; X deletes, Y switches case, Menu finishes.
 
-const ROWS: Record<'tr' | 'en', string[]> = {
+const ROWS: Record<Language, string[]> = {
   tr: ['1234567890', 'qwertyuıopğü', 'asdfghjklşi', 'zxcvbnmöç', '.-_@:/'],
   en: ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', '.-_@:/'],
+  de: ['1234567890ß', 'qwertzuiopü', 'asdfghjklöä', 'yxcvbnm', '.-_@:/'],
+  // Arabic letters as on the standard Arabic keyboard; addresses still need Latin, so
+  // the Latin rows follow.
+  ar: ['1234567890', 'ضصثقفغعهخحجد', 'شسيبلاتنمكط', 'ئءؤرىةوزظذ', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', '.-_@:/'],
 }
 const PAD_X = 2
 const PAD_Y = 3
@@ -91,7 +95,7 @@ export function PadKeyboard() {
   }, [field])
 
   if (!field) return null
-  const rows = ROWS[getLanguage() === 'tr' ? 'tr' : 'en']
+  const rows = ROWS[getLanguage()]
   const shown = field instanceof HTMLInputElement && field.type === 'password' ? '•'.repeat(field.value.length) : field.value
   const key = (c: string) => (upper ? c.toLocaleUpperCase(locale()) : c)
   return (

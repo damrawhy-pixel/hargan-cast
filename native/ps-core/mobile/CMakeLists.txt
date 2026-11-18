@@ -7,6 +7,8 @@
 #   Android: libhargan_ps.so, built by Gradle (see mobile/plugins/ps-core/android).
 #   iOS:     static libraries, merged into HarganPsCore.xcframework by
 #            mobile/plugins/ps-core/ios/build-core.sh.
+#   macOS:   the desktop app's hargan-ps-core executable (sidecar.c), built by
+#            scripts/build-native.mjs.
 cmake_minimum_required(VERSION 3.22)
 project(hargan_ps_mobile C)
 
@@ -61,7 +63,7 @@ set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
 set(CURL_ZLIB OFF CACHE STRING "" FORCE)
 set(CURL_BROTLI OFF CACHE STRING "" FORCE)
 set(CURL_ZSTD OFF CACHE STRING "" FORCE)
-if(IOS)
+if(APPLE)
 	set(CURL_USE_SECTRANSP ON CACHE BOOL "" FORCE)
 else()
 	set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
@@ -108,7 +110,7 @@ FetchContent_Declare(opus
 
 FetchContent_MakeAvailable(curl jsonc miniupnp opus)
 
-if(IOS)
+if(APPLE)
 	# curl's configure check finds _fseeki64 on Apple toolchains although it is
 	# MSVC-only, and formdata.c then fails to compile. Drop the bogus define.
 	set(_curl_config "${curl_BINARY_DIR}/lib/curl_config.h")
@@ -173,7 +175,7 @@ endif()
 # --- the core: commands and media, as on the desktop, without the desktop's own
 # controller and HTTP plumbing. media_server.c is the desktop file, compiled
 # against a small POSIX stand-in for the Win32 calls it makes.
-add_library(hargan_ps_media OBJECT "${CORE}/src/media_server.c" "${CORE}/src/controller_io.c" "${CORE}/src/console.c" "${CORE}/src/microphone.c")
+add_library(hargan_ps_media OBJECT "${CORE}/src/media_server.c" "${CORE}/src/controller_io.c" "${CORE}/src/console.c" "${CORE}/src/microphone.c" "${CORE}/src/priority.c")
 target_include_directories(hargan_ps_media BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compat")
 target_link_libraries(hargan_ps_media PRIVATE chiaki)
 target_compile_options(hargan_ps_media PRIVATE -Wno-pointer-sign -Wno-incompatible-pointer-types -Wno-int-conversion)
@@ -189,3 +191,14 @@ endif()
 target_include_directories(hargan_ps PRIVATE "${CORE}/src" "${CH}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(hargan_ps PRIVATE chiaki)
 target_compile_options(hargan_ps PRIVATE -O2 -Wall -Wno-unused-parameter)
+
+# --- macOS desktop: the same core as the desktop's sidecar executable, speaking
+# the stdin/stdout contract of ../src/main.c.
+if(APPLE AND NOT IOS)
+	target_compile_definitions(hargan_ps PRIVATE HC_LOG_STDERR)
+	add_executable(hargan-ps-core sidecar.c)
+	target_include_directories(hargan-ps-core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+	target_link_libraries(hargan-ps-core PRIVATE hargan_ps chiaki
+		"-framework CoreFoundation" "-framework CoreServices" "-framework Security" "-framework SystemConfiguration")
+	target_link_options(hargan-ps-core PRIVATE -Wl,-dead_strip)
+endif()

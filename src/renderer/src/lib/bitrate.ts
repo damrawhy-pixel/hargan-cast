@@ -1,7 +1,9 @@
 // What the connection test suggests for PlayStation streams.
 
 // PlayStation bit rates the settings offer, kb/s.
-const PS_RATES = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000]
+export const PS_RATES = [5000, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000]
+/** The caps the Xbox settings offer, Mb/s. */
+export const XBOX_CAPS = [5, 10, 15, 20]
 // A stream needs headroom over its average for key frames and other traffic.
 const BITRATE_SHARE = 0.7
 

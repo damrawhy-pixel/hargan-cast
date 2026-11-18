@@ -57,7 +57,7 @@ export function PsStream({ game, console: target, onExit }: Props) {
     const wantsHdr = target ? target.ps5 && s.psHdr : game?.streamServiceType === 'pscloud' && s.psCloudHdr
     return videoSurfaceSupported && (s.upscaler === 'system' || Boolean(wantsHdr && hdrScreen()))
   })
-  // Android can decode with the phone's own MediaCodec straight to the screen.
+  // Phones can decode with their own decoder straight to the screen (MediaCodec, VideoToolbox).
   const [native] = useState(() => (MOBILE && settingsFor(getSettings(), key).psNativeVideo ? window.hc.ps.nativeVideo : undefined))
   // A canvas hands itself to a worker only once, so each new session gets a new one.
   const [surfaceKey, setSurfaceKey] = useState(0)
@@ -215,15 +215,15 @@ export function PsStream({ game, console: target, onExit }: Props) {
           return
         }
         if (msg.type === 'frame') surface ? surface.push(msg.frame) : msg.frame.close()
-        // With the native picture the worker carries sound and input only; the picture's news comes from Android.
+        // With the native picture the worker carries sound and input only; the picture's news comes from the phone.
         else if (native && (msg.type === 'firstFrame' || msg.type === 'stats')) return
         else if (msg.type === 'firstFrame') {
           setLive(true)
           wasLive = true
           attempts = 0
         } else if (msg.type === 'stats') {
-          const scaling = system ? t('ekran kartı büyütmesi') : msg.filters && picture ? pictureLabel(picture) : ''
-          setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, rttMs: started.rttMs, decodeMs: msg.decodeMs, waitMs: msg.waitMs, jitterMs: msg.jitterMs, skipped: msg.skipped + (surface?.dropped() ?? 0), size: scaling ? `${msg.size} · ${scaling}` : msg.size })
+          const scaling = system ? t('ekran kartı büyütmesi') : msg.options ? pictureLabel(msg.options) : ''
+          setStats({ fps: msg.fps, mbps: msg.mbps, lost: msg.lost, rttMs: started.rttMs, decodeMs: msg.decodeMs, waitMs: msg.waitMs, gpuMs: msg.gpuMs, lightened: msg.lightened, jitterMs: msg.jitterMs, skipped: msg.skipped + (surface?.dropped() ?? 0), size: scaling ? `${msg.size} · ${scaling}` : msg.size })
         }
         // On phones the app rumbles the paired controller itself, straight from the session.
         else if (msg.type === 'rumble') psVibration && !MOBILE && rumble(msg.left, msg.right, nativeDualSense)

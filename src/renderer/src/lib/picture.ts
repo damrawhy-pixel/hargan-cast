@@ -11,7 +11,7 @@
 // It stays on WebGL: only WebGL and 2D canvases take the low-latency
 // "desynchronized" mode, which spares the compositor's extra frame of delay.
 
-import { t } from '../../../shared/i18n'
+import { t, type Message } from '../../../shared/i18n'
 import type { AppSettings } from '../../../shared/settings'
 
 export type Fit = 'contain' | 'cover' | 'fill'
@@ -69,6 +69,13 @@ const DEBAND_ROUNDS = 4
 // About six shades in 255: codec noise is smaller, real edges are larger.
 const DENOISE_STRENGTH = 0.025
 const ANTIRING = 0.8
+// Timer queries: one frame in this many, a few in flight at most.
+const TIME_EVERY = 6
+const MAX_QUERIES = 4
+// Seconds over budget before a filter is let go.
+const OVER_BUDGET_SECONDS = 3
+/** What the filters may take of a 60 fps frame before they are lightened, ms. */
+export const PICTURE_BUDGET_MS = 6
 
 const HEADER = `#version 300 es
 precision highp float;
@@ -412,6 +419,14 @@ export class Picture {
   private precise = false
   private frame = 0
   private lost = false
+  // GPU time of the filters, from timer queries every few frames where the driver offers them.
+  private timer: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null = null
+  private queries: WebGLQuery[] = []
+  private gpuSum = 0
+  private gpuCount = 0
+  private overBudget = 0
+  /** Milliseconds the last measured frames took on the graphics card, or undefined without timer queries. */
+  gpuMs?: number
 
   private constructor(private gl: Gl, private canvas: HTMLCanvasElement | OffscreenCanvas) {
     this.setup()
@@ -447,6 +462,8 @@ export class Picture {
 
   private setup() {
     const gl = this.gl
+    this.timer = gl.getExtension('EXT_disjoint_timer_query_webgl2')
+    this.queries = []
     this.precise = gl.getExtension('EXT_color_buffer_float') !== null
     this.copy = program(gl, COPY)
     this.easu = program(gl, EASU)
@@ -495,9 +512,56 @@ export class Picture {
   }
 
   /** Draws one frame scaled to the canvas's current size. */
+  /** Draws one frame scaled to the canvas's current size, timing every few on the graphics card. */
   draw(frame: TexImageSource, width: number, height: number) {
     const gl = this.gl
     if (this.lost || gl.isContextLost()) return
+    this.collectTimes()
+    const timed = this.timer && this.frame % TIME_EVERY === 0 && this.queries.length < MAX_QUERIES
+    const query = timed ? gl.createQuery() : null
+    if (query) gl.beginQuery(this.timer!.TIME_ELAPSED_EXT, query)
+    this.render(frame, width, height)
+    if (query) {
+      gl.endQuery(this.timer!.TIME_ELAPSED_EXT)
+      this.queries.push(query)
+    }
+  }
+
+  private collectTimes() {
+    const gl = this.gl
+    while (this.queries.length && gl.getQueryParameter(this.queries[0], gl.QUERY_RESULT_AVAILABLE)) {
+      const query = this.queries.shift()!
+      // A disjoint period (clock change, GPU switch) makes the result meaningless.
+      if (!gl.getParameter(this.timer!.GPU_DISJOINT_EXT)) {
+        this.gpuSum += gl.getQueryParameter(query, gl.QUERY_RESULT) / 1e6
+        this.gpuCount++
+      }
+      gl.deleteQuery(query)
+    }
+  }
+
+  /**
+   * Called about once a second: updates gpuMs and, after a few seconds over
+   * `budgetMs`, turns off the costliest filter that is on. Returns what it turned
+   * off, for the player to say, or undefined.
+   */
+  adapt(budgetMs: number): Message | undefined {
+    if (!this.gpuCount) return undefined
+    this.gpuMs = this.gpuSum / this.gpuCount
+    this.gpuSum = this.gpuCount = 0
+    this.overBudget = this.gpuMs > budgetMs ? this.overBudget + 1 : 0
+    if (this.overBudget < OVER_BUDGET_SECONDS) return undefined
+    this.overBudget = 0
+    const o = this.options
+    if (o.denoise) return (o.denoise = false), 'iz azaltma'
+    if (o.scaler === 'lanczos') return (o.scaler = 'fsr'), 'Lanczos'
+    if (o.deband) return (o.deband = false), 'bant giderme'
+    if (o.sharpness > 0) return (o.sharpness = 0), 'keskinleştirme'
+    return undefined
+  }
+
+  private render(frame: TexImageSource, width: number, height: number) {
+    const gl = this.gl
     const { scaler, sharpness, deband, denoise } = this.options
     const out = { width: this.canvas.width, height: this.canvas.height }
     this.frame++

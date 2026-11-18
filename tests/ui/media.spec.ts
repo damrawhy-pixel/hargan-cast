@@ -66,3 +66,35 @@ test(`a replayed PlayStation stream is decoded, shown and ends cleanly (${name})
   expect(errors).toEqual([])
 })
 }
+
+// The same clip over a bad network: frames go missing and arrive unevenly. The
+// stream has to keep painting, count the losses and end without an error.
+test('a stream on a lossy, jittery network keeps playing and ends cleanly', async () => {
+  app = await electron.launch({ args: [path.join(__dirname, 'media/main.cjs')] })
+  const page = await app.firstWindow()
+  const settings = { ...DEFAULT_SETTINGS, upscaler: 'shader', framePacing: 'smooth', language: 'tr', psPremium: true, showStats: true, psFsr: true, psDeband: false, fullscreenOnStream: false }
+  await page.addInitScript(
+    ([s, impair]) => {
+      const w = window as unknown as { __hcSettings: unknown; __hcImpair: unknown }
+      w.__hcSettings = s
+      w.__hcImpair = impair
+    },
+    [settings, { loss: 8, jitter: 40 }] as const,
+  )
+  await page.goto(HARNESS)
+  await page.getByRole('tab', { name: 'PlayStation' }).click()
+  await page.locator('.library .grid button').first().click()
+  await page.getByRole('button', { name: 'Oyna' }).click()
+
+  await expect(page.locator('.stream-veil')).toBeHidden({ timeout: 30_000 })
+  const stats = page.locator('.stream-stats')
+  await expect(stats).toContainText('1280×720', { timeout: 10_000 })
+  await expect.poll(async () => Number((await stats.textContent())?.match(/kayıp\s*(\d+)/)?.[1] ?? 0), { timeout: 15_000 }).toBeGreaterThan(0)
+  const fps = Number((await stats.textContent())?.match(/(\d+)\s*kare\/sn/)?.[1] ?? 0)
+  expect(fps).toBeGreaterThan(3)
+
+  await expect(page.locator('.stream')).toBeHidden({ timeout: 40_000 })
+  await expect(page.locator('.toast')).toHaveCount(0)
+  const errors: string[] = await page.evaluate(() => (window as unknown as { __hcErrors?: string[] }).__hcErrors ?? [])
+  expect(errors).toEqual([])
+})

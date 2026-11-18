@@ -59,6 +59,19 @@ test('settings switch the whole interface to English and back', async () => {
   await expect(page.getByRole('tab', { name: 'Ana Sayfa' })).toBeVisible()
 })
 
+test('Arabic turns the page right to left and German back', async () => {
+  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  await page.getByRole('combobox', { name: 'Dil' }).selectOption('ar')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+  await expect(page.getByRole('heading', { name: 'عام' })).toBeVisible()
+  await shot('settings-ar')
+  await page.getByRole('combobox', { name: 'اللغة' }).selectOption('de')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+  await expect(page.getByRole('heading', { name: 'Allgemein' })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Sprache' }).selectOption('tr')
+  await expect(page.getByRole('tab', { name: 'Ana Sayfa' })).toBeVisible()
+})
+
 test('a bad region address is refused with a message', async () => {
   await page.getByRole('button', { name: 'Ayarlar' }).click()
   await page.getByRole('button', { name: 'Xbox', exact: true }).click()

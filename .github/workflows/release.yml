@@ -212,6 +212,8 @@ jobs:
           xcodebuild -version
       - name: PlayStation core
         run: bash mobile/plugins/ps-core/ios/build-core.sh
+        env:
+          HC_IOS_SLICES: device
       # Always: an unsigned app that AltStore or Sideloadly can sign with any Apple ID.
       - name: Unsigned build
         run: |

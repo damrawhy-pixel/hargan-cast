@@ -1,11 +1,25 @@
 // Builds native/bin/hargan-ps-core.exe. Needs CMake, Ninja and llvm-mingw's clang on PATH;
 // falls back to the Ninja that ships with Visual Studio.
 // With --test it builds and runs the DualSense byte-format tests instead.
+// On macOS it builds native/bin/hargan-ps-core from the phone apps' core instead
+// (native/ps-core/mobile, sidecar.c); needs Xcode's command line tools and CMake.
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 
 const root = path.resolve(import.meta.dirname, '..')
+
+if (process.platform === 'darwin') {
+  const macBuild = path.join(root, 'native', 'build-mac')
+  const arch = process.env.HC_MAC_ARCH || process.arch
+  const run = (...args) => execFileSync('cmake', args, { stdio: 'inherit' })
+  run('-S', path.join(root, 'native', 'ps-core', 'mobile'), '-B', macBuild, '-DCMAKE_BUILD_TYPE=Release',
+    `-DCMAKE_OSX_ARCHITECTURES=${arch === 'x64' ? 'x86_64' : 'arm64'}`, '-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0')
+  run('--build', macBuild, '--target', 'hargan-ps-core', '-j', '8')
+  mkdirSync(path.join(root, 'native', 'bin'), { recursive: true })
+  copyFileSync(path.join(macBuild, 'hargan-ps-core'), path.join(root, 'native', 'bin', 'hargan-ps-core'))
+  process.exit(0)
+}
 const source = path.join(root, 'native', 'ps-core')
 const build = path.join(root, 'native', 'build')
 const test = process.argv.includes('--test')

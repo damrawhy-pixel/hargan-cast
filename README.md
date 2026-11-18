@@ -1,6 +1,6 @@
 # Hargan Cast
 
-PlayStation ve Xbox bulut oyun servislerini tek uygulamada, birbirinden tamamen ayrı iki alan olarak sunan Windows istemcisi.
+PlayStation ve Xbox bulut oyun servislerini tek uygulamada, birbirinden tamamen ayrı iki alan olarak sunan istemci: Windows, Mac (Apple silikon, ilk sürüm), Android ve iOS. Arayüz Türkçe, İngilizce, Almanca ve Arapça; Arapçada sayfa sağdan sola döner, akış ekranı ve dokunmatik düğmeler kolun yönünü korur.
 
 ## Mimari
 
@@ -14,7 +14,8 @@ Renderer: React arayüzü + stream.worker (WebCodecs) ◄───┘
 
 - **Hesap ayrımı:** her servis kendi tarayıcı bölümünü (`persist:xbox`, `persist:playstation`) ve kendi DPAPI ile şifreli kasasını kullanır. Birinden çıkmak diğerine dokunmaz.
 - **PlayStation yolu:** protokol kütüphanesi ayrı bir süreçte çalışır, çökmesi arayüzü düşürmez. H.264/H.265 kareleri GPU'da WebCodecs ile çözülür, ses AudioWorklet ile çalınır.
-- **HTTP:** çekirdeğin tüm istekleri `src/main/playstation/httpBridge.ts` ile Chromium ağ katmanından geçer.
+- **HTTP:** Windows çekirdeğinin tüm istekleri `src/main/playstation/httpBridge.ts` ile Chromium ağ katmanından geçer.
+- **Mac:** masaüstü çekirdeği Windows'a bağlı olduğundan Mac'te telefonların çekirdeği (`native/ps-core/mobile`) aynı stdin/stdout sözleşmesiyle çalışır (`sidecar.c`); isteklerini macOS'un kendi TLS'iyle kendisi yapar. Ekran yenileme hızını uydurma, Wi-Fi taraması, ağ önceliği, NAT testi, DualSense tetik köprüsü, masaüstü kısayolu ve Steam girişi şimdilik yalnızca Windows'ta.
 - **Xbox yolu:** WebRTC oynatıcısı üzerinden, yalnızca akış başlarken yüklenir.
 
 ## DualSense
@@ -47,6 +48,8 @@ npm run native
 ```bash
 npm run dev
 ```
+
+Mac'te `npm run native` aynı komutla Mac çekirdeğini derler (Xcode komut satırı araçları ve CMake gerekir); DMG için `npm run dist:mac`. İmzasız (ad-hoc) olduğu için ilk açılışta Finder'da sağ tık > Aç gerekir.
 
 Dağıtım klasörü: `npm run dist`. Tüm denetimler: `npm run check`. Arayüz testleri: `npm run test:ui`. Kol biçimi testleri, kol gerekmeden: `npm run test:native`. Ayrıntılar ve kurallar [CONTRIBUTING.md](CONTRIBUTING.md), güvenlik modeli [SECURITY.md](SECURITY.md) dosyasında.
 
@@ -94,7 +97,7 @@ Tüm ayarlar **Ayarlar** sekmesindedir ve şifreli olarak `vault/settings.bin` d
 
 Kendi PS5/PS4'ünden Uzaktan Oynatma masaüstünde ve telefonlarda var (PlayStation alanı > Konsolların): evde doğrudan, ev dışında "İnternet üzerinden oyna" ile PSN aracılığıyla. Kendi konsolunda mikrofon sesli sohbete gider. iPhone'da ağda arama Apple'ın çok noktaya yayın iznine bağlı; adresi elle girmek her zaman çalışır. Xbox ev akışı Microsoft'un aktarımıyla her yerden çalışır.
 
-Diğer: Xbox oyunlarında DualSense jiroskopla nişan (Ayarlar > Xbox kol ve giriş), kolla yazılabilen ekran klavyesi, her akışın ölçüm geçmişi (Ayarlar > Akış geçmişi), "Bu bilgisayara göre ayarla", hesap başına ayrı oturumlarla birden çok hesap (Ayarlar > Hesaplar) ve Android'de doğrudan görüntü (MediaCodec, deneysel). Android uygulaması her değişiklikte GitHub Actions'ta bir emülatörde Playwright ile denenir (tests/android).
+Diğer: Xbox oyunlarında DualSense jiroskopla nişan (Ayarlar > Xbox kol ve giriş), kolla yazılabilen ekran klavyesi, her akışın ölçüm geçmişi (Ayarlar > Akış geçmişi), "Bu bilgisayara göre ayarla", hesap başına ayrı oturumlarla birden çok hesap (Ayarlar > Hesaplar) ve telefonlarda doğrudan görüntü (Android'de MediaCodec, iPhone ve iPad'de VideoToolbox; deneysel). Android uygulaması her değişiklikte GitHub Actions'ta bir emülatörde Playwright ile, iOS uygulaması bir simülatörde açılış testiyle, Mac uygulaması da arayüz testleriyle denenir.
 
 ## Sorun giderme
 

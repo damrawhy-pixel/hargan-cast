@@ -1,8 +1,8 @@
 # Hargan Cast Gizlilik Politikası
 
-Son güncelleme: 9 Kasım 2026
+Son güncelleme: 18 Kasım 2026
 
-Hargan Cast; Windows, Android ve iOS için bir bulut oyun istemcisidir. Kendi Xbox ve PlayStation hesaplarınla, o hesaplarda zaten oynayabildiğin oyunları akışla oynamanı sağlar. Bu metin, uygulamanın hangi bilgileri nasıl kullandığını anlatır.
+Hargan Cast; Windows, Mac, Android ve iOS için bir bulut oyun istemcisidir. Kendi Xbox ve PlayStation hesaplarınla, o hesaplarda zaten oynayabildiğin oyunları akışla oynamanı sağlar. Bu metin, uygulamanın hangi bilgileri nasıl kullandığını anlatır.
 
 ## Kısaca
 
@@ -14,7 +14,7 @@ Hargan Cast; Windows, Android ve iOS için bir bulut oyun istemcisidir. Kendi Xb
 
 | Bilgi | Neden | Nerede |
 | --- | --- | --- |
-| Microsoft/Xbox oturum anahtarları | Xbox hesabına her açılışta yeniden giriş yapmamak için | Windows'ta şifreli olarak kullanıcı klasöründe; telefonda uygulamanın kendi korumalı alanında |
+| Microsoft/Xbox oturum anahtarları | Xbox hesabına her açılışta yeniden giriş yapmamak için | Windows'ta ve Mac'te şifreli olarak kullanıcı klasöründe (Mac'te anahtarı Anahtar Zinciri'nde); telefonda uygulamanın kendi korumalı alanında |
 | PlayStation oturum anahtarı (NPSSO) | PlayStation kataloğunu yüklemek ve akış başlatmak için | Aynı şekilde, yalnızca cihazında |
 | Uygulama ayarları | Seçtiğin görüntü, ses ve kontrol ayarlarını hatırlamak için | Yalnızca cihazında |
 | PlayStation katalog önbelleği | Kataloğu her seferinde baştan indirmemek için | Yalnızca cihazında |
@@ -34,11 +34,12 @@ Bu bilgiler cihazından Hargan Cast'e ya da başka bir yere gönderilmez. Hesapt
 - **Sony PSN (ev dışından kendi konsoluna bağlanırken):** Bağlantıyı Sony'nin sunucusu kurar; bunun için bu uygulamaya özel bir cihaz kimliği ve Sony oturum anahtarı kullanılır.
 - **Mikrofon (yalnızca açarsan):** Kendi konsolundan oynarken sesin yalnızca o konsola gider; kaydedilmez.
 - **Discord (yalnızca açarsan):** Ayarlar'da açarsan, oynadığın oyunun adı bilgisayarındaki Discord uygulamasına yerel olarak iletilir; Discord bunu arkadaşlarına gösterir.
+- **Google STUN sunucuları (yalnızca ev dışı bağlantı testinde, Windows sürümü):** Ayarlar > Ağ > Ev dışından bağlantı testi'ni başlattığında, ağının dışarıdan nasıl göründüğünü anlamak için stun.l.google.com ve stun1.l.google.com'a birer kısa soru gönderilir. Bu sorular hesap bilgisi taşımaz; sunucular yalnızca genel IP adresini görür. Test başlatılmadıkça bu bağlantı kurulmaz.
 - **Cloudflare (yalnızca bağlantı testinde, Windows sürümü):** Ayarlar > Ağ > Bağlantı testi'ni başlattığında indirme hızını ölçmek için speed.cloudflare.com'dan birkaç saniye boyunca anlamsız veri indirilir. Hiçbir bilgi gönderilmez; test başlatılmadıkça bu bağlantı kurulmaz.
 
 Hesap girişleri Microsoft'un ve Sony'nin kendi giriş sayfalarında yapılır; şifren Hargan Cast'ten geçmez ve uygulama şifreni hiçbir zaman görmez.
 
-Oyun akışı sırasında görüntü, ses ve kumanda girdileri yalnızca cihazınla Microsoft'un veya Sony'nin sunucuları arasında gider. PlayStation akışında görüntü, cihazın içinde uygulamanın bir bölümünden ötekine yerel bir bağlantıyla (127.0.0.1) aktarılır; bu bağlantı cihazdan dışarı çıkmaz.
+Oyun akışı sırasında görüntü, ses ve kumanda girdileri yalnızca cihazınla Microsoft'un veya Sony'nin sunucuları arasında gider. Windows sürümü akış sırasında Wi-Fi bağdaştırıcısının arka plan taramasını durdurur ve akış paketlerini ses ve görüntü önceliğiyle işaretler; bunlar yalnızca bilgisayarındaki ayarlardır, hiçbir yere bilgi gönderilmez. PlayStation akışında görüntü, cihazın içinde uygulamanın bir bölümünden ötekine yerel bir bağlantıyla (127.0.0.1) aktarılır; bu bağlantı cihazdan dışarı çıkmaz.
 
 ## Android izinleri
 

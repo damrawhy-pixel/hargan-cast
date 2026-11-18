@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import readline from 'node:readline'
 import { settingsFor, type AppSettings } from '../../shared/settings'
-import type { GameInfo, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
+import type { GameInfo, NatReport, PsCatalog, PsDatacenter, PsEvent, PsGame, PsStatus, PsStreamOptions, PsStreamStarted } from '../../shared/types'
 import { t } from '../../shared/i18n'
 import { log, safeUrl } from '../log'
 import SecureStore from '../secureStore'
@@ -162,17 +162,20 @@ export default class PlayStationService {
 
   // --- sidecar -------------------------------------------------------------
 
+  // Windows runs the desktop core; macOS the phone apps' core behind the same contract.
   private corePath() {
-    return app.isPackaged
-      ? path.join(process.resourcesPath, 'hargan-ps-core.exe')
-      : path.join(app.getAppPath(), 'native', 'bin', 'hargan-ps-core.exe')
+    const name = process.platform === 'win32' ? 'hargan-ps-core.exe' : 'hargan-ps-core'
+    return app.isPackaged ? path.join(process.resourcesPath, name) : path.join(app.getAppPath(), 'native', 'bin', name)
   }
 
   private ensureCore() {
     if (this.ready) return this.ready
     this.ready = new Promise<void>((resolve, reject) => {
       // A crash leaves a small minidump next to the app's own (see crash_dump.c).
-      const core = spawn(this.corePath(), [], { windowsHide: true, env: { ...process.env, HC_DUMP_DIR: app.getPath('crashDumps') } })
+      const core = spawn(this.corePath(), [], {
+        windowsHide: true,
+        env: { ...process.env, HC_DUMP_DIR: app.getPath('crashDumps'), HC_CACHE_DIR: path.join(app.getPath('userData'), 'ps-core') },
+      })
       this.core = core
       const helloTimer = setTimeout(() => {
         log('ps core: no hello in time')
@@ -360,6 +363,30 @@ export default class PlayStationService {
   async matchDisplay(hwnd: string, fps: number): Promise<{ changed: boolean; from: number; to: number }> {
     await this.ensureCore()
     return this.call('display', { action: 'match', hwnd, fps }, QUICK_TIMEOUT_MS)
+  }
+
+  /** Xbox games' trigger rumble on a DualSense (0-255 each); negative ends it. Fire and forget. */
+  dsTriggers(left: number, right: number) {
+    const done = left < 0 || right < 0
+    if (done && !this.core) return
+    void this.ensureCore()
+      .then(() => this.call('dsTriggers', { on: !done, left: Math.max(0, left), right: Math.max(0, right) }, QUICK_TIMEOUT_MS))
+      .catch(() => {})
+  }
+
+  /** How the network looks from outside, for PSN's connection broker; see nat.c. */
+  async natTest(): Promise<NatReport> {
+    await this.ensureCore()
+    const { report } = await this.call('console', { action: 'nat' }, QUICK_TIMEOUT_MS)
+    return report
+  }
+
+  /** Background Wi-Fi scans off for a stream's length; see wifi.c. Returns the adapters quieted. */
+  async quietWifi(on: boolean): Promise<number> {
+    if (!on && !this.core) return 0
+    await this.ensureCore()
+    const { adapters } = await this.call('wifi', { quiet: on }, QUICK_TIMEOUT_MS)
+    return adapters ?? 0
   }
 
   async restoreDisplay() {

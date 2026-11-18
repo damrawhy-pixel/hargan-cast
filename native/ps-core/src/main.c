@@ -15,6 +15,10 @@
 #include "haptics.h"
 #include "media_server.h"
 #include "microphone.h"
+#include "priority.h"
+#include "wifi.h"
+#include "qos.h"
+#include "nat.h"
 #include "remap.h"
 
 #include <chiaki/cloudcatalog.h>
@@ -352,6 +356,7 @@ static NalScan scan_nals(const uint8_t *b, size_t n, CodecFamily codec)
 
 static bool on_video(uint8_t *buf, size_t size, int32_t frames_lost, bool recovered, void *user)
 {
+	priority_boost_thread();
 	NalScan nal = scan_nals(buf, size, stream_codec);
 
 	// The protocol library hands over parameter sets as a standalone sample. WebCodecs needs
@@ -398,6 +403,7 @@ static void on_audio_settings(uint32_t channels, uint32_t rate, void *user)
 
 static void on_audio_frame(int16_t *buf, size_t samples, void *user)
 {
+	priority_boost_thread();
 	// Audio can start before the renderer's socket connects, so the format is
 	// announced from here until it actually got queued for a client.
 	if(!audio_format_sent)
@@ -426,6 +432,40 @@ static void on_dualsense_state(const ChiakiControllerState *state)
 	remap_apply(&pad_layout, &dualsense_state);
 	publish_controller_state();
 	LeaveCriticalSection(&input_lock);
+}
+
+// --- Xbox games on a DualSense: trigger rumble as trigger vibration ---------
+
+static bool xbox_triggers;
+
+// The core holds the controller only for its triggers; input stays with the browser.
+static void on_bridge_state(const ChiakiControllerState *state) {}
+static void on_bridge_link(const char *transport) {}
+
+/**
+ * A DualSense "vibration" trigger effect (0x26) over the whole travel at a
+ * strength from 0 (off) to 255, or the "off" effect (0x05) for 0.
+ */
+static uint8_t trigger_vibration(int strength, uint8_t params[10])
+{
+	memset(params, 0, 10);
+	if(strength <= 0)
+		return 0x05;
+	uint32_t level = (uint32_t)(strength > 255 ? 255 : strength) * 7 / 255;
+	uint32_t zones = 0, amplitudes = 0;
+	for(int i = 0; i < 10; i++)
+	{
+		zones |= 1u << i;
+		amplitudes |= level << (3 * i);
+	}
+	params[0] = (uint8_t)zones;
+	params[1] = (uint8_t)(zones >> 8);
+	params[2] = (uint8_t)amplitudes;
+	params[3] = (uint8_t)(amplitudes >> 8);
+	params[4] = (uint8_t)(amplitudes >> 16);
+	params[5] = (uint8_t)(amplitudes >> 24);
+	params[8] = 40; // Hz
+	return 0x26;
 }
 
 static void on_dualsense_link(const char *transport)
@@ -503,6 +543,10 @@ static void on_event(ChiakiEvent *event, void *user)
 	{
 		case CHIAKI_EVENT_CONNECTED:
 			emit_event("connected", NULL, NULL);
+			if(qos_attach((uintptr_t)session.stream_connection.takion.sock))
+				CHIAKI_LOGI(&core_log, "stream socket marked as audio/video (qWAVE)");
+			else
+				CHIAKI_LOGI(&core_log, "qWAVE flow not available; stream packets keep normal priority");
 			break;
 		case CHIAKI_EVENT_RUMBLE:
 		{
@@ -643,12 +687,14 @@ static void run_session(StreamRequest *req, ChiakiConnectInfo *info, json_object
 	chiaki_session_set_event_cb(&session, on_event, NULL);
 
 	ResetEvent(quit_event);
+	priority_stream_begin();
 	err = chiaki_session_start(&session);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		json_object_object_add(reply, "ok", json_object_new_boolean(0));
 		json_object_object_add(reply, "error", json_object_new_string(chiaki_error_string(err)));
 		emit(reply);
+		priority_stream_end();
 		chiaki_opus_decoder_fini(&opus);
 		chiaki_session_fini(&session);
 		return;
@@ -695,6 +741,8 @@ static void run_session(StreamRequest *req, ChiakiConnectInfo *info, json_object
 	mic_close();
 	chiaki_session_stop(&session);
 	chiaki_session_join(&session);
+	qos_detach();
+	priority_stream_end();
 	chiaki_opus_decoder_fini(&opus);
 	chiaki_session_fini(&session);
 	media_server_send(MEDIA_RESET, NULL, 0, NULL, 0);
@@ -905,6 +953,11 @@ static unsigned __stdcall console_thread(void *arg)
 		else
 			json_object_object_add(reply, "error", json_object_new_string("CONSOLE_PSN"));
 	}
+	else if(strcmp(r->action, "nat") == 0)
+	{
+		json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		json_object_object_add(reply, "report", nat_test());
+	}
 	else if(strcmp(r->action, "wake") == 0)
 	{
 		bool woke = console_wake(&core_log, r->host, r->regist_key, r->ps5);
@@ -988,6 +1041,8 @@ typedef struct
 {
 	char *path;
 	bool hevc;
+	// A bad network, for tests: share of non-key frames lost (%) and extra delay (up to, ms).
+	int loss, jitter;
 } DiagRequest;
 
 static unsigned __stdcall diag_thread(void *arg)
@@ -1003,20 +1058,33 @@ static unsigned __stdcall diag_thread(void *arg)
 	for(int i = 0; i < 960; i += 2)
 		pcm[i] = pcm[i + 1] = (int16_t)((i % 96) * 300);
 
-	int sent = 0, dropped = 0;
+	int sent = 0, dropped = 0, lost = 0;
+	// Fixed seed: the same losses on every run.
+	uint32_t random = 0x9e3779b9u;
 	uint32_t size;
 	while(f && fread(&size, 4, 1, f) == 1)
 	{
 		uint8_t *buf = malloc(size);
 		if(fread(buf, 1, size, f) != size)
 			break;
-		if(on_video(buf, size, 0, false, NULL))
+		random ^= random << 13; random ^= random >> 17; random ^= random << 5;
+		bool key = scan_nals(buf, size, stream_codec).has_key;
+		if(!key && req->loss > 0 && (int)(random % 100) < req->loss)
+		{
+			// Gone on the way: the next frame that arrives says how many went missing.
+			lost++;
+			free(buf);
+			Sleep(16);
+			continue;
+		}
+		if(on_video(buf, size, lost, false, NULL))
 			sent++;
 		else
 			dropped++;
+		lost = 0;
 		free(buf);
 		on_audio_frame(pcm, 480, NULL);
-		Sleep(16);
+		Sleep(16 + (req->jitter > 0 ? (DWORD)((random >> 8) % (uint32_t)req->jitter) : 0));
 	}
 	if(f)
 		fclose(f);
@@ -1161,6 +1229,42 @@ static void handle_command(const char *line)
 			CloseHandle((HANDLE)_beginthreadex(NULL, 0, haptic_test_thread, r, 0, NULL));
 		}
 	}
+	else if(strcmp(name, "dsTriggers") == 0)
+	{
+		// Xbox games: their trigger rumble played as DualSense trigger vibration.
+		// The core opens the controller just for this when no PlayStation stream has it.
+		json_object *reply = json_object_new_object();
+		json_object_object_add(reply, "id", json_object_new_int(id));
+		json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		if(!InterlockedCompareExchange(&session_live, 0, 0))
+		{
+			bool on = bool_field(cmd, "on");
+			if(on && !xbox_triggers)
+			{
+				dualsense_start(on_bridge_state, on_bridge_link);
+				xbox_triggers = true;
+			}
+			uint8_t left[10], right[10];
+			uint8_t left_mode = trigger_vibration(int_field(cmd, "left", 0), left);
+			uint8_t right_mode = trigger_vibration(int_field(cmd, "right", 0), right);
+			if(xbox_triggers)
+				dualsense_set_triggers(left_mode, left, right_mode, right);
+			if(!on && xbox_triggers)
+			{
+				dualsense_stop();
+				xbox_triggers = false;
+			}
+		}
+		emit(reply);
+	}
+	else if(strcmp(name, "wifi") == 0)
+	{
+		json_object *reply = json_object_new_object();
+		json_object_object_add(reply, "id", json_object_new_int(id));
+		json_object_object_add(reply, "ok", json_object_new_boolean(1));
+		json_object_object_add(reply, "adapters", json_object_new_int(wifi_quiet(bool_field(cmd, "quiet"))));
+		emit(reply);
+	}
 	else if(strcmp(name, "display") == 0)
 	{
 		// The app's window handle travels as a decimal string: JSON numbers lose 64-bit precision.
@@ -1195,6 +1299,8 @@ static void handle_command(const char *line)
 		DiagRequest *r = calloc(1, sizeof(*r));
 		r->path = dup_field(cmd, "file");
 		r->hevc = bool_field(cmd, "hevc");
+		r->loss = int_field(cmd, "loss", 0);
+		r->jitter = int_field(cmd, "jitter", 0);
 		CloseHandle((HANDLE)_beginthreadex(NULL, 0, diag_thread, r, 0, NULL));
 	}
 #endif
@@ -1266,6 +1372,7 @@ int main(void)
 
 	// stdin closes when the app exits; end a running session properly, then follow it.
 	display_restore();
+	wifi_quiet(false);
 	InterlockedExchange(&stop_requested, 1);
 	SetEvent(quit_event);
 	for(int waited = 0; waited < 2000 && InterlockedCompareExchange(&stream_busy, 0, 0); waited += 50)

@@ -17,7 +17,7 @@ export interface PsCorePlugin {
   vaultLoad(): Promise<{ data?: string }>
   vaultSave(options: { data: string }): Promise<void>
   addListener(event: 'line', listener: (e: { line: string }) => void): Promise<PluginListenerHandle>
-  /** Android: the stream's picture through MediaCodec onto a surface under the web view. */
+  /** The stream's picture through MediaCodec (Android) or VideoToolbox (iOS) under the web view. */
   nativeVideoStart(options: { hevc: boolean; width: number; height: number }): Promise<void>
   nativeVideoStop(): Promise<void>
   nativeVideoTest(options: { units: string[]; hevc: boolean; width: number; height: number }): Promise<NativeVideoTest>

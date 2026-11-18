@@ -10,6 +10,8 @@ const MAX_POINTS = 240
 export interface StreamRecord {
   at: string
   platform: string
+  /** The game's or console's settings key ("ps:<productId>", "xbox:<titleId>", "console:<id>"). */
+  key?: string
   title: string
   seconds: number
   /** Seconds from start to the first picture; undefined when none came. */

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings'
-import { getLanguage, resolveLanguage, setLanguage } from '../../../shared/i18n'
+import { direction, getLanguage, resolveLanguage, setLanguage } from '../../../shared/i18n'
 
 let current = DEFAULT_SETTINGS
 const listeners = new Set<() => void>()
@@ -8,15 +8,31 @@ const listeners = new Set<() => void>()
 function applyLanguage(settings: AppSettings) {
   setLanguage(resolveLanguage(settings.language, navigator.language))
   document.documentElement.lang = getLanguage()
+  document.documentElement.dir = direction()
 }
 applyLanguage(current)
 
 // The desktop scales the page from the main process (setZoomFactor); phones have no
 // such process, so the page scales itself. Same base size on both.
 const BASE_FONT_PX = 15
+// The living-room view: across the room on a TV or a Steam Deck in Game Mode,
+// everything a quarter larger and the controller's focus unmistakable.
+const LIVING_ROOM_SCALE = 1.25
+
+export function livingRoom(settings: AppSettings) {
+  if (settings.livingRoom !== 'auto') return settings.livingRoom === 'on'
+  const phoneOrTv = document.documentElement.dataset.platform === 'mobile'
+  // A TV has no touch screen; a Steam Deck in Game Mode is told by the main process.
+  const tv = phoneOrTv && typeof matchMedia === 'function' && !matchMedia('(any-pointer: coarse)').matches
+  return tv || Boolean(window.hc.platform.gameMode)
+}
+
 function applyTextSize(settings: AppSettings) {
-  if (document.documentElement.dataset.platform !== 'mobile') return
-  document.documentElement.style.setProperty('zoom', String(settings.fontSize / BASE_FONT_PX))
+  const living = livingRoom(settings)
+  document.documentElement.toggleAttribute('data-living-room', living)
+  const scale = living ? LIVING_ROOM_SCALE : 1
+  if (document.documentElement.dataset.platform === 'mobile') document.documentElement.style.setProperty('zoom', String((settings.fontSize / BASE_FONT_PX) * scale))
+  else document.documentElement.style.setProperty('zoom', living ? String(scale) : '')
 }
 
 function publish(next: AppSettings) {

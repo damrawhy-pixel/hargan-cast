@@ -3,6 +3,7 @@
 // one the setting is not offered at all. Off by default: it tells friends what
 // the user plays.
 import net from 'node:net'
+import path from 'node:path'
 import { log } from './log'
 
 declare const __DISCORD_CLIENT_ID__: string
@@ -20,10 +21,17 @@ function frame(op: number, payload: unknown) {
   return Buffer.concat([head, json])
 }
 
+// A named pipe on Windows; a socket in the user's temporary folder on macOS and Linux.
+function pipePath(index: number) {
+  if (process.platform === 'win32') return `\\\\?\\pipe\\discord-ipc-${index}`
+  const dir = process.env.XDG_RUNTIME_DIR || process.env.TMPDIR || process.env.TMP || process.env.TEMP || '/tmp'
+  return path.join(dir, `discord-ipc-${index}`)
+}
+
 function connect(index = 0): Promise<net.Socket | undefined> {
   if (index >= PIPES) return Promise.resolve(undefined)
   return new Promise((resolve) => {
-    const socket = net.connect(`\\\\?\\pipe\\discord-ipc-${index}`)
+    const socket = net.connect(pipePath(index))
     socket.once('connect', () => resolve(socket))
     socket.once('error', () => resolve(connect(index + 1)))
   })

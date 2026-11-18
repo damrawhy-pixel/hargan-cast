@@ -1,6 +1,6 @@
 // Runs the whole media path off the UI thread: socket, decode, paint.
 
-import { Picture, outputSize, pictureLabel, type Fit, type PictureOptions, type Size } from '../lib/picture'
+import { PICTURE_BUDGET_MS, Picture, outputSize, type Fit, type PictureOptions, type Size } from '../lib/picture'
 import { decoderConfig, dynamicRange, readFormat, type DynamicRange } from '../lib/sps'
 import type { Message } from '../../../shared/i18n'
 
@@ -31,7 +31,8 @@ export type WorkerCommand = WorkerInit | { type: 'view'; view: View } | { type: 
 
 export type WorkerEvent =
   /** `filters` is non-empty when post-processing runs; the page words it. */
-  | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; filters: string; decodeMs?: number; waitMs?: number; jitterMs: number; skipped: number }
+  /** `options` are the filters running now, `lightened` one just turned off for a slow graphics card. */
+  | { type: 'stats'; fps: number; mbps: number; lost: number; size: string; options?: PictureOptions; gpuMs?: number; lightened?: Message; decodeMs?: number; waitMs?: number; jitterMs: number; skipped: number }
   | { type: 'firstFrame' }
   /** A decoded frame for the page's <video>; the page closes it. */
   | { type: 'frame'; frame: VideoFrame }
@@ -320,7 +321,9 @@ function start(init: WorkerInit) {
       mbps: (bytes * 8) / 1e6,
       lost,
       size: `${frameSize.width}×${frameSize.height} · ${videoLabel()}`,
-      filters: picture ? pictureLabel(picture.options) : '',
+      lightened: picture?.adapt(PICTURE_BUDGET_MS),
+      options: picture ? { ...picture.options } : undefined,
+      gpuMs: picture?.gpuMs,
       decodeMs: decodeCount ? decodeSum / decodeCount : undefined,
       waitMs: waitCount ? waitSum / waitCount : undefined,
       jitterMs: jitter,

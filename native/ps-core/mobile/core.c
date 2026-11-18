@@ -122,6 +122,10 @@ static void on_log(ChiakiLogLevel level, const char *msg, void *user)
 #else
 	os_log(OS_LOG_DEFAULT, "HarganPS [%c] %s", chiaki_log_level_char(level), msg);
 #endif
+#ifdef HC_LOG_STDERR
+	// The macOS sidecar: the desktop app keeps the core's stderr with its own log.
+	fprintf(stderr, "[%c] %s\n", chiaki_log_level_char(level), msg);
+#endif
 }
 
 static void emit_line(const char *line, size_t size)

@@ -13,6 +13,8 @@ export interface AppSettings {
   showGameImage: boolean
   backgroundKeepalive: boolean
   useVulkan: boolean
+  /** Desktop: ask Windows for the stronger graphics card on two-GPU laptops (unless the user chose otherwise there). */
+  highPerformanceGpu: boolean
   /** Forces GPU features on drivers Chromium distrusts; off by default since it can crash them. */
   ignoreGpuBlocklist: boolean
   /** Desktop: also install pre-releases. */
@@ -23,6 +25,8 @@ export interface AppSettings {
   gameProfiles: Record<string, GameProfile>
   fontSize: number
   uiSounds: boolean
+  /** Larger interface for TVs and Steam Deck's Game Mode; 'auto' turns it on there. */
+  livingRoom: 'auto' | 'on' | 'off'
   /** 'system' follows Windows' "Animation effects" switch. */
   motion: 'on' | 'system' | 'off'
 
@@ -35,6 +39,8 @@ export interface AppSettings {
   touchOpacity: number
   touchSize: number
   touchVibrate: boolean
+  /** Moved and resized on-screen controls, as JSON by platform (TouchControls.readTouchLayout). */
+  touchLayout: string
 
   // Picture, shared by both services
   videoFormat: VideoFormat
@@ -54,6 +60,8 @@ export interface AppSettings {
   framePacing: 'latency' | 'smooth'
   /** The "fit this computer" step has been run or declined. */
   autoTuned: boolean
+  /** Desktop: no background Wi-Fi scans while streaming. */
+  quietWifi: boolean
   /** Desktop: while streaming, switch the monitor to a multiple of 60 Hz (144 to 120). */
   matchRefreshRate: boolean
   /** Desktop: keep the last replaySeconds of a stream, to save as a clip. */
@@ -145,6 +153,8 @@ export interface AppSettings {
   xboxMouseSensitivity: number
   /** Desktop: a DualSense's gyro moves the right stick, always or while LT is held. */
   xboxGyro: 'off' | 'always' | 'aim'
+  /** Desktop: Xbox games' trigger rumble as DualSense trigger vibration. */
+  xboxDualSenseTriggers: boolean
   xboxGyroSensitivity: number
   xboxGyroInvertX: boolean
   xboxGyroInvertY: boolean
@@ -159,12 +169,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showGameImage: true,
   backgroundKeepalive: false,
   useVulkan: false,
+  highPerformanceGpu: true,
   ignoreGpuBlocklist: false,
   betaUpdates: false,
   launchAtLogin: false,
   gameProfiles: {},
   fontSize: 15,
   uiSounds: true,
+  livingRoom: 'auto',
   motion: 'on',
 
   showStats: false,
@@ -174,6 +186,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   touchOpacity: 60,
   touchSize: 100,
   touchVibrate: true,
+  touchLayout: '',
 
   videoFormat: '',
   brightness: 100,
@@ -184,6 +197,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   upscaler: 'shader',
   framePacing: 'latency',
   autoTuned: false,
+  quietWifi: true,
   matchRefreshRate: false,
   replayBuffer: false,
   replaySeconds: 30,
@@ -257,6 +271,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   xboxMouseKeyboard: false,
   xboxMouseSensitivity: 0.5,
   xboxGyro: 'off',
+  xboxDualSenseTriggers: true,
   xboxGyroSensitivity: 1,
   xboxGyroInvertX: false,
   xboxGyroInvertY: false,
@@ -331,8 +346,9 @@ function sanitizeProfiles(input: object): Record<string, GameProfile> {
 
 // Fields whose value must be one of a fixed set.
 const CHOICES: { [K in keyof AppSettings]?: readonly AppSettings[K][] } = {
-  language: ['', 'tr', 'en'],
+  language: ['', 'tr', 'en', 'de', 'ar'],
   motion: ['on', 'system', 'off'],
+  livingRoom: ['auto', 'on', 'off'],
   touchControls: ['auto', 'on', 'off'],
   videoFormat: ['', 'Stretch', 'Zoom', '16:10', '18:9', '21:9', '4:3'],
   videoDecoder: ['prefer-hardware', 'prefer-software', 'no-preference'],
@@ -373,6 +389,18 @@ const RANGES: { [K in keyof AppSettings]?: [number, number] } = {
   xboxGyroSensitivity: [0.2, 4],
 }
 const NUMBER_SPAN = 1_000_000
+
+// { playstation?: {group: {x, y, s}}, xbox?: ... } with numbers in a sane span.
+function validTouchLayout(text: string) {
+  try {
+    const all = JSON.parse(text)
+    return Object.entries(all).every(([platform, groups]) =>
+      (platform === 'playstation' || platform === 'xbox') &&
+      Object.values(groups as object).every((g: any) => [g.x, g.y, g.s].every((n) => typeof n === 'number' && Number.isFinite(n)) && Math.abs(g.x) <= 100 && Math.abs(g.y) <= 100 && g.s >= 0.5 && g.s <= 2))
+  } catch {
+    return false
+  }
+}
 // Eighteen button indexes, 0 to 17.
 const BUTTON_MAP = /^(?:(?:1[0-7]|[0-9]),){17}(?:1[0-7]|[0-9])$/
 const MAX_TEXT = 512
@@ -401,8 +429,9 @@ export function sanitizeSettings(input: unknown): Partial<AppSettings> {
       const [min, max] = RANGES[field] ?? [-NUMBER_SPAN, NUMBER_SPAN]
       out[key] = Math.min(max, Math.max(min, value))
     } else if (typeof value === 'string') {
-      if (value.length > MAX_TEXT) continue
+      if (value.length > (field === 'touchLayout' ? 4000 : MAX_TEXT)) continue
       if (field === 'buttonMap' && value && !BUTTON_MAP.test(value)) continue
+      if (field === 'touchLayout' && value && !validTouchLayout(value)) continue
       out[key] = value
     } else out[key] = value
   }

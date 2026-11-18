@@ -3,6 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { saveClip, saveScreenshot, showCapture } from './captures'
 import { safeName } from './names'
+import { preferHighPerformanceGpu } from './gpuPreference'
 import { addToSteam } from './steam'
 import { LAUNCH, PROTOCOL, launchTarget } from './launch'
 import { DISCORD_CLIENT_ID, setPresence } from './discord'
@@ -148,7 +149,7 @@ function createWindow() {
       nodeIntegration: false,
       backgroundThrottling: true,
       // Under Proton the Windows Steam the app sees is a stub; adding games there does nothing.
-      additionalArguments: [...(UNDER_WINE ? ['--hc-under-wine'] : []), ...(DISCORD_CLIENT_ID ? ['--hc-discord'] : [])],
+      additionalArguments: [...(UNDER_WINE ? ['--hc-under-wine'] : []), ...(DISCORD_CLIENT_ID ? ['--hc-discord'] : []), ...(GAME_MODE ? ['--hc-game-mode'] : [])],
     },
   })
 
@@ -232,6 +233,11 @@ const STREAM_FPS = 60
 
 function matchDisplay(on: boolean) {
   if (process.platform !== 'win32') return
+  // Wi-Fi first: it matters on every stream, the refresh rate only when asked for.
+  if (!on || settings.get().quietWifi)
+    ps.quietWifi(on)
+      .then((n) => on && n && log(`wifi: background scans off on ${n} adapter(s) while streaming`))
+      .catch((e: Error) => log(`wifi: ${e.message}`))
   if (!on) return void ps.restoreDisplay()
   if (!win || !settings.get().matchRefreshRate) return
   const hwnd = win.getNativeWindowHandle().readBigUInt64LE().toString()
@@ -261,6 +267,9 @@ function registerIpc() {
     if (typeof url === 'string' && url.startsWith('https://')) void shell.openExternal(url)
   })
   listen('app:log', (text: unknown) => log(String(text).slice(0, 1000)))
+  listen('app:dsTriggers', (left: unknown, right: unknown) => {
+    if (process.platform === 'win32' && typeof left === 'number' && typeof right === 'number' && settings.get().xboxDualSenseTriggers) ps.dsTriggers(left, right)
+  })
   listen('app:presence', (title: unknown, service: unknown) => {
     if (!settings.get().discordPresence || typeof title !== 'string' || !title) return void setPresence(undefined)
     void setPresence({ title, service: String(service), since: Date.now() })
@@ -351,6 +360,7 @@ function registerIpc() {
     'ps:testHaptics': () => ps.testHaptics(),
     'ps:info': (game) => ps.info(game),
     'ps:routeSpeaker': () => ps.routeSpeaker(),
+    'ps:natTest': () => ps.natTest(),
     'ps:accounts': () => ps.accounts(),
     'ps:addAccount': (label) => ps.addAccount(label),
     'ps:switchAccount': (id, label) => ps.switchAccount(id, label),
@@ -431,6 +441,7 @@ app.whenReady().then(() => {
 
   settings = new SettingsStore()
   if (UNDER_WINE) log(`running on ${environmentLabel()}`)
+  if (app.isPackaged && !UNDER_WINE && settings.get().highPerformanceGpu) void preferHighPerformanceGpu(process.execPath)
   applyLanguage(settings.get())
   xbox = new XboxService((s) => send('xbox:statusChanged', s), settings.get())
   ps = new PlayStationService(

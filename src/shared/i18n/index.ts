@@ -4,23 +4,33 @@
 // so a new or changed Turkish text cannot ship untranslated.
 //
 // Placeholders are written {name} and filled from the second argument.
+import { ar } from './ar'
+import { de } from './de'
 import { en } from './en'
 
-export type Language = 'tr' | 'en'
+export type Language = 'tr' | 'en' | 'de' | 'ar'
 export type Message = keyof typeof en
 export type LanguageSetting = '' | Language
 
-export const LANGUAGES: readonly Language[] = ['tr', 'en']
+export const LANGUAGES: readonly Language[] = ['tr', 'en', 'de', 'ar']
 
-const dictionaries: Record<Exclude<Language, 'tr'>, Record<Message, string>> = { en }
+/** Each language's own name, as its speakers write it. */
+export const LANGUAGE_NAMES: Record<Language, string> = { tr: 'Türkçe', en: 'English', de: 'Deutsch', ar: 'العربية' }
+
+const dictionaries: Record<Exclude<Language, 'tr'>, Record<Message, string>> = { en, de, ar }
+
+// Arabic numbers keep Western digits, as the stream's own figures do.
+const TAGS: Record<Language, string> = { tr: 'tr-TR', en: 'en-US', de: 'de-DE', ar: 'ar-u-nu-latn' }
+const CONTENT: Record<Language, string> = { tr: 'tr-TR', en: 'en-US', de: 'de-DE', ar: 'ar-SA' }
 
 let current: Language = 'tr'
 const listeners = new Set<() => void>()
 
 /** The language a setting means; '' follows the system's. */
 export function resolveLanguage(setting: LanguageSetting | undefined, systemLocale: string): Language {
-  if (setting === 'tr' || setting === 'en') return setting
-  return systemLocale.toLowerCase().startsWith('tr') ? 'tr' : 'en'
+  if (setting && LANGUAGES.includes(setting)) return setting
+  const system = systemLocale.toLowerCase().slice(0, 2)
+  return LANGUAGES.find((language) => language === system) ?? 'en'
 }
 
 export function setLanguage(language: Language) {
@@ -38,8 +48,14 @@ export function onLanguageChange(listener: () => void) {
   }
 }
 
-/** A BCP 47 tag for dates, numbers and Accept-Language headers. */
-export const locale = () => (current === 'tr' ? 'tr-TR' : 'en-US')
+/** A BCP 47 tag for dates and numbers. */
+export const locale = () => TAGS[current]
+
+/** The language-region pair services understand when asked for text. */
+export const contentLanguage = () => CONTENT[current]
+
+/** Arabic reads right to left; the page mirrors for it. */
+export const direction = (language: Language = current): 'rtl' | 'ltr' => (language === 'ar' ? 'rtl' : 'ltr')
 
 export function t(message: Message, params?: Record<string, string | number>): string {
   const text = current === 'tr' ? message : (dictionaries[current][message] ?? message)

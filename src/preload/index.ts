@@ -26,11 +26,15 @@ const api: HarganApi = {
     saveClip: (title: string, data: ArrayBuffer) => ipcRenderer.invoke('app:saveClip', title, data),
     showCapture: (file: string) => ipcRenderer.send('app:showCapture', file),
     takeLaunch: () => ipcRenderer.invoke('app:takeLaunch'),
+    // The DualSense trigger bridge, the desktop shortcut and Steam entries are Windows features.
+    windows: process.platform === 'win32',
+    dualSenseTriggers: process.platform === 'win32' ? (left: number, right: number) => ipcRenderer.send('app:dsTriggers', left, right) : undefined,
     discord: process.argv.includes('--hc-discord'),
+    gameMode: process.argv.includes('--hc-game-mode'),
     presence: (title: string, service: string) => ipcRenderer.send('app:presence', title, service),
     onLaunch: subscribe('app:launch'),
-    createShortcut: (key: string, name: string) => ipcRenderer.invoke('app:createShortcut', key, name),
-    addToSteam: process.argv.includes('--hc-under-wine') ? undefined : (key: string, name: string) => ipcRenderer.invoke('app:addToSteam', key, name),
+    createShortcut: process.platform === 'win32' ? (key: string, name: string) => ipcRenderer.invoke('app:createShortcut', key, name) : undefined,
+    addToSteam: process.platform !== 'win32' || process.argv.includes('--hc-under-wine') ? undefined : (key: string, name: string) => ipcRenderer.invoke('app:addToSteam', key, name),
   },
   settings: {
     get: invoke('settings:get'),
@@ -78,6 +82,8 @@ const api: HarganApi = {
     testHaptics: invoke('ps:testHaptics'),
     info: invoke('ps:info'),
     routeSpeaker: invoke('ps:routeSpeaker'),
+    // The NAT test lives in the Windows core.
+    natTest: process.platform === 'win32' ? invoke('ps:natTest') : undefined,
     accounts: {
       list: invoke('ps:accounts'),
       add: invoke('ps:addAccount'),

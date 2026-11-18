@@ -3,7 +3,7 @@ import axios from 'axios'
 import { app, session } from 'electron'
 import type { GameInfo, XboxAchievement, XboxAchievements, XboxActiveSession, XboxConsole, XboxFriend, XboxSession, XboxStatus, XboxTitle } from '../../shared/types'
 import { log } from '../log'
-import { locale, t } from '../../shared/i18n'
+import { contentLanguage, t } from '../../shared/i18n'
 import Authentication from './authentication'
 import { clearStreamToken, saveStreamToken } from './helpers/streamTokenStore'
 import StreamManager from './helpers/streammanager'
@@ -237,7 +237,7 @@ export default class XboxService {
   // Text comes in the interface language. The market stays US: the cloud catalog
   // this account streams from is the US offering, and other markets may not list it.
   async info(productId: string): Promise<GameInfo> {
-    const language = locale()
+    const language = contentLanguage()
     const [cloud, store] = await Promise.allSettled([
       axios.post(
         `https://catalog.gamepass.com/v3/products?market=US&language=${language}&hydration=RemoteHighSapphire0`,

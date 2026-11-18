@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #include "media_server.h"
+#include "priority.h"
 
 #include <chiaki/base64.h>
 #include <chiaki/random.h>
@@ -204,6 +205,7 @@ static unsigned __stdcall accept_thread(void *arg)
 
 static unsigned __stdcall send_thread(void *arg)
 {
+	priority_boost_thread();
 	for(;;)
 	{
 		EnterCriticalSection(&lock);

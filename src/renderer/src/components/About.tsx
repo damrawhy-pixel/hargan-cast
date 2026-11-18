@@ -11,7 +11,7 @@ export function About({ onClose }: { onClose(): void }) {
   return (
     <dialog ref={ref} className="about" onClose={onClose}>
       <img className="about-logo" src="./logo-256.png" alt="Hargan Cast" />
-      <p>© 2026 Hargan Cast</p>
+      <p>Hargan Cast {__APP_VERSION__} · © 2026</p>
       <p>{t('Bu program AGPL-3.0 lisansıyla ve hiçbir garanti olmaksızın sunulur.')}</p>
       <p>{t('Sony veya Microsoft ile ilişkili değildir. PlayStation ve Xbox ilgili sahiplerinin ticari markalarıdır.')}</p>
       <form method="dialog" className="about-actions">

@@ -3,6 +3,8 @@ const path = require('node:path')
 const rcedit = require('rcedit')
 
 exports.default = async function afterPack(context) {
+  // Windows only: a Mac app's identity comes from its Info.plist.
+  if (context.electronPlatformName !== 'win32') return
   const exe = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`)
   await rcedit(exe, {
     icon: path.join(context.packager.projectDir, 'build', 'icon.ico'),
