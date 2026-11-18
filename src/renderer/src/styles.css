@@ -576,7 +576,7 @@ button { cursor: pointer; }
 @media (max-width: 760px) {
   :root { --gutter: 18px; --launch: 64px; --tile: 104px; }
   .tabs { gap: 18px; }
-  .tabs button { font-size: 17px; }
+  .tabs button { font-size: 17px; white-space: nowrap; }
   .clock, .avatar { display: none; }
   .launch-info h1 { font-size: 34px; }
   .launch-play { min-width: 0; flex: 1; }
@@ -584,6 +584,13 @@ button { cursor: pointer; }
   .hub-about { width: 260px; }
   .library-head { flex-wrap: wrap; }
   .search, .search:focus-within { width: 100%; }
+  /* Phones: the section list becomes a strip on top, the settings take the full width. */
+  .settings { flex-direction: column; }
+  .settings-nav { width: auto; flex-direction: row; overflow-x: auto; padding: 8px var(--gutter); gap: 6px; scrollbar-width: none; }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-nav button { flex: none; white-space: nowrap; }
+  .settings-nav button:hover { transform: none; }
+  .settings-body { padding: 8px var(--gutter) 40px; }
 }
 /* --- View transitions ------------------------------------------------------ */
 ::view-transition-group(game-art), ::view-transition-group(launch-art) { animation-duration: 440ms; animation-timing-function: var(--ease); }

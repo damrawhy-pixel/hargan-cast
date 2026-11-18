@@ -163,3 +163,19 @@ test('stream history starts empty and the accounts page offers nothing to switch
   await page.locator('.settings-nav button', { hasText: 'Hesaplar' }).click()
   await expect(page.getByText('Kayıtlı diğer hesap')).toHaveCount(0)
 })
+
+test('settings fit a phone-sized window', async () => {
+  // The desktop window has a minimum size, so the page is given a phone's viewport instead.
+  await page.setViewportSize({ width: 400, height: 820 })
+  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  const sections = page.locator('.settings-nav button')
+  const count = await sections.count()
+  for (let i = 0; i < count; i++) {
+    await sections.nth(i).click()
+    await expect(page.locator('.settings-body h2')).toBeVisible()
+  }
+  // The settings use the window's width, not what a side list would leave.
+  const width = await page.locator('.settings-body').evaluate((e) => e.getBoundingClientRect().width)
+  expect(width).toBeGreaterThan(360)
+  await shot('settings-phone')
+})
