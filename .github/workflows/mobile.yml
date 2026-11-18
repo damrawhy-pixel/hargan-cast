@@ -185,7 +185,7 @@ jobs:
           mkdir -p test-results/ios
           log=test-results/ios/console.log
           xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/App.app
-          xcrun simctl launch --console --terminate-running-process "$UDID" app.hargan.cast > "$log" 2>&1 &
+          xcrun simctl launch --console-pty --terminate-running-process "$UDID" app.hargan.cast > "$log" 2>&1 &
           for i in $(seq 1 90); do
             grep -q 'hargan: interface ready' "$log" && break
             sleep 2

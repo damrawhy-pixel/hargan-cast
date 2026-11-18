@@ -15,6 +15,8 @@ export interface PsCorePlugin {
   controllerMotion(options: { on: boolean }): Promise<void>
   /** The account vault, decrypted by Android Keystore or read from the iOS Keychain. */
   vaultLoad(): Promise<{ data?: string }>
+  /** Android: whether the device is a TV. */
+  deviceKind(): Promise<{ tv: boolean }>
   vaultSave(options: { data: string }): Promise<void>
   addListener(event: 'line', listener: (e: { line: string }) => void): Promise<PluginListenerHandle>
   /** The stream's picture through MediaCodec (Android) or VideoToolbox (iOS) under the web view. */

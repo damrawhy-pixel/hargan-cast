@@ -21,10 +21,8 @@ const LIVING_ROOM_SCALE = 1.25
 
 export function livingRoom(settings: AppSettings) {
   if (settings.livingRoom !== 'auto') return settings.livingRoom === 'on'
-  const phoneOrTv = document.documentElement.dataset.platform === 'mobile'
-  // A TV has no touch screen; a Steam Deck in Game Mode is told by the main process.
-  const tv = phoneOrTv && typeof matchMedia === 'function' && !matchMedia('(any-pointer: coarse)').matches
-  return tv || Boolean(window.hc.platform.gameMode)
+  // Android tells a TV apart itself; a Steam Deck in Game Mode is told by the main process.
+  return Boolean(window.hc.platform.television || window.hc.platform.gameMode)
 }
 
 function applyTextSize(settings: AppSettings) {

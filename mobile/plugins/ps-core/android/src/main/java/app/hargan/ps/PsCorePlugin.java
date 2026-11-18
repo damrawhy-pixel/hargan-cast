@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package app.hargan.ps;
 
+import android.app.UiModeManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.util.Base64;
@@ -48,6 +51,17 @@ public class PsCorePlugin extends Plugin {
         gamepad = new GamepadFeedback(getContext());
         gamepad.watchDevices();
         PsCore.feedback = gamepad;
+    }
+
+    /** Whether this is a TV (Android TV, Google TV, Fire TV): the living-room view starts on there. */
+    @PluginMethod
+    public void deviceKind(PluginCall call) {
+        UiModeManager mode = (UiModeManager) getContext().getSystemService(Context.UI_MODE_SERVICE);
+        boolean tv = (mode != null && mode.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION)
+            || getContext().getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+        JSObject result = new JSObject();
+        result.put("tv", tv);
+        call.resolve(result);
     }
 
     /** The account vault's JSON; no data when there is none yet. */

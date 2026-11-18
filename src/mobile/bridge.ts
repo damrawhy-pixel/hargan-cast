@@ -2,6 +2,7 @@
 // from Electron's preload; here it is built from Capacitor plugins.
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 import { ScreenOrientation } from '@capacitor/screen-orientation'
 import { StatusBar } from '@capacitor/status-bar'
 import XboxService from '../main/xbox/service'
@@ -74,6 +75,8 @@ export async function installBridge() {
 
   // Account sessions come out of the platform key store before any service reads them.
   await loadVaults()
+  // A TV gets the living-room view; only Android can run on one.
+  const television = Capacitor.getPlatform() === 'android' ? await PsCore.deviceKind().then((k) => k.tv).catch(() => false) : false
 
   // The same Xbox service the desktop runs, on the browser stand-ins in ./shims.
   let current = await getSettings()
@@ -93,6 +96,7 @@ export async function installBridge() {
       openExternal: (url) => void Browser.open({ url }),
       // The licences ship with the source; on a phone they are read where the source lives.
       openLicenses: () => void Browser.open({ url: `${SOURCE_URL}/blob/main/NOTICE.md` }),
+      television,
     },
     settings: {
       get: getSettings,
