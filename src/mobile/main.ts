@@ -6,11 +6,15 @@ import { resolveLanguage, setLanguage, t } from '../shared/i18n'
 // Settings are not read yet; the start-up error below follows the phone's language.
 setLanguage(resolveLanguage('', navigator.language))
 
+// Release builds drop console calls (vite.mobile.config.ts). These few lines are
+// meant for the iOS simulator test and the device log, so they go around that.
+const say = (level: 'info' | 'warn' | 'error', text: string) => globalThis.console[level](text)
+
 // If start-up itself fails there is no interface yet to show it, and the screen
 // would stay black: write the error out plainly so it can be reported.
 function showStartupError(error: unknown) {
   const e = error instanceof Error ? error : new Error(String(error))
-  console.error(`hargan: startup failed: ${e.name}: ${e.message} ${e.stack?.split('\n').slice(0, 4).join(' | ') ?? ''}`)
+  say('error', `hargan: startup failed: ${e.name}: ${e.message} ${e.stack?.split('\n').slice(0, 4).join(' | ') ?? ''}`)
   const panel = document.createElement('div')
   panel.setAttribute('role', 'alert')
   panel.style.cssText =
@@ -34,11 +38,11 @@ function showStartupError(error: unknown) {
 
 // The iOS simulator test (.github/workflows/mobile.yml) reads the app's console:
 // a line for every uncaught error, and one once the interface is on screen.
-addEventListener('error', (e) => console.error(`hargan: uncaught ${e.message}`))
+addEventListener('error', (e) => say('error', `hargan: uncaught ${e.message}`))
 function reportReady(tries = 0) {
-  if (document.querySelector('.topbar')) return console.info('hargan: interface ready')
+  if (document.querySelector('.topbar')) return say('info', 'hargan: interface ready')
   // Still nothing after a minute: say what the page shows instead.
-  if (tries >= 240) return console.warn(`hargan: no interface; the page shows: ${document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)}`)
+  if (tries >= 240) return say('warn', `hargan: no interface; the page shows: ${document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)}`)
   setTimeout(() => reportReady(tries + 1), 250)
 }
 
