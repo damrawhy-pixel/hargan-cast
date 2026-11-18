@@ -5,6 +5,9 @@
 import { _android as android, expect, test, type AndroidDevice, type Page } from '@playwright/test'
 
 const PACKAGE = 'app.hargan.cast'
+// The app follows the phone's language, which on the emulator is English.
+const WELCOME = /Hoş geldin|Welcome/
+const SETTINGS = /^(Ayarlar|Settings)$/
 
 let device: AndroidDevice
 let page: Page
@@ -16,10 +19,19 @@ test.beforeAll(async () => {
   if (!device) throw new Error('no Android device: start an emulator first')
   await device.shell(`am force-stop ${PACKAGE}`)
   await device.shell(`am start -n ${PACKAGE}/.MainActivity`)
-  const webView = await device.webView({ pkg: PACKAGE }, { timeout: 120_000 })
-  page = await webView.page()
+  // Right after a restart the old process's web view can still be listed; try again until the app's own page answers.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const webView = await device.webView({ pkg: PACKAGE }, { timeout: 120_000 })
+      page = await webView.page()
+      await page.waitForSelector('.topbar', { timeout: 60_000 })
+      break
+    } catch (e) {
+      if (attempt === 3) throw e
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+  }
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.waitForSelector('.topbar', { timeout: 120_000 })
 })
 
 test.afterAll(async () => {
@@ -27,13 +39,13 @@ test.afterAll(async () => {
 })
 
 test('the app starts on the home screen without errors', async () => {
-  await expect(page.getByRole('heading', { name: 'Hoş geldin' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: WELCOME })).toBeVisible({ timeout: 30_000 })
   await device.screenshot({ path: 'test-results/android/home.png' })
   expect(errors).toEqual([])
 })
 
 test('every settings section opens', async () => {
-  await page.getByRole('button', { name: 'Ayarlar' }).click()
+  await page.getByRole('button', { name: SETTINGS }).click()
   const sections = page.locator('.settings-nav button')
   const count = await sections.count()
   expect(count).toBeGreaterThan(5)
