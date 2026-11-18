@@ -64,7 +64,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: HarganCast-android
       - name: Enable KVM
