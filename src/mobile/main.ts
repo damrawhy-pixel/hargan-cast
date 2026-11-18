@@ -10,6 +10,7 @@ setLanguage(resolveLanguage('', navigator.language))
 // would stay black: write the error out plainly so it can be reported.
 function showStartupError(error: unknown) {
   const e = error instanceof Error ? error : new Error(String(error))
+  console.error(`hargan: startup failed: ${e.name}: ${e.message} ${e.stack?.split('\n').slice(0, 4).join(' | ') ?? ''}`)
   const panel = document.createElement('div')
   panel.setAttribute('role', 'alert')
   panel.style.cssText =
@@ -35,8 +36,10 @@ function showStartupError(error: unknown) {
 // a line for every uncaught error, and one once the interface is on screen.
 addEventListener('error', (e) => console.error(`hargan: uncaught ${e.message}`))
 function reportReady(tries = 0) {
-  if (document.querySelector('.topbar')) console.info('hargan: interface ready')
-  else if (tries < 240) setTimeout(() => reportReady(tries + 1), 250)
+  if (document.querySelector('.topbar')) return console.info('hargan: interface ready')
+  // Still nothing after a minute: say what the page shows instead.
+  if (tries >= 240) return console.warn(`hargan: no interface; the page shows: ${document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)}`)
+  setTimeout(() => reportReady(tries + 1), 250)
 }
 
 try {

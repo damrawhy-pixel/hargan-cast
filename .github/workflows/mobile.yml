@@ -187,7 +187,7 @@ jobs:
           xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/App.app
           xcrun simctl launch --console-pty --terminate-running-process "$UDID" app.hargan.cast > "$log" 2>&1 &
           for i in $(seq 1 90); do
-            grep -q 'hargan: interface ready' "$log" && break
+            grep -qE 'hargan: (interface ready|startup failed|no interface)' "$log" && break
             sleep 2
           done
           # A moment more, for errors right after start.
